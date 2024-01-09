@@ -26,7 +26,7 @@
         "[solidity]": {
           "editor.defaultFormatter": "JuanBlanco.solidity" 
         },
-        "solidity.formatter": "zkforge",
+        "solidity.formatter": "zkforge"
       },
       "extensions": [
         "JuanBlanco.solidity"
