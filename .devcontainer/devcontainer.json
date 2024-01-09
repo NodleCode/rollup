@@ -14,7 +14,23 @@
   },
   "remoteUser": "vscode",
   "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:/home/vscode/.cargo/bin:/home/vscode/.yarn/bin"
+    "PATH": "${containerEnv:PATH}:/usr/local/cargo/bin:/home/vscode/.yarn/bin"
   },
-  "onCreateCommand": "./.devcontainer/install-tools.sh"
+  "onCreateCommand": "./.devcontainer/install-tools.sh",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "solidity.packageDefaultDependenciesContractsDirectory": "src",
+        "solidity.packageDefaultDependenciesDirectory": "lib",
+        "editor.formatOnSave": true,
+        "[solidity]": {
+          "editor.defaultFormatter": "JuanBlanco.solidity" 
+        },
+        "solidity.formatter": "zkforge",
+      },
+      "extensions": [
+        "JuanBlanco.solidity"
+      ]
+    }
+  }
 }
