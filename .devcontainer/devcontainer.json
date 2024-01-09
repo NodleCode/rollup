@@ -12,5 +12,9 @@
       "version": "latest"
     }
   },
+  "remoteUser": "vscode",
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/vscode/.cargo/bin:/home/vscode/.yarn/bin"
+  },
   "onCreateCommand": "./.devcontainer/install-tools.sh"
 }
