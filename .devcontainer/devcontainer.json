@@ -12,6 +12,11 @@
       "version": "latest"
     }
   },
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "50gb"
+  },
   "remoteUser": "vscode",
   "remoteEnv": {
     "PATH": "${containerEnv:PATH}:/usr/local/cargo/bin:/home/vscode/.yarn/bin"
