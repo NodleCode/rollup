@@ -1,4 +1,3 @@
-# Nodle Rollup
-This is the monorepo for the Nodle Rollup codebase. It includes anything from smart-contracts to UI code etc.
+# Nodle's Eth L2 rollup powered by zkSync stack
 
-Most of it is todo at this stage... like this readme :).
+This mono repo will contain all the required smart-contracts and the services that we would need to develop aroung them. This is a proof of concept targeting the needs of our Click dApp as its initial goal.
