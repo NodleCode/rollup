@@ -13,7 +13,7 @@ dotenv.config();
 export const getProvider = () => {
   const rpcUrl = hre.network.config.url;
   if (!rpcUrl) throw `⛔️ RPC URL wasn't found in "${hre.network.name}"! Please add a "url" field to the network config in hardhat.config.ts`;
-  
+
   // Initialize zkSync Provider
   const provider = new Provider(rpcUrl);
 
@@ -27,7 +27,7 @@ export const getWallet = (privateKey?: string) => {
   }
 
   const provider = getProvider();
-  
+
   // Initialize zkSync Wallet
   const wallet = new Wallet(privateKey ?? process.env.WALLET_PRIVATE_KEY!, provider);
 
@@ -35,8 +35,8 @@ export const getWallet = (privateKey?: string) => {
 }
 
 export const getGovernance = () => {
-    if (!process.env.GOVERNANCE_ADDRESS) throw "⛔️ Governance address wasn't found in .env file!";
-    return process.env.GOVERNANCE_ADDRESS;
+  if (!process.env.GOVERNANCE_ADDRESS) throw "⛔️ Governance address wasn't found in .env file!";
+  return process.env.GOVERNANCE_ADDRESS;
 }
 
 export const verifyEnoughBalance = async (wallet: Wallet, amount: bigint) => {
@@ -72,8 +72,14 @@ type DeployContractOptions = {
   noVerify?: boolean
   /**
    * If specified, the contract will be deployed using this wallet
-   */ 
+   */
   wallet?: Wallet
+  /**
+   * If specified, skip gas and balanc checks - this is used during
+   * unit tests as the upgrade zksync plugin does not appear compatible
+   * in memory or test nodes
+   */
+  skipChecks?: boolean
 }
 export const deployContract = async (contractArtifactName: string, constructorArguments?: any[], options?: DeployContractOptions) => {
   const log = (message: string) => {
@@ -81,7 +87,7 @@ export const deployContract = async (contractArtifactName: string, constructorAr
   }
 
   log(`\nStarting deployment process of "${contractArtifactName}"...`);
-  
+
   const wallet = options?.wallet ?? getWallet();
   const deployer = new Deployer(hre, wallet);
   const artifact = await deployer.loadArtifact(contractArtifactName).catch((error) => {
@@ -93,25 +99,27 @@ export const deployContract = async (contractArtifactName: string, constructorAr
     }
   });
 
-  // Estimate contract deployment fee
-  const deploymentBeaconFee = await hre.zkUpgrades.estimation.estimateGasBeacon(deployer, artifact);
-  const deploymentProxyFee = await hre.zkUpgrades.estimation.estimateGasBeaconProxy(deployer);
-  const deploymentFee = deploymentBeaconFee + deploymentProxyFee;
-  
-  // log(`Estimated beacon deployment cost: ${formatEther(deploymentBeaconFee)} ETH`);
-  // log(`Estimated proxy deployment cost: ${formatEther(deploymentProxyFee)} ETH`);
-  log(`Estimated total deployment cost: ${formatEther(deploymentFee)} ETH`)
+  if (!options?.skipChecks) {
+    // Estimate contract deployment fee
+    const deploymentBeaconFee = await hre.zkUpgrades.estimation.estimateGasBeacon(deployer, artifact, undefined, undefined, options?.silent);
+    const deploymentProxyFee = await hre.zkUpgrades.estimation.estimateGasBeaconProxy(deployer, undefined, undefined, options?.silent);
+    const deploymentFee = deploymentBeaconFee + deploymentProxyFee;
 
-  // Check if the wallet has enough balance
-  await verifyEnoughBalance(wallet, deploymentFee);
+    // log(`Estimated beacon deployment cost: ${formatEther(deploymentBeaconFee)} ETH`);
+    // log(`Estimated proxy deployment cost: ${formatEther(deploymentProxyFee)} ETH`);
+    log(`Estimated total deployment cost: ${formatEther(deploymentFee)} ETH`)
+
+    // Check if the wallet has enough balance
+    await verifyEnoughBalance(wallet, deploymentFee);
+  }
 
   // Deploy beacon for contract
-  const beacon = await hre.zkUpgrades.deployBeacon(deployer.zkWallet, artifact);
+  const beacon = await hre.zkUpgrades.deployBeacon(deployer.zkWallet, artifact, undefined, options?.silent);
   await beacon.waitForDeployment();
   const beaconAddress = await beacon.getAddress();
 
   // Deploy the contract to zkSync
-  const contract = await hre.zkUpgrades.deployBeaconProxy(deployer.zkWallet, beaconAddress, artifact, constructorArguments || []);
+  const contract = await hre.zkUpgrades.deployBeaconProxy(deployer.zkWallet, beaconAddress, artifact, constructorArguments || [], undefined, options?.silent);
   await contract.waitForDeployment();
   const contractAddress = await contract.getAddress();
 
