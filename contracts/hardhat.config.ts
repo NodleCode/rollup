@@ -1,12 +1,13 @@
 import { HardhatUserConfig } from "hardhat/config";
 
 import "@matterlabs/hardhat-zksync-node";
-import "@matterlabs/hardhat-zksync-deploy";
 import "@matterlabs/hardhat-zksync-solc";
+import "@matterlabs/hardhat-zksync-deploy";
 import "@matterlabs/hardhat-zksync-verify";
+import "@matterlabs/hardhat-zksync-upgradable";
 
 const config: HardhatUserConfig = {
-  defaultNetwork: "zkSyncSepoliaTestnet",
+  defaultNetwork: "inMemoryNode",
   networks: {
     zkSyncSepoliaTestnet: {
       url: "https://sepolia.era.zksync.dev",
@@ -34,7 +35,7 @@ const config: HardhatUserConfig = {
     inMemoryNode: {
       url: "http://127.0.0.1:8011",
       ethNetwork: "", // in-memory node doesn't support eth node; removing this line will cause an error
-      zksync: true,
+      zksync: true
     },
     hardhat: {
       zksync: true,
@@ -48,7 +49,7 @@ const config: HardhatUserConfig = {
     },
   },
   solidity: {
-    version: "0.8.17",
+    version: "0.8.20",
   },
 };
 
