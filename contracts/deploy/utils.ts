@@ -39,10 +39,10 @@ export const getGovernance = () => {
     return process.env.GOVERNANCE_ADDRESS;
 }
 
-export const verifyEnoughBalance = async (wallet: Wallet, amount: BigNumberish) => {
+export const verifyEnoughBalance = async (wallet: Wallet, amount: bigint) => {
   // Check if the wallet has enough balance
-  const balance: BigNumberish = await wallet.getBalance();
-  if (balance.lt(amount)) throw `⛔️ Wallet balance is too low! Required ${formatEther(amount)} ETH, but current ${wallet.address} balance is ${formatEther(balance)} ETH`;
+  const balance = await wallet.getBalance();
+  if (balance < amount) throw `⛔️ Wallet balance is too low! Required ${formatEther(amount)} ETH, but current ${wallet.address} balance is ${formatEther(balance)} ETH`;
 }
 
 /**
@@ -93,13 +93,17 @@ export const deployContract = async (contractArtifactName: string, constructorAr
     }
   });
 
-  // TODO: fix this
-  // // Estimate contract deployment fee
-  // const deploymentFee = await hre.zkUpgrades.estimation.estimateGasBeaconProxy(deployer, artifact, constructorArguments || []);
-  // log(`Estimated deployment cost: ${formatEther(deploymentFee)} ETH`);
+  // Estimate contract deployment fee
+  const deploymentBeaconFee = await hre.zkUpgrades.estimation.estimateGasBeacon(deployer, artifact);
+  const deploymentProxyFee = await hre.zkUpgrades.estimation.estimateGasBeaconProxy(deployer);
+  const deploymentFee = deploymentBeaconFee + deploymentProxyFee;
+  
+  // log(`Estimated beacon deployment cost: ${formatEther(deploymentBeaconFee)} ETH`);
+  // log(`Estimated proxy deployment cost: ${formatEther(deploymentProxyFee)} ETH`);
+  log(`Estimated total deployment cost: ${formatEther(deploymentFee)} ETH`)
 
-  // // Check if the wallet has enough balance
-  // await verifyEnoughBalance(wallet, deploymentFee);
+  // Check if the wallet has enough balance
+  await verifyEnoughBalance(wallet, deploymentFee);
 
   // Deploy beacon for contract
   const beacon = await hre.zkUpgrades.deployBeacon(deployer.zkWallet, artifact);
