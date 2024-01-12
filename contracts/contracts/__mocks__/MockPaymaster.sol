@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.20;
 
-import "../bases/BasePaymaster.sol";
+import "../paymasters/BasePaymaster.sol";
 
 contract MockPaymaster is BasePaymaster {
     constructor(address admin, address withdrawer) BasePaymaster(admin, withdrawer) {}

@@ -26,6 +26,24 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         _;
     }
 
+    modifier onlyAdmin() {
+        require(
+            hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
+            "Only admin can call this method"
+        );
+        // Continue execution if called from the bootloader.
+        _;
+    }
+
+    modifier onlyWithdrawer() {
+        require(
+            hasRole(WITHDRAWER_ROLE, msg.sender),
+            "Only withdrawer can call this method"
+        );
+        // Continue execution if called from the bootloader.
+        _;
+    }
+
     constructor(address admin, address withdrawer) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(WITHDRAWER_ROLE, withdrawer);
@@ -115,11 +133,7 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         // Refunds are not supported yet.
     }
 
-    function withdraw(address to, uint256 amount) external {
-        require(
-            hasRole(WITHDRAWER_ROLE, msg.sender),
-            "Only withdrawer can call this method"
-        );
+    function withdraw(address to, uint256 amount) external onlyWithdrawer {
         (bool success, ) = payable(to).call{value: amount}("");
         require(success, "Failed to withdraw");
     }

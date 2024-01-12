@@ -1,7 +1,8 @@
 import { expect } from 'chai';
 import { Contract, Provider, Wallet, utils } from "zksync-ethers";
-import { getWallet, deployContract, LOCAL_RICH_WALLETS, getProvider } from '../deploy/utils';
 import * as ethers from "ethers";
+import { setupEnv } from './helpers';
+import { deployContract } from '../../deploy/utils';
 
 describe("MockPaymaster", function () {
     let paymaster: Contract;
@@ -16,27 +17,19 @@ describe("MockPaymaster", function () {
     let provider: Provider;
 
     before(async function () {
-        provider = getProvider();
+        const result = await setupEnv("MockPaymaster");
+        paymaster = result.paymaster;
+        adminWallet = result.adminWallet;
+        withdrawerWallet = result.withdrawerWallet;
+        sponsorWallet = result.sponsorWallet;
+        userWallet = result.userWallet;
+        provider = result.provider;
 
-        adminWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
-        withdrawerWallet = getWallet(LOCAL_RICH_WALLETS[1].privateKey);
-        sponsorWallet = getWallet(LOCAL_RICH_WALLETS[2].privateKey);
-
-        paymaster = await deployContract("MockPaymaster", [adminWallet.address, withdrawerWallet.address], { wallet: adminWallet, silent: true, skipChecks: true });
         flag = await deployContract("MockFlag", [], { wallet: adminWallet, silent: true, skipChecks: true });
         nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true });
-
-        // send some ETH to it
-        const tx = await sponsorWallet.sendTransaction({ to: await paymaster.getAddress(), value: ethers.parseEther("1") });
-        await tx.wait();
-
-        const emptyWallet = Wallet.createRandom();
-        userWallet = new Wallet(emptyWallet.privateKey, provider);
     });
 
     async function executePaymasterTransaction(user: Wallet, type: "General" | "ApprovalBased", nonce: number, flagValue: string = "flag captured") {
-        const gasPrice = await provider.getGasPrice();
-
         let paymasterParams;
         if (type === "General") {
             paymasterParams = utils.getPaymasterParams(await paymaster.getAddress(), {
@@ -89,6 +82,7 @@ describe("MockPaymaster", function () {
         // paymaster cannot pay for txs anymore
         try {
             await executePaymasterTransaction(userWallet, "General", 2);
+            expect(false).to.be.true; // should not reach this line
         } catch (e) {
             expect(e.message).to.include("Paymaster validation error");
         }
