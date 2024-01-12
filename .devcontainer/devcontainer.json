@@ -27,7 +27,8 @@
   "customizations": {
     "vscode": {
       "settings": {
-        "solidity.packageDefaultDependenciesDirectory": "contracts/node_modules"
+        "solidity.packageDefaultDependenciesDirectory": "contracts/node_modules",
+        "solidity.defaultCompiler": "localNodeModule"
       },
       "extensions": [
         "JuanBlanco.solidity"
