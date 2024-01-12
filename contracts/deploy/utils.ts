@@ -109,6 +109,7 @@ export const deployContract = async (contractArtifactName: string, constructorAr
 
   // Deploy the contract to zkSync but behind a transparent proxy
   const contract = await deployer.deploy(artifact, constructorArguments);
+  await contract.waitForDeployment();
   const contractAddress = await contract.getAddress();
 
   const constructorArgs = contract.interface.encodeDeploy(constructorArguments);
