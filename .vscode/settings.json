@@ -1,4 +1,4 @@
 {
-    "solidity.defaultCompiler": "localNodeModule",
+    "solidity.defaultCompiler": "remote",
     "solidity.packageDefaultDependenciesDirectory": "contracts/node_modules/"
 }
