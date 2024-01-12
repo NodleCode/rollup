@@ -100,7 +100,7 @@ export const deployContract = async (contractArtifactName: string, constructorAr
   });
 
   if (!options?.skipChecks) {
-    const deploymentFee = await hre.zkUpgrades.estimation.estimateGasProxy(deployer, artifact, [], { kind: "transparent" }, options?.silent);
+    const deploymentFee = await deployer.estimateDeployFee(artifact, constructorArguments || []);
 
     log(`Estimated total deployment cost: ${formatEther(deploymentFee)} ETH`)
 
@@ -108,29 +108,27 @@ export const deployContract = async (contractArtifactName: string, constructorAr
   }
 
   // Deploy the contract to zkSync but behind a transparent proxy
-  const contract = await hre.zkUpgrades.deployProxy(deployer.zkWallet, artifact, constructorArguments || [], undefined, options?.silent);
-  await contract.waitForDeployment();
+  const contract = await deployer.deploy(artifact, constructorArguments);
   const contractAddress = await contract.getAddress();
 
-  // const constructorArgs = contract.interface.encodeDeploy(constructorArguments);
+  const constructorArgs = contract.interface.encodeDeploy(constructorArguments);
   const fullContractSource = `${artifact.sourceName}:${artifact.contractName}`;
 
   // Display contract deployment info
   log(`\n"${artifact.contractName}" was successfully deployed:`);
   log(` - Contract address: ${contractAddress}`);
   log(` - Contract source: ${fullContractSource}`);
-  // log(` - Encoded constructor arguments: ${constructorArgs}\n`);
+  log(` - Encoded constructor arguments: ${constructorArgs}\n`);
 
-  // TODO: fix this
-  // if (!options?.noVerify && hre.network.config.verifyURL) {
-  //   log(`Requesting contract verification...`);
-  //   await verifyContract({
-  //     address: contractAddress,
-  //     contract: fullContractSource,
-  //     constructorArguments: constructorArgs,
-  //     bytecode: artifact.bytecode,
-  //   });
-  // }
+  if (!options?.noVerify && hre.network.config.verifyURL) {
+    log(`Requesting contract verification...`);
+    await verifyContract({
+      address: contractAddress,
+      contract: fullContractSource,
+      constructorArguments: constructorArgs,
+      bytecode: artifact.bytecode,
+    });
+  }
 
   return contract;
 }

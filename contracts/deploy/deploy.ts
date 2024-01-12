@@ -1,5 +1,5 @@
 import { deployContract, getGovernance } from "./utils";
 
 export default async function() {
-    await deployContract("NODL", [getGovernance()]);
+    await deployContract("NODL", [getGovernance(), getGovernance()]);
 }

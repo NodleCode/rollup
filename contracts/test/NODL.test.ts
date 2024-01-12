@@ -12,7 +12,7 @@ describe("NODL", function () {
     ownerWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
     userWallet = getWallet(LOCAL_RICH_WALLETS[1].privateKey);
 
-    tokenContract = await deployContract("NODL", [ownerWallet.address], { wallet: ownerWallet, silent: true, skipChecks: true });
+    tokenContract = await deployContract("NODL", [ownerWallet.address, ownerWallet.address], { wallet: ownerWallet, silent: true, skipChecks: true });
   });
 
   it("Should be deployed with no supply", async function () {
