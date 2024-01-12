@@ -26,6 +26,9 @@
   "postCreateCommand": "./.devcontainer/testnet.sh",
   "customizations": {
     "vscode": {
+      "settings": {
+        "solidity.packageDefaultDependenciesDirectory": "contracts/node_modules"
+      },
       "extensions": [
         "JuanBlanco.solidity"
       ]
