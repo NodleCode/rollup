@@ -100,26 +100,15 @@ export const deployContract = async (contractArtifactName: string, constructorAr
   });
 
   if (!options?.skipChecks) {
-    // Estimate contract deployment fee
-    const deploymentBeaconFee = await hre.zkUpgrades.estimation.estimateGasBeacon(deployer, artifact, undefined, undefined, options?.silent);
-    const deploymentProxyFee = await hre.zkUpgrades.estimation.estimateGasBeaconProxy(deployer, undefined, undefined, options?.silent);
-    const deploymentFee = deploymentBeaconFee + deploymentProxyFee;
+    const deploymentFee = await hre.zkUpgrades.estimation.estimateGasProxy(deployer, artifact, [], { kind: "transparent" }, options?.silent);
 
-    // log(`Estimated beacon deployment cost: ${formatEther(deploymentBeaconFee)} ETH`);
-    // log(`Estimated proxy deployment cost: ${formatEther(deploymentProxyFee)} ETH`);
     log(`Estimated total deployment cost: ${formatEther(deploymentFee)} ETH`)
 
-    // Check if the wallet has enough balance
     await verifyEnoughBalance(wallet, deploymentFee);
   }
 
-  // Deploy beacon for contract
-  const beacon = await hre.zkUpgrades.deployBeacon(deployer.zkWallet, artifact, undefined, options?.silent);
-  await beacon.waitForDeployment();
-  const beaconAddress = await beacon.getAddress();
-
-  // Deploy the contract to zkSync
-  const contract = await hre.zkUpgrades.deployBeaconProxy(deployer.zkWallet, beaconAddress, artifact, constructorArguments || [], undefined, options?.silent);
+  // Deploy the contract to zkSync but behind a transparent proxy
+  const contract = await hre.zkUpgrades.deployProxy(deployer.zkWallet, artifact, constructorArguments || [], undefined, options?.silent);
   await contract.waitForDeployment();
   const contractAddress = await contract.getAddress();
 
@@ -130,7 +119,6 @@ export const deployContract = async (contractArtifactName: string, constructorAr
   log(`\n"${artifact.contractName}" was successfully deployed:`);
   log(` - Contract address: ${contractAddress}`);
   log(` - Contract source: ${fullContractSource}`);
-  log(` - Beacon address: ${beaconAddress}`);
   // log(` - Encoded constructor arguments: ${constructorArgs}\n`);
 
   // TODO: fix this
