@@ -82,7 +82,7 @@ describe("MockPaymaster", function () {
         // paymaster cannot pay for txs anymore
         try {
             await executePaymasterTransaction(userWallet, "General", 2);
-            expect(false).to.be.true; // should not reach this line
+            expect.fail("Should have reverted");
         } catch (e) {
             expect(e.message).to.include("Paymaster validation error");
         }

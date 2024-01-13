@@ -79,7 +79,7 @@ describe("WhitelistPaymaster", function () {
                     paymasterParams,
                 },
             });
-            expect(false).to.be.true; // Should not reach this line
+            expect.fail("Should have reverted");
         } catch (e) {
             expect(e.message).to.contain("execution reverted");
         }
@@ -117,7 +117,7 @@ describe("WhitelistPaymaster", function () {
                     paymasterParams,
                 },
             });
-            expect(false).to.be.true; // Should not reach this line
+            expect.fail("Should have reverted");
         } catch (e) {
             expect(e.message).to.contain("execution reverted");
         }
@@ -136,7 +136,7 @@ describe("WhitelistPaymaster", function () {
                     paymasterParams,
                 },
             });
-            expect(false).to.be.true; // Should not reach this line
+            expect.fail("Should have reverted");
         } catch (e) {
             expect(e.message).to.contain("execution reverted");
         }
