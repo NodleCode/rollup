@@ -1,8 +1,6 @@
 import { expect } from 'chai';
 import { Contract, Wallet } from "zksync-ethers";
 import { getWallet, deployContract, LOCAL_RICH_WALLETS } from '../../deploy/utils';
-import * as ethers from "ethers";
-import exp from 'constants';
 
 describe("ContentSignNFT", function () {
   let tokenContract: Contract;
