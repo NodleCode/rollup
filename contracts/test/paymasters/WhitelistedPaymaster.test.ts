@@ -35,7 +35,7 @@ describe("WhitelistPaymaster", function () {
         await tx.wait();
     });
 
-    it("only admin can update contract whitelist", async function () {
+    it("Only admin can update contract whitelist", async function () {
         const newFlag = await deployContract("MockFlag", [], { wallet: withdrawerWallet, silent: true, skipChecks: true });
         const newFlagAddress = await newFlag.getAddress();
 
@@ -64,7 +64,7 @@ describe("WhitelistPaymaster", function () {
         expect(await paymaster.isWhitelistedContract(await flag.getAddress())).to.be.true;
     });
 
-    it("does not support approval based flow", async function () {
+    it("Does not support approval based flow", async function () {
         const paymasterParams = utils.getPaymasterParams(await paymaster.getAddress(), {
             type: "ApprovalBased",
             token: await nodl.getAddress(),
@@ -85,7 +85,7 @@ describe("WhitelistPaymaster", function () {
         }
     });
 
-    it("supports calls to whitelisted contracts", async function () {
+    it("Supports calls to whitelisted contracts", async function () {
         const paymasterParams = utils.getPaymasterParams(await paymaster.getAddress(), {
             type: "General",
             innerInput: new Uint8Array(),
@@ -102,7 +102,7 @@ describe("WhitelistPaymaster", function () {
         expect(await flag.flag()).to.equal("flag captured");
     });
 
-    it("does not support calls to non-whitelisted contracts", async function () {
+    it("Does not support calls to non-whitelisted contracts", async function () {
         const newFlag = await deployContract("MockFlag", [], { silent: true, skipChecks: true });
 
         const paymasterParams = utils.getPaymasterParams(await paymaster.getAddress(), {
@@ -123,7 +123,7 @@ describe("WhitelistPaymaster", function () {
         }
     });
 
-    it("does not support calls from non-whitelisted users", async function () {
+    it("Does not support calls from non-whitelisted users", async function () {
         const paymasterParams = utils.getPaymasterParams(await paymaster.getAddress(), {
             type: "General",
             innerInput: new Uint8Array(),
