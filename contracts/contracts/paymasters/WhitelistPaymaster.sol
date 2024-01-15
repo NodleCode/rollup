@@ -55,7 +55,7 @@ contract WhitelistPaymaster is BasePaymaster {
     function _validateAndPayGeneralFlow(
         address from,
         address to,
-        uint256 requiredETH
+        uint256 /* requiredETH */
     ) internal override {
         if (!isWhitelistedContract[to]) {
             revert DestIsNotWhitelisted();

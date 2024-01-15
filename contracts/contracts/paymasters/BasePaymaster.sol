@@ -61,6 +61,9 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
     {
         // By default we consider the transaction as accepted.
         magic = PAYMASTER_VALIDATION_SUCCESS_MAGIC;
+        // By default no context will be returned unless the paymaster flow requires a post transaction call.
+        context = new bytes(0);
+
         require(
             _transaction.paymasterInput.length >= 4,
             "The standard paymaster input must be at least 4 bytes long"
