@@ -26,15 +26,12 @@
   "updateContentCommand": "cd contracts && yarn && yarn compile",
   "customizations": {
     "vscode": {
-      "settings": {
-        "solidity.defaultCompiler": "localNodeModule"
-      },
       "extensions": [
-        "JuanBlanco.solidity",
         "GitHub.copilot",
         "github.vscode-github-actions",
         "eamodio.gitlens",
-        "Gruntfuggly.todo-tree"
+        "Gruntfuggly.todo-tree",
+        "NomicFoundation.hardhat-solidity"
       ]
     }
   }
