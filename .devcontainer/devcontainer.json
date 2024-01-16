@@ -31,7 +31,11 @@
         "solidity.defaultCompiler": "localNodeModule"
       },
       "extensions": [
-        "JuanBlanco.solidity"
+        "JuanBlanco.solidity",
+        "GitHub.copilot",
+        "github.vscode-github-actions",
+        "eamodio.gitlens",
+        "Gruntfuggly.todo-tree"
       ]
     }
   }
