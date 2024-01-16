@@ -1,6 +1,7 @@
 {
-  "name": "nodle-contracts",
+  "name": "contracts",
   "private": true,
+  "version": "0.0.1",
   "scripts": {
     "deploy": "hardhat deploy-zksync --script deploy.ts",
     "compile": "hardhat compile",

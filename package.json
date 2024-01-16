@@ -1,0 +1,8 @@
+{
+    "name": "nodle-rollup",
+    "private": true,
+    "workspaces": ["contracts",  "packages/*"],
+    "scripts": {
+      "test": "yarn workspace contracts test"
+    }
+  }
