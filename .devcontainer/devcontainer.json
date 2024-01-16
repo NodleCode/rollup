@@ -23,7 +23,6 @@
   },
   "onCreateCommand": "./.devcontainer/install-tools.sh",
   "updateContentCommand": "cd contracts && yarn && yarn compile",
-  "postCreateCommand": "./.devcontainer/testnet.sh",
   "customizations": {
     "vscode": {
       "settings": {
