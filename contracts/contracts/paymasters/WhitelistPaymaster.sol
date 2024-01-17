@@ -64,8 +64,6 @@ contract WhitelistPaymaster is BasePaymaster {
         if (!isWhitelistedUser(from)) {
             revert UserIsNotWhitelisted();
         }
-
-        // TODO: shall we rate limit gas consumption?
     }
 
     function _validateAndPayApprovalBasedFlow(
