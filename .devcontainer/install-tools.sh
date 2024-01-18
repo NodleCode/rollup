@@ -25,3 +25,4 @@ git checkout $VERSION
 mkdir -p $ZKSYNC_HOME/volumes || true
 sudo chown -R $USER:$USER $ZKSYNC_HOME/volumes
 zk
+zk init || echo "zk init failed - ignored | you may want to run cd $ZKSYNC_HOME && git reset --hard && zk init"
