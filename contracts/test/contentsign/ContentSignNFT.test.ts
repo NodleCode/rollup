@@ -11,7 +11,7 @@ describe("ContentSignNFT", function () {
     ownerWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
     userWallet = getWallet(LOCAL_RICH_WALLETS[1].privateKey);
 
-    tokenContract = await deployContract("ContentSignNFT", ["Mock NFT", "MFT", ownerWallet.address, ownerWallet.address], { wallet: ownerWallet, silent: true, skipChecks: true });
+    tokenContract = await deployContract("ContentSignNFT", [ownerWallet.address, ownerWallet.address], { wallet: ownerWallet, silent: true, skipChecks: true });
   });
 
   it("Should mint token", async function () {
