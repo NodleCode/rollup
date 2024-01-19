@@ -4,7 +4,7 @@ import * as ethers from "ethers";
 import { setupEnv } from './helpers';
 import { deployContract } from '../../deploy/utils';
 
-describe("MockPaymaster", function () {
+describe("BasePaymaster", function () {
     let paymaster: Contract;
     let flag: Contract;
     let nodl: Contract;

@@ -12,9 +12,9 @@ contract ContentSignNFT is ERC721, ERC721URIStorage, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     uint256 private _nextTokenId;
 
-    constructor(address defaultAdmin, address minter) ERC721("ContentSign", "CSN") {
-        _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
-        _grantRole(MINTER_ROLE, minter);
+    constructor(address admin) ERC721("ContentSign", "CSN") {
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(MINTER_ROLE, admin);
     }
 
     function safeMint(address to, string memory uri) public onlyRole(MINTER_ROLE) {

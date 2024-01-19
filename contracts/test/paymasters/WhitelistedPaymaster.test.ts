@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import { Contract, Provider, Wallet, utils } from "zksync-ethers";
 import * as ethers from "ethers";
 import { setupEnv } from './helpers';
-import { deployContract } from '../../deploy/utils';
+import { LOCAL_RICH_WALLETS, deployContract, getWallet } from '../../deploy/utils';
 
 describe("WhitelistPaymaster", function () {
     let paymaster: Contract;
@@ -17,21 +17,22 @@ describe("WhitelistPaymaster", function () {
     let provider: Provider;
 
     before(async function () {
-        flag = await deployContract("MockFlag", [], { silent: true, skipChecks: true });
+        adminWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
+        flag = await deployContract("MockFlag", [], { wallet: adminWallet, silent: true, skipChecks: true });
 
         const result = await setupEnv("WhitelistPaymaster", [[await flag.getAddress()]]);
         paymaster = result.paymaster;
-        adminWallet = result.adminWallet;
+        // adminWallet = result.adminWallet;
         withdrawerWallet = result.withdrawerWallet;
         sponsorWallet = result.sponsorWallet;
         userWallet = result.userWallet;
         provider = result.provider;
 
-        nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { silent: true, skipChecks: true });
+        nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true });
 
         // whitelist user
         const whitelistRole = await paymaster.WHITELISTED_USER_ROLE();
-        const tx = await paymaster.connect(adminWallet).grantRole(whitelistRole, userWallet.address);
+        const tx = await paymaster.connect(adminWallet).grantRole(whitelistRole, userWallet.address, { nonce: await adminWallet.getNonce() });
         await tx.wait();
     });
 
@@ -103,7 +104,7 @@ describe("WhitelistPaymaster", function () {
     });
 
     it("Does not support calls to non-whitelisted contracts", async function () {
-        const newFlag = await deployContract("MockFlag", [], { silent: true, skipChecks: true });
+        const newFlag = await deployContract("MockFlag", [], { wallet: adminWallet, silent: true, skipChecks: true });
 
         const paymasterParams = utils.getPaymasterParams(await paymaster.getAddress(), {
             type: "General",

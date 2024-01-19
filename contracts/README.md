@@ -25,8 +25,8 @@ The deploy script will check that you have enough ETH in your account to go ahea
 `ContentSignNFTFactory` is the way to instantiate `ContentSignNFT` contracts at deterministic addresses thanks to the `Create2` operand in the EVM.
 
 Deployment may be done by calling the `deployContentSignNFT` function on the factory contract with the appropriate parameters:
-- `_salt` should be a series of bytes. It may be random, or determined from the user address.
-- `_defaultAdmin` and `_defaultMinter` will typically be the user address.
+- `salt` should be a series of bytes. It may be random, or determined from the user address.
+- `admin` will typically be the user address.
 
 Once the transaction goes through a `ContentSignNFT` will be deployed, with the user address set as the minter and admin. Thanks to `Create2`, one can easily compute the address of the contracts with code similar to the below:
 ```js
@@ -45,7 +45,7 @@ const contractAddress = utils.create2Address(
     // are compiled with `yarn compile`
     utils.hashBytecode(artifact.bytecode),
     salt,
-    abiCoder.encode(["address", "address"], [wallet.address, wallet.address])
+    abiCoder.encode(["address"], [wallet.address])
 );
 ```
 

@@ -9,11 +9,10 @@ import "./ContentSignNFT.sol";
 
 contract ContentSignNFTFactory {
     function deployContentSignNFT(
-        bytes32 _salt,
-        address _defaultAdmin,
-        address _defaultMinter
+        bytes32 salt,
+        address admin
     ) external returns (address) {
-        ContentSignNFT nft = new ContentSignNFT{salt: _salt}(_defaultAdmin, _defaultMinter);
+        ContentSignNFT nft = new ContentSignNFT{salt: salt}(admin);
         return address(nft);
     }
 }

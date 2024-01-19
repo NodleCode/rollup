@@ -19,24 +19,23 @@ contract WhitelistPaymaster is BasePaymaster {
     error DestIsNotWhitelisted();
 
     constructor(
-        address _admin,
-        address _withdrawer,
-        address[] memory _whitelistedContracts
-    ) BasePaymaster(_admin, _withdrawer) {
-        _setContractWhitelist(_whitelistedContracts);
+        address admin,
+        address[] memory whitelistedContracts
+    ) BasePaymaster(admin, admin) {
+        _setContractWhitelist(whitelistedContracts);
     }
 
     function addWhitelistedContracts(
-        address[] memory _whitelistedContracts
+        address[] memory whitelistedContracts
     ) external onlyAdmin {
-        _setContractWhitelist(_whitelistedContracts);
+        _setContractWhitelist(whitelistedContracts);
     }
 
     function removeWhitelistedContracts(
-        address[] memory _whitelistedContracts
+        address[] memory whitelistedContracts
     ) external onlyAdmin {
-        for (uint256 i = 0; i < _whitelistedContracts.length; i++) {
-            isWhitelistedContract[_whitelistedContracts[i]] = false;
+        for (uint256 i = 0; i < whitelistedContracts.length; i++) {
+            isWhitelistedContract[whitelistedContracts[i]] = false;
         }
     }
 
@@ -44,11 +43,11 @@ contract WhitelistPaymaster is BasePaymaster {
         return hasRole(WHITELISTED_USER_ROLE, user);
     }
 
-    function _setContractWhitelist(address[] memory _whitelistedContracts)
+    function _setContractWhitelist(address[] memory whitelistedContracts)
         internal
     {
-        for (uint256 i = 0; i < _whitelistedContracts.length; i++) {
-            isWhitelistedContract[_whitelistedContracts[i]] = true;
+        for (uint256 i = 0; i < whitelistedContracts.length; i++) {
+            isWhitelistedContract[whitelistedContracts[i]] = true;
         }
     }
 

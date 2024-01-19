@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 import "../paymasters/BasePaymaster.sol";
 
 contract MockPaymaster is BasePaymaster {
-    constructor(address admin, address withdrawer) BasePaymaster(admin, withdrawer) {}
+    constructor(address admin) BasePaymaster(admin, admin) {}
 
     function _validateAndPayGeneralFlow(
         address from,

@@ -52,7 +52,7 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
     function validateAndPayForPaymasterTransaction(
         bytes32,
         bytes32,
-        Transaction calldata _transaction
+        Transaction calldata transaction
     )
         external
         payable
@@ -65,19 +65,19 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         context = new bytes(0);
 
         require(
-            _transaction.paymasterInput.length >= 4,
+            transaction.paymasterInput.length >= 4,
             "The standard paymaster input must be at least 4 bytes long"
         );
 
         bytes4 paymasterInputSelector = bytes4(
-            _transaction.paymasterInput[0:4]
+            transaction.paymasterInput[0:4]
         );
 
         // Note, that while the minimal amount of ETH needed is tx.gasPrice * tx.gasLimit,
         // neither paymaster nor account are allowed to access this context variable.
-        uint256 requiredETH = _transaction.gasLimit * _transaction.maxFeePerGas;
-        address destAddress = address(uint160(_transaction.to));
-        address userAddress = address(uint160(_transaction.from));
+        uint256 requiredETH = transaction.gasLimit * transaction.maxFeePerGas;
+        address destAddress = address(uint160(transaction.to));
+        address userAddress = address(uint160(transaction.from));
 
         if (paymasterInputSelector == IPaymasterFlow.general.selector) {
             _validateAndPayGeneralFlow(userAddress, destAddress, requiredETH);
@@ -85,7 +85,7 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
             paymasterInputSelector == IPaymasterFlow.approvalBased.selector
         ) {
             (address token, uint256 amount, bytes memory data) = abi.decode(
-                _transaction.paymasterInput[4:],
+                transaction.paymasterInput[4:],
                 (address, uint256, bytes)
             );
 
@@ -126,12 +126,12 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
     ) internal virtual;
 
     function postTransaction(
-        bytes calldata _context,
-        Transaction calldata _transaction,
+        bytes calldata context,
+        Transaction calldata transaction,
         bytes32,
         bytes32,
-        ExecutionResult _txResult,
-        uint256 _maxRefundedGas
+        ExecutionResult txResult,
+        uint256 maxRefundedGas
     ) external payable override onlyBootloader {
         // Refunds are not supported yet.
     }

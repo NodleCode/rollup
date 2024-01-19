@@ -1,7 +1,8 @@
-import { deployContract, getGovernance } from "./utils";
+import { deployContract, getGovernance, getWhitelistAdmin } from "./utils";
 
 export default async function() {
     await deployContract("NODL", [getGovernance(), getGovernance()]);
-    await deployContract("ContentSignNFT", [getGovernance(), getGovernance()]);
-    await deployContract("WhitelistPaymaster", [getGovernance(), getGovernance(), []]);
+    
+    const factory = await deployContract("ContentSignNFTFactory");
+    await deployContract("WhitelistPaymaster", [getWhitelistAdmin(), [await factory.getAddress()]]);
 }

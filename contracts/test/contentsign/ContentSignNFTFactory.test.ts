@@ -11,13 +11,13 @@ describe("ContentSignNFTFactory", function () {
 
     before(async function () {
         wallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
-        factory = await deployContract("ContentSignNFTFactory", [], { silent: true, skipChecks: true });
+        factory = await deployContract("ContentSignNFTFactory", [], {wallet: wallet, silent: true, skipChecks: true });
     });
 
     it("Should deploy contract", async function () {
         const salt = ethers.ZeroHash;
 
-        const tx = await factory.deployContentSignNFT(salt, wallet.address, wallet.address);
+        const tx = await factory.deployContentSignNFT(salt, wallet.address);
         await tx.wait();
 
         const deployer = new Deployer(hre, wallet);
@@ -28,7 +28,7 @@ describe("ContentSignNFTFactory", function () {
             await factory.getAddress(),
             utils.hashBytecode(artifact.bytecode),
             salt,
-            abiCoder.encode(["address", "address"], [wallet.address, wallet.address])
+            abiCoder.encode(["address"], [wallet.address])
         );
 
         const nft = new Contract(contractAddress, artifact.abi, wallet);
