@@ -17,7 +17,7 @@ describe("ContentSignNFTFactory", function () {
     it("Should deploy contract", async function () {
         const salt = ethers.ZeroHash;
 
-        const tx = await factory.deployContentSignNFT(salt, "Mock NFT", "MFT", wallet.address, wallet.address);
+        const tx = await factory.deployContentSignNFT(salt, wallet.address, wallet.address);
         await tx.wait();
 
         const deployer = new Deployer(hre, wallet);
@@ -28,15 +28,15 @@ describe("ContentSignNFTFactory", function () {
             await factory.getAddress(),
             utils.hashBytecode(artifact.bytecode),
             salt,
-            abiCoder.encode(["string", "string", "address", "address"], ["Mock NFT", "MFT", wallet.address, wallet.address])
+            abiCoder.encode(["address", "address"], [wallet.address, wallet.address])
         );
 
         const nft = new Contract(contractAddress, artifact.abi, wallet);
         const name = await nft.name();
         const symbol = await nft.symbol();
 
-        expect(name).to.equal("Mock NFT");
-        expect(symbol).to.equal("MFT");
+        expect(name).to.equal("ContentSign");
+        expect(symbol).to.equal("CSN");
         expect(await nft.hasRole(await nft.DEFAULT_ADMIN_ROLE(), wallet.address)).to.equal(true);
         expect(await nft.hasRole(await nft.MINTER_ROLE(), wallet.address)).to.equal(true);
     });
