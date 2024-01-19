@@ -13,6 +13,7 @@ cargo install cargo-nextest
 cargo install sqlx-cli
 
 yarn global add zksync-cli
+yarn global add @graphprotocol/graph-cli
 
 # install and build zk tool
 export ZKSYNC_HOME=/home/$USER/zksync-era
