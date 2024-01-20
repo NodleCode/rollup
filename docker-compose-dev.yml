@@ -10,7 +10,7 @@ services:
     healthcheck:
       test: wget http://localhost:8545
       interval: 2s
-      timeout: 5s
+      timeout: 30s
       retries: 30
   ipfs:
     image: ipfs/kubo:v0.14.0
@@ -132,7 +132,7 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3071/health"]
       interval: 10s
-      timeout: 5s
+      timeout: 10m
       retries: 10
   graph-node:
     image: graphprotocol/graph-node
