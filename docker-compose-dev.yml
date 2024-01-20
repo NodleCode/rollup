@@ -131,9 +131,9 @@ services:
       - ETH_CLIENT_WEB3_URL=http://geth:8545
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3071/health"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
-      retries: 10
+      retries: 30
   graph-node:
     image: graphprotocol/graph-node
     ports:
