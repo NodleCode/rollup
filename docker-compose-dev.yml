@@ -163,6 +163,12 @@ services:
       ipfs: 'ipfs:5001'
       ethereum: 'zksync-era:http://zksync:3050'
       GRAPH_LOG: info
+  portal:
+    build:
+      context: .
+      dockerfile: ./.maintain/Dockerfile.dapp-portal
+    ports:
+      - "3000:3000"
 
 volumes:
   ipfs:
