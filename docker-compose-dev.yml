@@ -70,6 +70,8 @@ services:
       explorer-api:
         condition: service_started
         restart: true
+    volumes:
+      - ./.maintain/explorer.config.js:/usr/src/app/packages/app/dist/config.js
   explorer-worker:
     image: "matterlabs/block-explorer-worker"
     environment:
