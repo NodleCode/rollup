@@ -70,9 +70,6 @@ services:
       explorer-api:
         condition: service_started
         restart: true
-      zksync:
-        condition: service_healthy
-        restart: true
   explorer-worker:
     image: "matterlabs/block-explorer-worker"
     environment:
@@ -84,6 +81,7 @@ services:
       - DATABASE_PASSWORD=postgres
       - DATABASE_NAME=block-explorer
       - BLOCKCHAIN_RPC_URL=http://zksync:3050
+      - DATA_FETCHER_URL=http://explorer-data-fetcher:3040
       - BATCHES_PROCESSING_POLLING_INTERVAL=1000
     depends_on:
       zksync:
@@ -103,6 +101,16 @@ services:
       explorer-worker:
         condition: service_started
         restart: true
+  explorer-data-fetcher:
+    image: "matterlabs/block-explorer-data-fetcher"
+    environment:
+      - PORT=3040
+      - LOG_LEVEL=verbose
+      - NODE_ENV=development
+      - BLOCKCHAIN_RPC_URL=http://zksync:3050
+    ports:
+      - '3040:3040'
+    depends_on:
       zksync:
         condition: service_healthy
         restart: true
@@ -183,7 +191,7 @@ services:
       zksync:
         condition: service_healthy
         restart: true
-        
+
 volumes:
   ipfs:
   geth:
