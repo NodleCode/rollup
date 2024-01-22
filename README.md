@@ -6,8 +6,8 @@ Each sub-package should feature a `README.md` file explaining how to test and us
 # Development setup
 > We recommend you run within the provided [devcontainer](https://code.visualstudio.com/remote/advancedcontainers/overview) to ensure you have all the necessary tooling with the correct versions and can skip the below steps.
 
-## Dependencies
-A number of dependencies are necessary to support this project, you may install them yourself by running `./.devcontainer/install-tools.sh`.
-
 ## Local network
-Most packages in this repo depend on various services which can easily be deployed locally by running `docker compose -f docker-compose-dev up`.
+Most packages in this repo depend on various services which can easily be deployed locally by running `docker compose -f docker-compose-dev.yml up`.
+
+## Dependencies
+If developing on this repo, you will need a number of dependencies, you may install them yourself by running `./.devcontainer/install-tools.sh`. This is not necessary if you simply want to use docker compose to start a local testnet.
