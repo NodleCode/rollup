@@ -36,6 +36,11 @@ const config: HardhatUserConfig = {
       ethNetwork: "", // in-memory node doesn't support eth node; removing this line will cause an error
       zksync: true
     },
+    dockerComposeNode: {
+      url: "http://zksync:3050",
+      ethNetwork: "http://geth:8545",
+      zksync: true,
+    },
     hardhat: {
       zksync: true,
     },

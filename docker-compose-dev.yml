@@ -170,6 +170,20 @@ services:
     ports:
       - "3000:3000"
 
+  deploy-contracts:
+    image: node
+    volumes:
+      - ./contracts:/app
+    working_dir: /app
+    command: ["bash", "-c", "yarn && yarn compile && yarn deploy --network dockerComposeNode"]
+    depends_on:
+      geth:
+        condition: service_healthy
+        restart: true
+      zksync:
+        condition: service_healthy
+        restart: true
+        
 volumes:
   ipfs:
   geth:
