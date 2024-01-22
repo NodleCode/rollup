@@ -9,5 +9,7 @@ Each sub-package should feature a `README.md` file explaining how to test and us
 ## Local network
 Most packages in this repo depend on various services which can easily be deployed locally by running `docker compose -f docker-compose-dev.yml up`.
 
+If using a mac with Apple Silicon chip, you may need to run `export DOCKER_DEFAULT_PLATFORM=linux/amd64` first.
+
 ## Dependencies
 If developing on this repo, you will need a number of dependencies, you may install them yourself by running `./.devcontainer/install-tools.sh`. This is not necessary if you simply want to use docker compose to start a local testnet.
