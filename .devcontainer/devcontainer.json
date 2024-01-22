@@ -19,8 +19,7 @@
   },
   "remoteUser": "vscode",
   "remoteEnv": {
-    "ZKSYNC_HOME": "/home/vscode/zksync-era",
-    "PATH": "/home/vscode/zksync-era/bin:${containerEnv:PATH}:/usr/local/cargo/bin:/home/vscode/.yarn/bin"
+    "PATH": "${containerEnv:PATH}:/usr/local/cargo/bin:/home/vscode/.yarn/bin"
   },
   "onCreateCommand": "./.devcontainer/install-tools.sh",
   "updateContentCommand": "cd contracts && yarn && yarn compile",
