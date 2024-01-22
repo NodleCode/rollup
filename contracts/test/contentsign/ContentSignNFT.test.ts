@@ -11,7 +11,12 @@ describe("ContentSignNFT", function () {
     ownerWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
     userWallet = getWallet(LOCAL_RICH_WALLETS[1].privateKey);
 
-    tokenContract = await deployContract("ContentSignNFT", [ownerWallet.address], { wallet: ownerWallet, silent: true, skipChecks: true });
+    tokenContract = await deployContract("ContentSignNFT", ["Mock", "MCK", ownerWallet.address], { wallet: ownerWallet, silent: true, skipChecks: true });
+  });
+
+  it("Set the right metadata", async function () {
+    expect(await tokenContract.name()).to.equal("Mock");
+    expect(await tokenContract.symbol()).to.equal("MCK");
   });
 
   it("Should mint token", async function () {

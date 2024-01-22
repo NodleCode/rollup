@@ -19,33 +19,11 @@ The deploy script will check that you have enough ETH in your account to go ahea
 
 ### Usage
 
-#### `ContentSignNFT` and `ContentSignNFTFactory`
-`ContentSignNFTFactory` is the way to instantiate `ContentSignNFT` contracts at deterministic addresses thanks to the `Create2` operand in the EVM.
-
-Deployment may be done by calling the `deployContentSignNFT` function on the factory contract with the appropriate parameters:
-- `salt` should be a series of bytes. It may be random, or determined from the user address.
-- `admin` will typically be the user address.
-
-Once the transaction goes through a `ContentSignNFT` will be deployed, with the user address set as the minter and admin. Thanks to `Create2`, one can easily compute the address of the contracts with code similar to the below:
-```js
-const salt = ethers.ZeroHash; // in production, you will use any series of bytes of your choosing
-
-const tx = await factory.deployContentSignNFT(salt, wallet.address, wallet.address);
-await tx.wait();
-
-const deployer = new Deployer(hre, wallet);
-const artifact = await deployer.loadArtifact("ContentSignNFT");
-
-const abiCoder = new ethers.AbiCoder();
-const contractAddress = utils.create2Address(
-    await factory.getAddress(),
-    // the bytecode value typically comes from the artifact file once the contracts
-    // are compiled with `yarn compile`
-    utils.hashBytecode(artifact.bytecode),
-    salt,
-    abiCoder.encode(["address"], [wallet.address])
-);
-```
+#### `ContentSignNFT`
+`ContentSignNFT` is a shared NFT contract for ContentSign customers. Typically one instance is deployed per group of users or customers. Its constructor accepts three arguments:
+- `name`: the name of the NFT contract
+- `symbol`: the symbol of the NFT contract
+- `admin`: the admin address which may grant minting permissions to users
 
 Once you have a `ContentSignNFT` deployed, you can easily interact with it. Minting a NFT may be done via the function `safeMint` which accepts the following parameters:
 - `to` is the address of the NFT owner
