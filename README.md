@@ -7,7 +7,7 @@ Each sub-package should feature a `README.md` file explaining how to test and us
 > We recommend you run within the provided [devcontainer](https://code.visualstudio.com/remote/advancedcontainers/overview) to ensure you have all the necessary tooling with the correct versions and can skip the below steps.
 
 ## Local network
-Most packages in this repo depend on various services which can easily be deployed locally by running `docker compose -f docker-compose-dev.yml up`.
+Most packages in this repo depend on various services which can easily be deployed locally by running `docker compose up`.
 
 If using a mac with Apple Silicon chip, you may need to run `export DOCKER_DEFAULT_PLATFORM=linux/amd64` first.
 
