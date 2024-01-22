@@ -31,4 +31,37 @@ describe("NODL", function () {
     const finalSupply = await tokenContract.totalSupply();
     expect(finalSupply).to.equal(initialSupply + mintAmount);
   });
+
+  it("Should be burnable", async () => {
+    const burnAmount = ethers.parseEther("1000");
+    const initialSupply = await tokenContract.totalSupply();
+    await tokenContract.connect(userWallet).burn(burnAmount);
+
+    const balance = await tokenContract.balanceOf(userWallet.address);
+    expect(balance.toString()).to.equal("0");
+
+    const finalSupply = await tokenContract.totalSupply();
+    expect(finalSupply).to.equal(initialSupply - burnAmount);
+  });
+
+  it("Has a max supply of 21 billion", async () => {
+    const maxSupply = ethers.parseEther("21000000000");
+    const cap = await tokenContract.cap();
+    expect(cap).to.equal(maxSupply);
+  });
+
+  it("Cannot mint above max supply", async () => {
+    const cap = await tokenContract.cap();
+    const currentSupply = await tokenContract.totalSupply();
+
+    const maxMint = cap - currentSupply;
+    await tokenContract.mint(userWallet.address, maxMint);
+    
+    try {
+      await tokenContract.mint(userWallet.address, 1);
+      expect.fail("Should have reverted");
+    } catch (e) {
+      expect(e.message).to.contain("execution reverted");
+    }
+  });
 });
