@@ -14,5 +14,10 @@ If using a mac with Apple Silicon chip, you may need to run `export DOCKER_DEFAU
 ### Getting contract addresses
 The docker compose should auto deploy the contracts for you. You should be able to see their addresses via `docker compose logs -f deploy-contracts`.
 
+### Useful links
+- Block Explorer: [`http://127.0.0.1:3010/`](http://127.0.0.1:3010/)
+- DAPP Portal / ZkSync Wallet: [`http://127.0.0.1:3000`](http://127.0.0.1:3000)
+- Local Rollup RPC: `127.0.0.1:3050`
+
 ## Dependencies
 If developing on this repo, you will need a number of dependencies, you may install them yourself by running `./.devcontainer/install-tools.sh`. This is not necessary if you simply want to use docker compose to start a local testnet.
