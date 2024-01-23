@@ -11,6 +11,8 @@ Most packages in this repo depend on various services which can easily be deploy
 
 If using a mac with Apple Silicon chip, you may need to run `export DOCKER_DEFAULT_PLATFORM=linux/amd64` first.
 
+If any issues, you may reset your local setup via `docker compose rm -fsv` before restarting it.
+
 ### Getting contract addresses
 The docker compose should auto deploy the contracts for you. You should be able to see their addresses via `docker compose logs -f deploy-contracts`.
 
