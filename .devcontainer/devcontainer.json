@@ -23,7 +23,6 @@
   },
   "onCreateCommand": "./.devcontainer/install-tools.sh",
   "updateContentCommand": "cd contracts && yarn && yarn compile",
-  "postStartCommand": "docker compose up -d",
   "customizations": {
     "vscode": {
       "settings": {
