@@ -1,0 +1,48 @@
+specVersion: 0.0.4
+schema:
+  file: content-sign.schema.graphql
+dataSources:
+  - kind: ethereum/contract
+    name: erc721
+    network: zksync-era
+    source:
+      address: "0x8a544924916dCf0f73564750CBC68BBC65Fe1E0B"
+      abi: IERC721
+      startBlock: 1
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - ERC721Contract
+      abis:
+        - name: IERC721
+          file: ../../node_modules/@openzeppelin/contracts/build/contracts/IERC721Metadata.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,indexed uint256)
+          handler: handleApproval
+        - event: ApprovalForAll(indexed address,indexed address,bool)
+          handler: handleApprovalForAll
+        - event: Transfer(indexed address,indexed address,indexed uint256)
+          handler: handleTransfer
+      file: ../../node_modules/@openzeppelin/subgraphs/src/datasources/erc721.ts
+  - kind: ethereum/contract
+    name: ownable
+    network: zksync-era
+    source:
+      address: "0x8a544924916dCf0f73564750CBC68BBC65Fe1E0B"
+      abi: Ownable
+      startBlock: 1
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - Ownable
+      abis:
+        - name: Ownable
+          file: ../../node_modules/@openzeppelin/contracts/build/contracts/Ownable.json
+      eventHandlers:
+        - event: OwnershipTransferred(indexed address,indexed address)
+          handler: handleOwnershipTransferred
+      file: ../../node_modules/@openzeppelin/subgraphs/src/datasources/ownable.ts

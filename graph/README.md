@@ -19,7 +19,7 @@ As part of the monorepo, all installs are specially arranged to the root package
 
 Use after all main installations.
 
-Major codebase are generated and edited, by running the following command or just `yarn generate`
+Major codebase are generated and edited, by running the following command or just `yarn bootstrap`
 
 ```
 npx graph-compiler \
@@ -28,4 +28,6 @@ npx graph-compiler \
   --export-schema \
   --export-subgraph
 ```
+
+Fix the Contracts paths on the generated files `generated/*`, for now this is all you need to start
 
