@@ -5,7 +5,7 @@ address=$(cat ../contracts/.nft-contract-address)
 
 if [ -z "$address" ]
 then
-      echo "Factory address is empty. Please run yarn deploy-local first."
+      echo "Factory address is empty. Please make sure you have deployed the contract"
       exit 1
 fi
 

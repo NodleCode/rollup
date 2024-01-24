@@ -109,8 +109,8 @@ export class Account extends Entity {
     );
   }
 
-  get asOwnable(): Bytes | null {
-    let value = this.get("asOwnable");
+  get asAccessControl(): Bytes | null {
+    let value = this.get("asAccessControl");
     if (!value || value.kind == ValueKind.NULL) {
       return null;
     } else {
@@ -118,27 +118,51 @@ export class Account extends Entity {
     }
   }
 
-  set asOwnable(value: Bytes | null) {
+  set asAccessControl(value: Bytes | null) {
     if (!value) {
-      this.unset("asOwnable");
+      this.unset("asAccessControl");
     } else {
-      this.set("asOwnable", Value.fromBytes(<Bytes>value));
+      this.set("asAccessControl", Value.fromBytes(<Bytes>value));
     }
   }
 
-  get ownerOf(): OwnableLoader {
-    return new OwnableLoader(
+  get membership(): AccessControlRoleMemberLoader {
+    return new AccessControlRoleMemberLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "ownerOf",
+      "membership",
     );
   }
 
-  get ownershipTransferred(): OwnershipTransferredLoader {
-    return new OwnershipTransferredLoader(
+  get roleGranted(): RoleGrantedLoader {
+    return new RoleGrantedLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "ownershipTransferred",
+      "roleGranted",
+    );
+  }
+
+  get roleGrantedSender(): RoleGrantedLoader {
+    return new RoleGrantedLoader(
+      "Account",
+      this.get("id")!.toBytes().toHexString(),
+      "roleGrantedSender",
+    );
+  }
+
+  get roleRevoked(): RoleRevokedLoader {
+    return new RoleRevokedLoader(
+      "Account",
+      this.get("id")!.toBytes().toHexString(),
+      "roleRevoked",
+    );
+  }
+
+  get roleRevokedSender(): RoleRevokedLoader {
+    return new RoleRevokedLoader(
+      "Account",
+      this.get("id")!.toBytes().toHexString(),
+      "roleRevokedSender",
     );
   }
 }
@@ -617,7 +641,7 @@ export class ERC721Transfer extends Entity {
   }
 }
 
-export class Ownable extends Entity {
+export class AccessControl extends Entity {
   constructor(id: Bytes) {
     super();
     this.set("id", Value.fromBytes(id));
@@ -625,24 +649,26 @@ export class Ownable extends Entity {
 
   save(): void {
     let id = this.get("id");
-    assert(id != null, "Cannot save Ownable entity without an ID");
+    assert(id != null, "Cannot save AccessControl entity without an ID");
     if (id) {
       assert(
         id.kind == ValueKind.BYTES,
-        `Entities of type Ownable must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+        `Entities of type AccessControl must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
-      store.set("Ownable", id.toBytes().toHexString(), this);
+      store.set("AccessControl", id.toBytes().toHexString(), this);
     }
   }
 
-  static loadInBlock(id: Bytes): Ownable | null {
-    return changetype<Ownable | null>(
-      store.get_in_block("Ownable", id.toHexString()),
+  static loadInBlock(id: Bytes): AccessControl | null {
+    return changetype<AccessControl | null>(
+      store.get_in_block("AccessControl", id.toHexString()),
     );
   }
 
-  static load(id: Bytes): Ownable | null {
-    return changetype<Ownable | null>(store.get("Ownable", id.toHexString()));
+  static load(id: Bytes): AccessControl | null {
+    return changetype<AccessControl | null>(
+      store.get("AccessControl", id.toHexString()),
+    );
   }
 
   get id(): Bytes {
@@ -671,8 +697,45 @@ export class Ownable extends Entity {
     this.set("asAccount", Value.fromBytes(value));
   }
 
-  get owner(): Bytes {
-    let value = this.get("owner");
+  get roles(): AccessControlRoleLoader {
+    return new AccessControlRoleLoader(
+      "AccessControl",
+      this.get("id")!.toBytes().toHexString(),
+      "roles",
+    );
+  }
+}
+
+export class Role extends Entity {
+  constructor(id: Bytes) {
+    super();
+    this.set("id", Value.fromBytes(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save Role entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.BYTES,
+        `Entities of type Role must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("Role", id.toBytes().toHexString(), this);
+    }
+  }
+
+  static loadInBlock(id: Bytes): Role | null {
+    return changetype<Role | null>(
+      store.get_in_block("Role", id.toHexString()),
+    );
+  }
+
+  static load(id: Bytes): Role | null {
+    return changetype<Role | null>(store.get("Role", id.toHexString()));
+  }
+
+  get id(): Bytes {
+    let value = this.get("id");
     if (!value || value.kind == ValueKind.NULL) {
       throw new Error("Cannot return null for a required field.");
     } else {
@@ -680,20 +743,20 @@ export class Ownable extends Entity {
     }
   }
 
-  set owner(value: Bytes) {
-    this.set("owner", Value.fromBytes(value));
+  set id(value: Bytes) {
+    this.set("id", Value.fromBytes(value));
   }
 
-  get ownershipTransferred(): OwnershipTransferredLoader {
-    return new OwnershipTransferredLoader(
-      "Ownable",
+  get roleOf(): AccessControlRoleLoader {
+    return new AccessControlRoleLoader(
+      "Role",
       this.get("id")!.toBytes().toHexString(),
-      "ownershipTransferred",
+      "roleOf",
     );
   }
 }
 
-export class OwnershipTransferred extends Entity {
+export class AccessControlRole extends Entity {
   constructor(id: string) {
     super();
     this.set("id", Value.fromString(id));
@@ -701,25 +764,221 @@ export class OwnershipTransferred extends Entity {
 
   save(): void {
     let id = this.get("id");
-    assert(id != null, "Cannot save OwnershipTransferred entity without an ID");
+    assert(id != null, "Cannot save AccessControlRole entity without an ID");
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type OwnershipTransferred must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+        `Entities of type AccessControlRole must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
-      store.set("OwnershipTransferred", id.toString(), this);
+      store.set("AccessControlRole", id.toString(), this);
     }
   }
 
-  static loadInBlock(id: string): OwnershipTransferred | null {
-    return changetype<OwnershipTransferred | null>(
-      store.get_in_block("OwnershipTransferred", id),
+  static loadInBlock(id: string): AccessControlRole | null {
+    return changetype<AccessControlRole | null>(
+      store.get_in_block("AccessControlRole", id),
     );
   }
 
-  static load(id: string): OwnershipTransferred | null {
-    return changetype<OwnershipTransferred | null>(
-      store.get("OwnershipTransferred", id),
+  static load(id: string): AccessControlRole | null {
+    return changetype<AccessControlRole | null>(
+      store.get("AccessControlRole", id),
+    );
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get contract(): Bytes {
+    let value = this.get("contract");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set contract(value: Bytes) {
+    this.set("contract", Value.fromBytes(value));
+  }
+
+  get role(): Bytes {
+    let value = this.get("role");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set role(value: Bytes) {
+    this.set("role", Value.fromBytes(value));
+  }
+
+  get admin(): string {
+    let value = this.get("admin");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set admin(value: string) {
+    this.set("admin", Value.fromString(value));
+  }
+
+  get adminOf(): AccessControlRoleLoader {
+    return new AccessControlRoleLoader(
+      "AccessControlRole",
+      this.get("id")!.toString(),
+      "adminOf",
+    );
+  }
+
+  get members(): AccessControlRoleMemberLoader {
+    return new AccessControlRoleMemberLoader(
+      "AccessControlRole",
+      this.get("id")!.toString(),
+      "members",
+    );
+  }
+
+  get roleGranted(): RoleGrantedLoader {
+    return new RoleGrantedLoader(
+      "AccessControlRole",
+      this.get("id")!.toString(),
+      "roleGranted",
+    );
+  }
+
+  get roleRevoked(): RoleRevokedLoader {
+    return new RoleRevokedLoader(
+      "AccessControlRole",
+      this.get("id")!.toString(),
+      "roleRevoked",
+    );
+  }
+
+  get roleAdminChanged(): RoleAdminChangedLoader {
+    return new RoleAdminChangedLoader(
+      "AccessControlRole",
+      this.get("id")!.toString(),
+      "roleAdminChanged",
+    );
+  }
+}
+
+export class AccessControlRoleMember extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(
+      id != null,
+      "Cannot save AccessControlRoleMember entity without an ID",
+    );
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type AccessControlRoleMember must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("AccessControlRoleMember", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): AccessControlRoleMember | null {
+    return changetype<AccessControlRoleMember | null>(
+      store.get_in_block("AccessControlRoleMember", id),
+    );
+  }
+
+  static load(id: string): AccessControlRoleMember | null {
+    return changetype<AccessControlRoleMember | null>(
+      store.get("AccessControlRoleMember", id),
+    );
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get accesscontrolrole(): string {
+    let value = this.get("accesscontrolrole");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set accesscontrolrole(value: string) {
+    this.set("accesscontrolrole", Value.fromString(value));
+  }
+
+  get account(): Bytes {
+    let value = this.get("account");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set account(value: Bytes) {
+    this.set("account", Value.fromBytes(value));
+  }
+}
+
+export class RoleAdminChanged extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save RoleAdminChanged entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type RoleAdminChanged must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("RoleAdminChanged", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): RoleAdminChanged | null {
+    return changetype<RoleAdminChanged | null>(
+      store.get_in_block("RoleAdminChanged", id),
+    );
+  }
+
+  static load(id: string): RoleAdminChanged | null {
+    return changetype<RoleAdminChanged | null>(
+      store.get("RoleAdminChanged", id),
     );
   }
 
@@ -775,8 +1034,89 @@ export class OwnershipTransferred extends Entity {
     this.set("timestamp", Value.fromBigInt(value));
   }
 
-  get contract(): Bytes {
-    let value = this.get("contract");
+  get role(): string {
+    let value = this.get("role");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set role(value: string) {
+    this.set("role", Value.fromString(value));
+  }
+
+  get newAdminRole(): string {
+    let value = this.get("newAdminRole");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set newAdminRole(value: string) {
+    this.set("newAdminRole", Value.fromString(value));
+  }
+
+  get previousAdminRole(): string {
+    let value = this.get("previousAdminRole");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set previousAdminRole(value: string) {
+    this.set("previousAdminRole", Value.fromString(value));
+  }
+}
+
+export class RoleGranted extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save RoleGranted entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type RoleGranted must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("RoleGranted", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): RoleGranted | null {
+    return changetype<RoleGranted | null>(
+      store.get_in_block("RoleGranted", id),
+    );
+  }
+
+  static load(id: string): RoleGranted | null {
+    return changetype<RoleGranted | null>(store.get("RoleGranted", id));
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get emitter(): Bytes {
+    let value = this.get("emitter");
     if (!value || value.kind == ValueKind.NULL) {
       throw new Error("Cannot return null for a required field.");
     } else {
@@ -784,12 +1124,51 @@ export class OwnershipTransferred extends Entity {
     }
   }
 
-  set contract(value: Bytes) {
-    this.set("contract", Value.fromBytes(value));
+  set emitter(value: Bytes) {
+    this.set("emitter", Value.fromBytes(value));
   }
 
-  get owner(): Bytes {
-    let value = this.get("owner");
+  get transaction(): string {
+    let value = this.get("transaction");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set transaction(value: string) {
+    this.set("transaction", Value.fromString(value));
+  }
+
+  get timestamp(): BigInt {
+    let value = this.get("timestamp");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set timestamp(value: BigInt) {
+    this.set("timestamp", Value.fromBigInt(value));
+  }
+
+  get role(): string {
+    let value = this.get("role");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set role(value: string) {
+    this.set("role", Value.fromString(value));
+  }
+
+  get account(): Bytes {
+    let value = this.get("account");
     if (!value || value.kind == ValueKind.NULL) {
       throw new Error("Cannot return null for a required field.");
     } else {
@@ -797,8 +1176,141 @@ export class OwnershipTransferred extends Entity {
     }
   }
 
-  set owner(value: Bytes) {
-    this.set("owner", Value.fromBytes(value));
+  set account(value: Bytes) {
+    this.set("account", Value.fromBytes(value));
+  }
+
+  get sender(): Bytes {
+    let value = this.get("sender");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set sender(value: Bytes) {
+    this.set("sender", Value.fromBytes(value));
+  }
+}
+
+export class RoleRevoked extends Entity {
+  constructor(id: string) {
+    super();
+    this.set("id", Value.fromString(id));
+  }
+
+  save(): void {
+    let id = this.get("id");
+    assert(id != null, "Cannot save RoleRevoked entity without an ID");
+    if (id) {
+      assert(
+        id.kind == ValueKind.STRING,
+        `Entities of type RoleRevoked must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
+      );
+      store.set("RoleRevoked", id.toString(), this);
+    }
+  }
+
+  static loadInBlock(id: string): RoleRevoked | null {
+    return changetype<RoleRevoked | null>(
+      store.get_in_block("RoleRevoked", id),
+    );
+  }
+
+  static load(id: string): RoleRevoked | null {
+    return changetype<RoleRevoked | null>(store.get("RoleRevoked", id));
+  }
+
+  get id(): string {
+    let value = this.get("id");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set id(value: string) {
+    this.set("id", Value.fromString(value));
+  }
+
+  get emitter(): Bytes {
+    let value = this.get("emitter");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set emitter(value: Bytes) {
+    this.set("emitter", Value.fromBytes(value));
+  }
+
+  get transaction(): string {
+    let value = this.get("transaction");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set transaction(value: string) {
+    this.set("transaction", Value.fromString(value));
+  }
+
+  get timestamp(): BigInt {
+    let value = this.get("timestamp");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigInt();
+    }
+  }
+
+  set timestamp(value: BigInt) {
+    this.set("timestamp", Value.fromBigInt(value));
+  }
+
+  get role(): string {
+    let value = this.get("role");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toString();
+    }
+  }
+
+  set role(value: string) {
+    this.set("role", Value.fromString(value));
+  }
+
+  get account(): Bytes {
+    let value = this.get("account");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set account(value: Bytes) {
+    this.set("account", Value.fromBytes(value));
+  }
+
+  get sender(): Bytes {
+    let value = this.get("sender");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set sender(value: Bytes) {
+    this.set("sender", Value.fromBytes(value));
   }
 }
 
@@ -924,7 +1436,7 @@ export class ERC721TransferLoader extends Entity {
   }
 }
 
-export class OwnableLoader extends Entity {
+export class AccessControlRoleMemberLoader extends Entity {
   _entity: string;
   _field: string;
   _id: string;
@@ -936,13 +1448,13 @@ export class OwnableLoader extends Entity {
     this._field = field;
   }
 
-  load(): Ownable[] {
+  load(): AccessControlRoleMember[] {
     let value = store.loadRelated(this._entity, this._id, this._field);
-    return changetype<Ownable[]>(value);
+    return changetype<AccessControlRoleMember[]>(value);
   }
 }
 
-export class OwnershipTransferredLoader extends Entity {
+export class RoleGrantedLoader extends Entity {
   _entity: string;
   _field: string;
   _id: string;
@@ -954,8 +1466,62 @@ export class OwnershipTransferredLoader extends Entity {
     this._field = field;
   }
 
-  load(): OwnershipTransferred[] {
+  load(): RoleGranted[] {
     let value = store.loadRelated(this._entity, this._id, this._field);
-    return changetype<OwnershipTransferred[]>(value);
+    return changetype<RoleGranted[]>(value);
+  }
+}
+
+export class RoleRevokedLoader extends Entity {
+  _entity: string;
+  _field: string;
+  _id: string;
+
+  constructor(entity: string, id: string, field: string) {
+    super();
+    this._entity = entity;
+    this._id = id;
+    this._field = field;
+  }
+
+  load(): RoleRevoked[] {
+    let value = store.loadRelated(this._entity, this._id, this._field);
+    return changetype<RoleRevoked[]>(value);
+  }
+}
+
+export class AccessControlRoleLoader extends Entity {
+  _entity: string;
+  _field: string;
+  _id: string;
+
+  constructor(entity: string, id: string, field: string) {
+    super();
+    this._entity = entity;
+    this._id = id;
+    this._field = field;
+  }
+
+  load(): AccessControlRole[] {
+    let value = store.loadRelated(this._entity, this._id, this._field);
+    return changetype<AccessControlRole[]>(value);
+  }
+}
+
+export class RoleAdminChangedLoader extends Entity {
+  _entity: string;
+  _field: string;
+  _id: string;
+
+  constructor(entity: string, id: string, field: string) {
+    super();
+    this._entity = entity;
+    this._id = id;
+    this._field = field;
+  }
+
+  load(): RoleAdminChanged[] {
+    let value = store.loadRelated(this._entity, this._id, this._field);
+    return changetype<RoleAdminChanged[]>(value);
   }
 }

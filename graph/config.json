@@ -7,7 +7,7 @@
             "startBlock": 1,
             "module": [
                 "erc721",
-                "ownable"
+                "accesscontrol"
             ]
         }
     ]
