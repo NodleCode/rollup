@@ -1,0 +1,14 @@
+{
+    "output": "generated/content-sign.",
+    "chain": "zksync-era",
+    "datasources": [
+        {
+            "address": "0x8a544924916dCf0f73564750CBC68BBC65Fe1E0B",
+            "startBlock": 1,
+            "module": [
+                "erc721",
+                "ownable"
+            ]
+        }
+    ]
+}
