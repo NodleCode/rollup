@@ -16,6 +16,7 @@ sed -i "s/address: \".*\"/address: \"$address\"/g" generated/content-sign.subgra
 # run the build command and deploy command
 yarn build
 echo "Graph build completed. Deploying to local graph node..."
+graph create --node http://graph-node:8020/ content-sign
 graph deploy --node http://graph-node:8020/ --ipfs http://ipfs:5001 --version-label v0.0.1 content-sign generated/content-sign.subgraph.yaml
 echo "Graph local deployed."
 
