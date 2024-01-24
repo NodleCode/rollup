@@ -6,7 +6,8 @@
     "deploy": "hardhat deploy-zksync --script deploy.ts",
     "compile": "hardhat compile",
     "clean": "hardhat clean",
-    "test": "hardhat test --network hardhat"
+    "test": "hardhat test --network hardhat",
+    "mint": "hardhat run scripts/mint.ts --network dockerizedNode"
   },
   "devDependencies": {
     "@matterlabs/hardhat-zksync-deploy": "^1.1.2",

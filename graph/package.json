@@ -1,0 +1,25 @@
+{
+  "name": "graph",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "bootstrap": "graph-compiler --config config.json --include ../node_modules/@openzeppelin/subgraphs/src/datasources --export-schema --export-subgraph",
+    "codegen": "graph codegen generated/content-sign.subgraph.yaml",
+    "build": "graph build generated/content-sign.subgraph.yaml",
+    "deploy": "graph deploy --node https://api.thegraph.com/deploy/ generated/content-sign.subgraph.yaml",
+    "create-local": "graph create --node http://localhost:8020/ content-sign",
+    "remove-local": "graph remove --node http://localhost:8020/ content-sign generated/content-sign.subgraph.yaml",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 content-sign generated/content-sign.subgraph.yaml",
+    "test": "graph test generated/content-sign.subgraph.yaml",
+    "prepare": "./prepare.sh",
+    "fix-paths": "for file in generated/*.yaml; do sed -i '' 's/file: \\.\\.\\/node_modules/file: \\.\\.\\/\\.\\.\\/node_modules/g' \"$file\"; done"
+  },
+  "dependencies": {
+    "@graphprotocol/graph-cli": "0.67.2",
+    "@graphprotocol/graph-ts": "0.32.0",
+    "@openzeppelin/subgraphs": "^0.1.8-5"
+  },
+  "devDependencies": {
+    "matchstick-as": "0.5.0"
+  }
+}

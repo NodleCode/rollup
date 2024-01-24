@@ -1,8 +1,9 @@
 {
     "name": "nodle-rollup",
     "private": true,
-    "workspaces": ["contracts",  "packages/*"],
+    "workspaces": ["contracts", "graph",  "packages/*"],
     "scripts": {
-      "test": "yarn workspace contracts test"
+      "test": "yarn workspace contracts test",
+      "bootstrap-graph": "yarn workspace graph bootstrap && yarn workspace graph fix-paths && yarn workspace graph codegen"
     }
   }
