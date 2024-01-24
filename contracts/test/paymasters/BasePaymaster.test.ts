@@ -87,4 +87,12 @@ describe("BasePaymaster", function () {
             expect(e.message).to.include("Paymaster validation error");
         }
     });
+
+    it("Sets correct roles", async () => {
+        const withdrawerRole = await paymaster.WITHDRAWER_ROLE();
+        const adminRole = await paymaster.DEFAULT_ADMIN_ROLE();
+
+        expect(await paymaster.hasRole(withdrawerRole, withdrawerWallet.address)).to.be.true;
+        expect(await paymaster.hasRole(adminRole, adminWallet.address)).to.be.true;
+    });
 });

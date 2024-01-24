@@ -4,5 +4,5 @@ export default async function() {
     await deployContract("NODL", [getGovernance(), getGovernance()]);
     
     const nft = await deployContract("ContentSignNFT", ["Click", "CLK", getWhitelistAdmin()]);
-    await deployContract("WhitelistPaymaster", [getWhitelistAdmin(), [await nft.getAddress()]]);
+    await deployContract("WhitelistPaymaster", [getGovernance(), getWhitelistAdmin(), [await nft.getAddress()]]);
 }

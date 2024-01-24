@@ -10,6 +10,7 @@ describe("WhitelistPaymaster", function () {
     let nodl: Contract;
 
     let adminWallet: Wallet;
+    let whitelistAdminWallet: Wallet;
     let withdrawerWallet: Wallet;
     let sponsorWallet: Wallet;
     let userWallet: Wallet;
@@ -18,9 +19,10 @@ describe("WhitelistPaymaster", function () {
 
     before(async function () {
         adminWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
+        whitelistAdminWallet = getWallet(LOCAL_RICH_WALLETS[3].privateKey);
         flag = await deployContract("MockFlag", [], { wallet: adminWallet, silent: true, skipChecks: true });
 
-        const result = await setupEnv("WhitelistPaymaster", [[await flag.getAddress()]]);
+        const result = await setupEnv("WhitelistPaymaster", [whitelistAdminWallet.address, [await flag.getAddress()]]);
         paymaster = result.paymaster;
         // adminWallet = result.adminWallet;
         withdrawerWallet = result.withdrawerWallet;
@@ -31,35 +33,45 @@ describe("WhitelistPaymaster", function () {
         nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true });
 
         // whitelist user
-        const whitelistRole = await paymaster.WHITELISTED_USER_ROLE();
-        const tx = await paymaster.connect(adminWallet).grantRole(whitelistRole, userWallet.address, { nonce: await adminWallet.getNonce() });
+        const whitelistedRole = await paymaster.WHITELISTED_USER_ROLE();
+        const tx = await paymaster.connect(adminWallet).grantRole(whitelistedRole, userWallet.address, { nonce: await adminWallet.getNonce() });
         await tx.wait();
     });
 
-    it("Only admin can update contract whitelist", async function () {
+    it("Sets correct roles", async () => {
+        const adminRole = await paymaster.DEFAULT_ADMIN_ROLE();
+        const withdrawerRole = await paymaster.WITHDRAWER_ROLE();
+        const whitelistAdminRole = await paymaster.WHITELIST_ADMIN_ROLE();
+
+        expect(await paymaster.hasRole(adminRole, adminWallet.address)).to.be.true;
+        expect(await paymaster.hasRole(withdrawerRole, withdrawerWallet.address)).to.be.true;
+        expect(await paymaster.hasRole(whitelistAdminRole, whitelistAdminWallet.address)).to.be.true;
+    });
+
+    it("Only whitelist admin can update contract whitelist", async function () {
         const newFlag = await deployContract("MockFlag", [], { wallet: withdrawerWallet, silent: true, skipChecks: true });
         const newFlagAddress = await newFlag.getAddress();
 
         try {
             await paymaster.connect(userWallet).addWhitelistedContracts([newFlagAddress]);
         } catch (e) {
-            expect(e.message).to.contain("Only admin can call this method");
+            expect(e.message).to.contain("Only whitelist admin can call this method");
         }
 
         try {
             await paymaster.connect(userWallet).removeWhitelistedContracts([newFlagAddress]);
         } catch (e) {
-            expect(e.message).to.contain("Only admin can call this method");
+            expect(e.message).to.contain("Only whitelist admin can call this method");
         }
 
-        const nonce = await adminWallet.getNonce();
+        const nonce = await whitelistAdminWallet.getNonce();
 
-        const tx1 = await paymaster.connect(adminWallet).addWhitelistedContracts([newFlagAddress], { nonce: nonce });
+        const tx1 = await paymaster.connect(whitelistAdminWallet).addWhitelistedContracts([newFlagAddress], { nonce: nonce });
         await tx1.wait();
         expect(await paymaster.isWhitelistedContract(newFlagAddress)).to.be.true;
         expect(await paymaster.isWhitelistedContract(await flag.getAddress())).to.be.true;
 
-        const tx2 = await paymaster.connect(adminWallet).removeWhitelistedContracts([newFlagAddress], { nonce: nonce + 1 });
+        const tx2 = await paymaster.connect(whitelistAdminWallet).removeWhitelistedContracts([newFlagAddress], { nonce: nonce + 1 });
         await tx2.wait();
         expect(await paymaster.isWhitelistedContract(newFlagAddress)).to.be.false;
         expect(await paymaster.isWhitelistedContract(await flag.getAddress())).to.be.true;

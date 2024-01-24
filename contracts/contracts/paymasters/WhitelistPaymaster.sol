@@ -12,28 +12,39 @@ contract WhitelistPaymaster is BasePaymaster {
     // This allows us to avoid reinventing the wheel and to piggy back on existing code and methods
     // that are already audited and tested.
     bytes32 public constant WHITELISTED_USER_ROLE = keccak256("WHITELISTED_USER_ROLE");
+    bytes32 public constant WHITELIST_ADMIN_ROLE = keccak256("WHITELIST_ADMIN_ROLE");
 
     mapping(address => bool) public isWhitelistedContract;
 
     error UserIsNotWhitelisted();
     error DestIsNotWhitelisted();
 
+    modifier onlyWhitelistAdmin() {
+        require(
+            hasRole(WHITELIST_ADMIN_ROLE, msg.sender),
+            "Only whitelist admin can call this method"
+        );
+        _;
+    }
+
     constructor(
         address admin,
+        address whitelistAdmin,
         address[] memory whitelistedContracts
     ) BasePaymaster(admin, admin) {
+        _grantRole(WHITELIST_ADMIN_ROLE, whitelistAdmin);
         _setContractWhitelist(whitelistedContracts);
     }
 
     function addWhitelistedContracts(
         address[] memory whitelistedContracts
-    ) external onlyAdmin {
+    ) external onlyWhitelistAdmin {
         _setContractWhitelist(whitelistedContracts);
     }
 
     function removeWhitelistedContracts(
         address[] memory whitelistedContracts
-    ) external onlyAdmin {
+    ) external onlyWhitelistAdmin {
         for (uint256 i = 0; i < whitelistedContracts.length; i++) {
             isWhitelistedContract[whitelistedContracts[i]] = false;
         }
