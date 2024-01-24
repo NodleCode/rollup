@@ -113,5 +113,5 @@ dist
 # TernJS port file
 .tern-port
 
-#custom
-.factory-address
+build
+yarn.lock

@@ -193,6 +193,17 @@ services:
       zksync:
         condition: service_healthy
         restart: true
+    
+  deploy-graph:
+    image: node
+    volumes:
+      - ./:/app
+    working_dir: /app/graph
+    command: ["bash", "-c", "yarn prepare"]
+    depends_on:
+      deploy-contracts:
+        condition: service_completed_successfully
+        restart: true
 
 volumes:
   ipfs:
