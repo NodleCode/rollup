@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Get the address from .factory-address file
-address=$(cat ../contracts/.factory-address)
+# Get the address from .nft-contract-address file
+address=$(cat ../contracts/.nft-contract-address)
 
 if [ -z "$address" ]
 then

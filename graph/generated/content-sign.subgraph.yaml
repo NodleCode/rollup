@@ -6,7 +6,7 @@ dataSources:
     name: erc721
     network: zksync-era
     source:
-      address: "0x76234fCa976408f34F429F1D7417B65f2D6BC52e"
+      address: "0x1Ce822993E2255E2724e67Ad901E3209b36C23c5"
       abi: IERC721
       startBlock: 1
     mapping:
@@ -30,7 +30,7 @@ dataSources:
     name: ownable
     network: zksync-era
     source:
-      address: "0x76234fCa976408f34F429F1D7417B65f2D6BC52e"
+      address: "0x1Ce822993E2255E2724e67Ad901E3209b36C23c5"
       abi: Ownable
       startBlock: 1
     mapping:
