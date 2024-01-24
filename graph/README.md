@@ -1,15 +1,8 @@
 # Content Sign - The Graph
 
-This project exists to support indexing data for the ERC721 - Content Sign from Nodle.
+To support indexing data for the ERC721 - Content Sign from Nodle.
 
 Please refer to: @openzeppelin/subgraphs
-
-## Table of Contents
-
-- [Installation](#installation)
-- [Usage](#usage)
-- [Contributing](#contributing)
-- [License](#license)
 
 ## Installation
 
@@ -17,7 +10,7 @@ As part of the monorepo, all installs are specially arranged to the root package
 
 ## Usage
 
-Use after all main installations.
+Use after all main installations.You do not need to run anything more
 
 Major codebase are generated and edited, by running the following command or just `yarn bootstrap`
 
@@ -29,5 +22,5 @@ npx graph-compiler \
   --export-subgraph
 ```
 
-Fix the Contracts paths on the generated files `generated/*`, for now this is all you need to start
+Fix the Contracts paths on the generated files `generated/*`, [*]
 
