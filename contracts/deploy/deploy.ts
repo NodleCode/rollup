@@ -4,10 +4,10 @@ import { execSync } from "child_process";
 export default async function() {
     await deployContract("NODL", [getGovernance(), getGovernance()]);
     
-    const factory = await deployContract("ContentSignNFT", ["Click", "CLK", getWhitelistAdmin()]);
-    const factoryAddress = await factory.getAddress();
-    await deployContract("WhitelistPaymaster", [getWhitelistAdmin(), [factoryAddress]]);
+    const nft = await deployContract("ContentSignNFT", ["Click", "CLK", getWhitelistAdmin()]);
+    const nftAddress = await nft.getAddress();
+    await deployContract("WhitelistPaymaster", [getWhitelistAdmin(), [nftAddress]]);
 
     // run commands with new address, create a file with the address
-    execSync(`echo "${factoryAddress}" > .factory-address`);
+    execSync(`echo "${nftAddress}" > .nft-contract-address`);
 }

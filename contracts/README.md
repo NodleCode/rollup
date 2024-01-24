@@ -45,3 +45,78 @@ Operations of the contract is relatively simple:
 4. The user may then craft ZkSync compliant transactions to use the paymaster. You will need to refer to your SDK's documentation for this.
 
 > Note that the `WhitelistPaymaster` contract would typically be managed by a central API and not by end users!
+
+#### Whitelisting
+As highlighted above, some of the contracts expect the user to be whitelisted before they can call them. The instructions below may be used to whitelist a user. This typically would be done by a backend side component, though when developing it may be necessary to manually whitelist users.
+
+> The instructions below assume you have a running local setup, ideally via `docker compose up` at the root of this repo.
+
+##### Tooling
+Make sure you have installed [foundry](https://book.getfoundry.sh/).
+
+> Pro Tip: if you use our devcontainer, it is already preinstalled!
+
+##### Environment
+For the sake of making our life easier, let's define a few environment variables (the command `export VAR=VALUE` allows you to do this on most systems where `VAR` and `VALUE` are both the environment variable and its value):
+- `ETH_RPC_URL`: URL of the your rollup node, typically `http://localhost:3050`. This is automatically preset in the devcontainer too!
+- `ADDR_NFT` and `ADDR_PAYMASTER`: addresses of the deployed `ContentSignNFT` and `WhitelistPaymaster` contracts. If you use the docker compose setup, this can fetched via `docker compose logs -f deploy-contracts`.
+- `ADDR_USER` the address of the user you would like to whitelist.
+- `PK_WHITELIST` the address of the whitelist admin configured on the paymaster and nft contracts. On the docker compose setup this should be `0xac1e735be8536c6534bb4f17f06f6afc73b2b5ba84ac2cfb12f7461b20c0bbe3`.
+
+##### Add a user to the Paymaster contract
+The Paymaster is used to allow users not to pay for their transactions when interacting with the `ContentSignNFT` contract. To prevent abuse, users must be whitelisted.
+
+First, fetch the whitelist role contant, which is used to track whitelisted users.
+```sh
+export ROLE_WHITELIST=`cast call $ADDR_PAYMASTER "WHITELISTED_USER_ROLE()(bytes32)"`
+```
+
+Let's check if the user is already whitelisted:
+```sh
+$ cast call $ADDR_PAYMASTER "hasRole(bytes32,address)(bool)" $ROLE_WHITELIST $ADDR_USER
+false
+```
+
+As expected, the user is not whitelisted yet. Let's whitelist him:
+```sh
+cast send --private-key $PK_WHITELIST $ADDR_PAYMASTER "grantRole(bytes32,address)" $ROLE_WHITELIST $ADDR_USER
+```
+
+And let's check the whitelist status of the user:
+```sh
+$ cast call $ADDR_PAYMASTER "hasRole(bytes32,address)(bool)" $ROLE_WHITELIST $ADDR_USER
+true
+```
+
+It worked!
+
+##### Add a user to the NFT contract
+Whitelisting a user on the paymaster is not enough. They also need to be allowed to mint NFTs. The flow is very similar with some slight differences.
+
+First, fetch the minter role contant, which is used to track users allowed to mint tokens.
+```sh
+export ROLE_MINTER=`cast call $ADDR_NFT "MINTER_ROLE()(bytes32)"`
+```
+
+Let's check if the user is already allowed to mint tokens:
+```sh
+$ cast call $ADDR_NFT "hasRole(bytes32,address)(bool)" $ROLE_MINTER $ADDR_USER
+false
+```
+
+As expected, the user is not allowed yet. Let's allow him:
+```sh
+cast send --private-key $PK_WHITELIST $ADDR_NFT "grantRole(bytes32,address)" $ROLE_MINTER $ADDR_USER
+```
+
+And let's check the whitelist status of the user:
+```sh
+$ cast call $ADDR_NFT "hasRole(bytes32,address)(bool)" $ROLE_MINTER $ADDR_USER
+true
+```
+
+And here we go! The user may now mint NFTs. You may mint NFTs with commands similar to the below:
+```sh
+cast send --private-key <private key of the user account> $ADDR_NFT "safeMint(address,string)" $ADDR_USER "test"
+```
+Of course, make sure to replace `<private key of the user account>` with the actual private key of the user account. `cast` is a really powerful tool, make sure to check the [Foundry Docs](https://book.getfoundry.sh/) for more details.

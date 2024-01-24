@@ -15,6 +15,9 @@ rustup toolchain install nightly
 yarn global add zksync-cli
 yarn global add @graphprotocol/graph-cli
 
+curl -L https://foundry.paradigm.xyz | sh
+~/.foundry/bin/foundryup
+
 # install and build zk tool
 # export ZKSYNC_HOME=/home/$USER/zksync-era
 # export PATH=$ZKSYNC_HOME/bin:$PATH
