@@ -19,6 +19,7 @@ The docker compose should auto deploy the contracts for you. You should be able 
 ### Useful links
 - Block Explorer: [`http://127.0.0.1:3010/`](http://127.0.0.1:3010/)
 - DAPP Portal / ZkSync Wallet: [`http://127.0.0.1:3000`](http://127.0.0.1:3000)
+- ContentSign NFT SubGraph: [`http://127.0.0.1:8000/subgraphs/name/content-sign`](http://127.0.0.1:8000/subgraphs/name/content-sign)
 - Local Rollup RPC: `127.0.0.1:3050`
 
 ## Dependencies
