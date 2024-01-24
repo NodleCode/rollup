@@ -27,6 +27,7 @@ const ERC721ABI = `
 `;
 
 async function main() {
+    // Make sure the wallet used here is the Deployer or Whitelisted
     const wallet = getWallet();
     const ContentSignContract = new Contract(ContractAddress, ERC721ABI, wallet);
 
