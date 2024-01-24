@@ -26,21 +26,11 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         _;
     }
 
-    modifier onlyAdmin() {
-        require(
-            hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
-            "Only admin can call this method"
-        );
-        // Continue execution if called from the bootloader.
-        _;
-    }
-
     modifier onlyWithdrawer() {
         require(
             hasRole(WITHDRAWER_ROLE, msg.sender),
             "Only withdrawer can call this method"
         );
-        // Continue execution if called from the bootloader.
         _;
     }
 

@@ -6,8 +6,8 @@ export default async function() {
     
     const nft = await deployContract("ContentSignNFT", ["Click", "CLK", getWhitelistAdmin()]);
     const nftAddress = await nft.getAddress();
-    await deployContract("WhitelistPaymaster", [getWhitelistAdmin(), [nftAddress]]);
+    await deployContract("WhitelistPaymaster", [getGovernance(), getWhitelistAdmin(), [await nft.getAddress()]]);
 
-    // run commands with new address, create a file with the address
+    // used for docker compose setup so we can deploy a The Graph indexer on the NFT contract
     execSync(`echo "${nftAddress}" > .nft-contract-address`);
 }
