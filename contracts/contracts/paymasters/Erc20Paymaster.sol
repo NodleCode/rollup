@@ -1,35 +1,37 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import "./BasePaymaster.sol";
+import {BasePaymaster} from "./BasePaymaster.sol";
 
 contract Erc20Paymaster is BasePaymaster {
     bytes32 public constant PRICE_ORACLE_ROLE = keccak256("PRICE_ORACLE_ROLE");
 
     uint256 public feePrice;
-
     address public allowedToken;
 
-    constructor(address _admin, address _price_oracle, address _erc20, uint256 _feePrice) BasePaymaster(_admin, _admin) {
-        _grantRole(PRICE_ORACLE_ROLE, _price_oracle);
-        allowedToken = _erc20;
-        feePrice = _feePrice;
+    error AllowanceNotEnough(uint256 provided, uint256 required);
+    error FeeTransferFailed(bytes reason);
+
+    constructor(address admin, address priceOracle, address erc20, uint256 initialFeePrice) BasePaymaster(admin, admin) {
+        _grantRole(PRICE_ORACLE_ROLE, priceOracle);
+        allowedToken = erc20;
+        feePrice = initialFeePrice;
     }
 
-    function updatePriceOracle(address _price_oracle) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        _grantRole(PRICE_ORACLE_ROLE, _price_oracle);
+    function updatePriceOracle(address priceOracle) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        _grantRole(PRICE_ORACLE_ROLE, priceOracle);
     }
 
-    function updateFeePrice(uint256 _feePrice) public onlyRole(PRICE_ORACLE_ROLE) {
-        feePrice = _feePrice;
+    function updateFeePrice(uint256 newFeePrice) public onlyRole(PRICE_ORACLE_ROLE) {
+        feePrice = newFeePrice;
     }
 
     function _validateAndPayGeneralFlow(
         address /* from */,
         address /* to */,
-        uint256
+        uint256 /* requiredETH */
     ) internal pure override {
         revert PaymasterFlowNotSupported();
     }
@@ -38,7 +40,7 @@ contract Erc20Paymaster is BasePaymaster {
         address userAddress,
         address /* destAddress */,
         address token,
-        uint256 minAllowance,
+        uint256 /* amount */,
         bytes memory /* data */,
         uint256 requiredETH
     ) internal override {
@@ -48,31 +50,18 @@ contract Erc20Paymaster is BasePaymaster {
                 userAddress,
                 thisAddress
             );
-
-            require(
-                providedAllowance >= minAllowance,
-                "Provided allowance lower than minimum"
-            );
-
             uint256 requiredToken = requiredETH * feePrice;
 
-            require(
-                providedAllowance >= requiredToken,
-                "Provided allowance not covering gas fee"
-            );
+            if (providedAllowance < requiredToken) {
+                revert AllowanceNotEnough(providedAllowance, requiredToken);
+            }
 
-            try
+            try 
                 IERC20(token).transferFrom(userAddress, thisAddress, requiredToken)
-            {} catch (bytes memory revertReason) {
-                // If the revert reason is empty or represented by just a function selector,
-                // we replace the error with a more user-friendly message
-                if (revertReason.length <= 4) {
-                    revert("Failed to transferFrom from users' account");
-                } else {
-                    assembly {
-                        revert(add(0x20, revertReason), mload(revertReason))
-                    }
-                }
+            {
+                return;
+            } catch (bytes memory revertReason) {
+                revert FeeTransferFailed(revertReason);
             }
     }
 }
