@@ -69,8 +69,8 @@ describe("BasePaymaster", function () {
         const tx = await paymaster.connect(withdrawerWallet).withdraw(sponsorWallet.address, withdrawValue);
         await tx.wait();
 
-        expect(await provider.getBalance(await paymaster.getAddress())).to.equal(balancePaymasterBefore - withdrawValue);
         expect(await provider.getBalance(sponsorWallet.address)).to.equal(balanceSponsorBefore + withdrawValue);
+        expect(await provider.getBalance(await paymaster.getAddress())).to.equal(balancePaymasterBefore - withdrawValue);
     });
 
     it("Works as a paymaster", async () => {
