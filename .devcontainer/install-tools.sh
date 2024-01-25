@@ -7,7 +7,7 @@ sudo add-apt-repository --yes ppa:ethereum/ethereum
 sudo apt-get update
 sudo apt-get install solc
 
-rustup toolchain install nightly
+# rustup toolchain install nightly
 
 # cargo install cargo-nextest
 # cargo install sqlx-cli
