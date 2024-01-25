@@ -40,7 +40,7 @@ contract Erc20Paymaster is BasePaymaster {
         address /* destAddress */,
         address token,
         uint256 minAllowance,
-        bytes memory /* data*/,
+        bytes memory /* data */,
         uint256 requiredETH
     ) internal override {
             address thisAddress = address(this);
