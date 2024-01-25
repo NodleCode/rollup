@@ -11,12 +11,8 @@ export const setupEnv = async (paymasterContract: string, additionalArgs: any[] 
 
     const paymaster = await deployContract(paymasterContract, [adminWallet.address, ...additionalArgs], { wallet: adminWallet, silent: true, skipChecks: true });
 
-    let tx = await paymaster.connect(adminWallet).grantRole(await paymaster.WITHDRAWER_ROLE(), withdrawerWallet.address);
-    await tx.wait();
-
-    // send some ETH to it
-    tx = await sponsorWallet.sendTransaction({ to: await paymaster.getAddress(), value: ethers.parseEther("1") });
-    await tx.wait();
+    await paymaster.connect(adminWallet).grantRole(await paymaster.WITHDRAWER_ROLE(), withdrawerWallet.address);
+    await sponsorWallet.sendTransaction({ to: await paymaster.getAddress(), value: ethers.parseEther("1") });
 
     const emptyWallet = Wallet.createRandom();
     const userWallet = new Wallet(emptyWallet.privateKey, provider);

@@ -31,11 +31,13 @@ describe("ContentSignNFT", function () {
   it("Non minter cannot mint token", async function () {
     const tokenURI = "https://example.com";
 
-    try {
-        await tokenContract.connect(userWallet).safeMint(userWallet.address, tokenURI);
-        expect.fail("Should have reverted");
-    } catch (e) {
-        expect(e.message).to.contain("execution reverted");
-    }
+    const minterRole = await tokenContract.MINTER_ROLE();
+    await expect(
+      tokenContract
+        .connect(userWallet)
+        .safeMint(userWallet.address, tokenURI)
+    ).to.be
+      .revertedWithCustomError(tokenContract, "AccessControlUnauthorizedAccount")
+      .withArgs(userWallet.address, minterRole);
   });
 });

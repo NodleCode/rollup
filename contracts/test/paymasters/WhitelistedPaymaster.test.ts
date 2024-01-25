@@ -34,8 +34,10 @@ describe("WhitelistPaymaster", function () {
 
         // whitelist user
         const whitelistedRole = await paymaster.WHITELISTED_USER_ROLE();
-        const tx = await paymaster.connect(adminWallet).grantRole(whitelistedRole, userWallet.address, { nonce: await adminWallet.getNonce() });
-        await tx.wait();
+        await paymaster.connect(adminWallet).grantRole(whitelistedRole, userWallet.address, {
+            // somehow if we do not do this, the underlying lib will not use an up to date nonce value
+            nonce: await adminWallet.getNonce()
+        });
     });
 
     it("Sets correct roles", async () => {
@@ -52,27 +54,27 @@ describe("WhitelistPaymaster", function () {
         const newFlag = await deployContract("MockFlag", [], { wallet: withdrawerWallet, silent: true, skipChecks: true });
         const newFlagAddress = await newFlag.getAddress();
 
-        try {
-            await paymaster.connect(userWallet).addWhitelistedContracts([newFlagAddress]);
-        } catch (e) {
-            expect(e.message).to.contain("execution reverted");
-        }
+        const whitelistAdminRole = await paymaster.WHITELIST_ADMIN_ROLE();
 
-        try {
-            await paymaster.connect(userWallet).removeWhitelistedContracts([newFlagAddress]);
-        } catch (e) {
-            expect(e.message).to.contain("execution reverted");
-        }
+        await expect(
+            paymaster.connect(userWallet).addWhitelistedContracts([newFlagAddress])
+        ).to.be
+            .revertedWithCustomError(paymaster, "AccessControlUnauthorizedAccount")
+            .withArgs(userWallet.address, whitelistAdminRole);
+
+        await expect(
+            paymaster.connect(userWallet).removeWhitelistedContracts([newFlagAddress])
+        ).to.be
+            .revertedWithCustomError(paymaster, "AccessControlUnauthorizedAccount")
+            .withArgs(userWallet.address, whitelistAdminRole);
 
         const nonce = await whitelistAdminWallet.getNonce();
 
-        const tx1 = await paymaster.connect(whitelistAdminWallet).addWhitelistedContracts([newFlagAddress], { nonce: nonce });
-        await tx1.wait();
+        await paymaster.connect(whitelistAdminWallet).addWhitelistedContracts([newFlagAddress], { nonce: nonce });
         expect(await paymaster.isWhitelistedContract(newFlagAddress)).to.be.true;
         expect(await paymaster.isWhitelistedContract(await flag.getAddress())).to.be.true;
 
-        const tx2 = await paymaster.connect(whitelistAdminWallet).removeWhitelistedContracts([newFlagAddress], { nonce: nonce + 1 });
-        await tx2.wait();
+        await paymaster.connect(whitelistAdminWallet).removeWhitelistedContracts([newFlagAddress], { nonce: nonce + 1 });
         expect(await paymaster.isWhitelistedContract(newFlagAddress)).to.be.false;
         expect(await paymaster.isWhitelistedContract(await flag.getAddress())).to.be.true;
     });
@@ -85,17 +87,17 @@ describe("WhitelistPaymaster", function () {
             innerInput: new Uint8Array(),
         });
 
-        try {
-            await flag.connect(userWallet).setFlag("flag captured", {
+        // bootloader / zksync logic strips our error context away so
+        // `.revertedWithCustomError(paymaster, "PaymasterFlowNotSupported");`
+        // would not work
+        await expect(
+            flag.connect(userWallet).setFlag("flag captured", {
                 customData: {
                     gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                     paymasterParams,
                 },
-            });
-            expect.fail("Should have reverted");
-        } catch (e) {
-            expect(e.message).to.contain("execution reverted");
-        }
+            })
+        ).to.be.revertedWithoutReason();
     });
 
     it("Supports calls to whitelisted contracts", async function () {
@@ -103,14 +105,13 @@ describe("WhitelistPaymaster", function () {
             type: "General",
             innerInput: new Uint8Array(),
         });
-
-        const tx = await flag.connect(userWallet).setFlag("flag captured", {
+        
+        await flag.connect(userWallet).setFlag("flag captured", {
             customData: {
                 gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                 paymasterParams,
             },
         });
-        await tx.wait();
 
         expect(await flag.flag()).to.equal("flag captured");
     });
@@ -123,17 +124,14 @@ describe("WhitelistPaymaster", function () {
             innerInput: new Uint8Array(),
         });
 
-        try {
-            await newFlag.connect(userWallet).setFlag("flag captured", {
+        await expect(
+            newFlag.connect(userWallet).setFlag("flag captured", {
                 customData: {
                     gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                     paymasterParams,
                 },
-            });
-            expect.fail("Should have reverted");
-        } catch (e) {
-            expect(e.message).to.contain("execution reverted");
-        }
+            })
+        ).to.be.revertedWithoutReason();
     });
 
     it("Does not support calls from non-whitelisted users", async function () {
@@ -142,16 +140,13 @@ describe("WhitelistPaymaster", function () {
             innerInput: new Uint8Array(),
         });
 
-        try {
-            await flag.connect(sponsorWallet).setFlag("flag captured", {
+        await expect(
+            flag.connect(sponsorWallet).setFlag("flag captured", {
                 customData: {
                     gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                     paymasterParams,
                 },
-            });
-            expect.fail("Should have reverted");
-        } catch (e) {
-            expect(e.message).to.contain("execution reverted");
-        }
+            })
+        ).to.be.revertedWithoutReason();
     });
 });

@@ -45,23 +45,23 @@ describe("BasePaymaster", function () {
             });
         }
 
-        const tx = await flag.connect(user).setFlag(flagValue, {
+        await flag.connect(user).setFlag(flagValue, {
             nonce,
             customData: {
                 gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                 paymasterParams,
             },
         });
-        await tx.wait();
 
         expect(await flag.flag()).to.equal(flagValue);
     }
 
     it("Can withdraw excess ETH", async () => {
-        const tx = await paymaster.connect(withdrawerWallet).withdraw(withdrawerWallet.address, ethers.parseEther("0.5"));
-        await tx.wait();
-
-        expect(await provider.getBalance(paymaster.getAddress())).to.equal(ethers.parseEther("0.5"));
+        await expect(
+            paymaster.connect(withdrawerWallet).withdraw(withdrawerWallet.address, ethers.parseEther("0.5"))
+        ).to
+            .changeEtherBalance(withdrawerWallet, ethers.parseEther("0.5"))
+            .and.to.changeEtherBalance(await paymaster.getAddress(), ethers.parseEther("-0.5"));
     });
 
     it("Works as a paymaster", async () => {
@@ -76,16 +76,14 @@ describe("BasePaymaster", function () {
     it("Fails if not enough ETH", async () => {
         // withdraw all the ETH
         const toWithdraw = await provider.getBalance(paymaster.getAddress());
-        const tx = await paymaster.connect(withdrawerWallet).withdraw(withdrawerWallet.address, toWithdraw);
-        await tx.wait();
+        await expect(
+            paymaster.connect(withdrawerWallet).withdraw(withdrawerWallet.address, toWithdraw)
+        ).to.changeEtherBalance(withdrawerWallet, toWithdraw);
 
         // paymaster cannot pay for txs anymore
-        try {
-            await executePaymasterTransaction(userWallet, "General", 2);
-            expect.fail("Should have reverted");
-        } catch (e) {
-            expect(e.message).to.include("Paymaster validation error");
-        }
+        await expect(
+            executePaymasterTransaction(userWallet, "General", 2)
+        ).to.be.revertedWithoutReason();
     });
 
     it("Sets correct roles", async () => {
