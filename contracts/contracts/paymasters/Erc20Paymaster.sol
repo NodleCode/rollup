@@ -13,7 +13,6 @@ contract Erc20Paymaster is BasePaymaster {
     address public allowedToken;
 
     constructor(address _admin, address _price_oracle, address _erc20, uint256 _feePrice) BasePaymaster(_admin, _admin) {
-        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(PRICE_ORACLE_ROLE, _price_oracle);
         allowedToken = _erc20;
         feePrice = _feePrice;
