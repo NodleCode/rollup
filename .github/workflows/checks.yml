@@ -1,0 +1,29 @@
+name: checks
+
+on:
+  push:
+    branches:
+      - master
+  pull_request: {}
+  workflow_dispatch: {}
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./.devcontainer/install-tools.sh
+      - run: yarn
+      - run: yarn lint
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./.devcontainer/install-tools.sh
+      - run: yarn
+      - run: yarn test
