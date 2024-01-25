@@ -69,6 +69,10 @@ describe("BasePaymaster", function () {
         const tx = await paymaster.connect(withdrawerWallet).withdraw(sponsorWallet.address, withdrawValue);
         await tx.wait();
 
+        // BUG: the RPC is not quite up to date with the withdrawal tx (ie. there is some lag)
+        // so we trigger another tx to force a refresh
+        await paymaster.connect(withdrawerWallet).withdraw(sponsorWallet.address, 0);
+
         expect(await provider.getBalance(sponsorWallet.address)).to.equal(balanceSponsorBefore + withdrawValue);
         expect(await provider.getBalance(await paymaster.getAddress())).to.equal(balancePaymasterBefore - withdrawValue);
     });
