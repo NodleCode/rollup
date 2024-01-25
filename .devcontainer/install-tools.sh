@@ -7,7 +7,7 @@ sudo add-apt-repository --yes ppa:ethereum/ethereum
 sudo apt-get update
 sudo apt-get install solc
 
-rustup toolchain install nightly
+# rustup toolchain install nightly
 
 # cargo install cargo-nextest
 # cargo install sqlx-cli
@@ -15,8 +15,10 @@ rustup toolchain install nightly
 yarn global add zksync-cli
 yarn global add @graphprotocol/graph-cli
 
-curl -L https://foundry.paradigm.xyz | sh
-~/.foundry/bin/foundryup
+if [ -z "$SKIP_FOUNDRY" ]; then
+    curl -L https://foundry.paradigm.xyz | sh
+    ~/.foundry/bin/foundryup
+fi
 
 # install and build zk tool
 # export ZKSYNC_HOME=/home/$USER/zksync-era

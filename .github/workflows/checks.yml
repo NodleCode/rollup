@@ -1,0 +1,33 @@
+name: checks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request: {}
+  workflow_dispatch: {}
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./.devcontainer/install-tools.sh
+        env:
+          SKIP_FOUNDRY: 1
+      - run: yarn
+      - run: yarn lint
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./.devcontainer/install-tools.sh
+        env:
+          SKIP_FOUNDRY: 1
+      - run: yarn
+      - run: yarn test

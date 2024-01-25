@@ -2,27 +2,31 @@
 
 pragma solidity ^0.8.20;
 
-import "../paymasters/BasePaymaster.sol";
+import {BasePaymaster} from "../paymasters/BasePaymaster.sol";
 
 contract MockPaymaster is BasePaymaster {
+    event MockPaymasterCalled();
+
     constructor(address admin) BasePaymaster(admin, admin) {}
 
     function _validateAndPayGeneralFlow(
-        address from,
-        address to,
-        uint256 requiredETH
+        address,
+        address,
+        uint256
     ) internal override {
         // this is a mock, do nothing for now
+        emit MockPaymasterCalled();
     }
 
     function _validateAndPayApprovalBasedFlow(
-        address from,
-        address to,
-        address token,
-        uint256 tokenAmount,
-        bytes memory data,
-        uint256 requiredETH
+        address,
+        address,
+        address,
+        uint256,
+        bytes memory,
+        uint256
     ) internal override {
         // this is a mock, do nothing for now
+        emit MockPaymasterCalled();
     }
 }

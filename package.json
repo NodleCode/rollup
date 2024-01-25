@@ -3,6 +3,7 @@
     "private": true,
     "workspaces": ["contracts", "graph",  "packages/*"],
     "scripts": {
+      "lint": "yarn workspace contracts lint",
       "test": "yarn workspace contracts test",
       "bootstrap-graph": "yarn workspace graph bootstrap && yarn workspace graph fix-paths && yarn workspace graph codegen"
     }
