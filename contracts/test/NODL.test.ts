@@ -21,32 +21,28 @@ describe("NODL", function () {
   });
 
   it("Should be mintable", async () => {
+    const balanceBefore = await tokenContract.balanceOf(userWallet.address);
     const mintAmount = ethers.parseEther("1000");
     const initialSupply = await tokenContract.totalSupply();
-    
-    await expect(
-      tokenContract.mint(userWallet.address, mintAmount)
-    ).to.changeTokenBalance(
-      tokenContract,
-      userWallet.address,
-      mintAmount
-    );
+
+    await tokenContract.mint(userWallet.address, mintAmount);
+
+    const balanceAfter = await tokenContract.balanceOf(userWallet.address);
+    expect(balanceAfter).to.equal(balanceBefore + mintAmount);
 
     const finalSupply = await tokenContract.totalSupply();
     expect(finalSupply).to.equal(initialSupply + mintAmount);
   });
 
   it("Should be burnable", async () => {
+    const balanceBefore = await tokenContract.balanceOf(userWallet.address);
     const burnAmount = ethers.parseEther("1000");
     const initialSupply = await tokenContract.totalSupply();
-    
-    await expect(
-      tokenContract.connect(userWallet).burn(burnAmount)
-    ).to.changeTokenBalance(
-      tokenContract,
-      userWallet.address,
-      -burnAmount
-    );
+
+    await tokenContract.connect(userWallet).burn(burnAmount);
+
+    const balanceAfter = await tokenContract.balanceOf(userWallet.address);
+    expect(balanceAfter).to.equal(balanceBefore - burnAmount);
 
     const finalSupply = await tokenContract.totalSupply();
     expect(finalSupply).to.equal(initialSupply - burnAmount);

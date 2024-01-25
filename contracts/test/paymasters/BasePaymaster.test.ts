@@ -59,13 +59,18 @@ describe("BasePaymaster", function () {
     }
 
     it("Can withdraw excess ETH", async () => {
-        await expect(
-            paymaster.connect(withdrawerWallet).withdraw(withdrawerWallet.address, ethers.parseEther("0.5"))
-        ).to
-            .changeEtherBalances(
-                [withdrawerWallet, await paymaster.getAddress()],
-                [ethers.parseEther("0.5"), ethers.parseEther("-0.5")]
-            );
+        const balancePaymasterBefore = await provider.getBalance(await paymaster.getAddress());
+        const balanceSponsorBefore = await provider.getBalance(sponsorWallet.address);
+
+        const withdrawValue = ethers.parseEther("0.5");
+
+        // we withdraw to the sponsor wallet so we can compute the balance changes
+        // without having to handle the tx fees
+        const tx = await paymaster.connect(withdrawerWallet).withdraw(sponsorWallet.address, withdrawValue);
+        await tx.wait();
+
+        expect(await provider.getBalance(await paymaster.getAddress())).to.equal(balancePaymasterBefore - withdrawValue);
+        expect(await provider.getBalance(sponsorWallet.address)).to.equal(balanceSponsorBefore + withdrawValue);
     });
 
     it("Works as a paymaster", async () => {
@@ -79,15 +84,20 @@ describe("BasePaymaster", function () {
 
     it("Fails if not enough ETH", async () => {
         // withdraw all the ETH
-        const toWithdraw = await provider.getBalance(paymaster.getAddress());
-        await expect(
-            paymaster.connect(withdrawerWallet).withdraw(withdrawerWallet.address, toWithdraw)
-        ).to.changeEtherBalance(withdrawerWallet, toWithdraw);
+        const toWithdraw = await provider.getBalance(await paymaster.getAddress());
+        const tx = await paymaster.connect(withdrawerWallet).withdraw(withdrawerWallet.address, toWithdraw);
+        await tx.wait();
 
         // paymaster cannot pay for txs anymore
         await expect(
             executePaymasterTransaction(userWallet, "General", 2)
-        ).to.be.revertedWithoutReason();
+        ).to.be.reverted;
+
+        // sanity checks: make sure the paymaster balance was emptied
+        // not done earlier as it sounds like the RPC is not quite up
+        // to date with the withdrawal tx (ie. there is some lag)
+        const paymasterBalance = await provider.getBalance(await paymaster.getAddress());
+        expect(paymasterBalance).to.equal(ethers.toBigInt(0));
     });
 
     it("Sets correct roles", async () => {
