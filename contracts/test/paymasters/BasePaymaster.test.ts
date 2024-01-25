@@ -25,8 +25,10 @@ describe("BasePaymaster", function () {
         userWallet = result.userWallet;
         provider = result.provider;
 
-        flag = await deployContract("MockFlag", [], { wallet: adminWallet, silent: true, skipChecks: true });
-        nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true });
+        // using the admin or sponsor wallet to deploy seem to have us run into
+        // a nonce management bug in zksync-ethers
+        flag = await deployContract("MockFlag", [], { wallet: withdrawerWallet, silent: true, skipChecks: true });
+        nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { wallet: withdrawerWallet, silent: true, skipChecks: true });
     });
 
     async function executePaymasterTransaction(user: Wallet, type: "General" | "ApprovalBased", nonce: number, flagValue: string = "flag captured") {
