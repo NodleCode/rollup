@@ -60,8 +60,10 @@ describe("BasePaymaster", function () {
         await expect(
             paymaster.connect(withdrawerWallet).withdraw(withdrawerWallet.address, ethers.parseEther("0.5"))
         ).to
-            .changeEtherBalance(withdrawerWallet, ethers.parseEther("0.5"))
-            .and.to.changeEtherBalance(await paymaster.getAddress(), ethers.parseEther("-0.5"));
+            .changeEtherBalances(
+                [withdrawerWallet, await paymaster.getAddress()],
+                [ethers.parseEther("0.5"), ethers.parseEther("-0.5")]
+            );
     });
 
     it("Works as a paymaster", async () => {
