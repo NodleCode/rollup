@@ -15,8 +15,10 @@ sudo apt-get install solc
 yarn global add zksync-cli
 yarn global add @graphprotocol/graph-cli
 
-curl -L https://foundry.paradigm.xyz | sh
-~/.foundry/bin/foundryup
+if [ -z "$SKIP_FOUNDRY" ]; then
+    curl -L https://foundry.paradigm.xyz | sh
+    ~/.foundry/bin/foundryup
+fi
 
 # install and build zk tool
 # export ZKSYNC_HOME=/home/$USER/zksync-era

@@ -17,6 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ./.devcontainer/install-tools.sh
+        env:
+          SKIP_FOUNDRY: 1
       - run: yarn
       - run: yarn lint
 
@@ -25,5 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ./.devcontainer/install-tools.sh
+        env:
+          SKIP_FOUNDRY: 1
       - run: yarn
       - run: yarn test
