@@ -14,7 +14,6 @@ sudo apt-get install solc
 
 yarn global add zksync-cli
 yarn global add @graphprotocol/graph-cli
-yarn global add solhint
 
 curl -L https://foundry.paradigm.xyz | sh
 ~/.foundry/bin/foundryup
