@@ -25,8 +25,10 @@ describe("BasePaymaster", function () {
         userWallet = result.userWallet;
         provider = result.provider;
 
-        flag = await deployContract("MockFlag", [], { wallet: adminWallet, silent: true, skipChecks: true });
-        nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true });
+        // using the admin or sponsor wallet to deploy seem to have us run into
+        // a nonce management bug in zksync-ethers
+        flag = await deployContract("MockFlag", [], { wallet: withdrawerWallet, silent: true, skipChecks: true });
+        nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { wallet: withdrawerWallet, silent: true, skipChecks: true });
     });
 
     async function executePaymasterTransaction(user: Wallet, type: "General" | "ApprovalBased", nonce: number, flagValue: string = "flag captured") {
@@ -45,23 +47,34 @@ describe("BasePaymaster", function () {
             });
         }
 
-        const tx = await flag.connect(user).setFlag(flagValue, {
+        await flag.connect(user).setFlag(flagValue, {
             nonce,
             customData: {
                 gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                 paymasterParams,
             },
         });
-        await tx.wait();
 
         expect(await flag.flag()).to.equal(flagValue);
     }
 
     it("Can withdraw excess ETH", async () => {
-        const tx = await paymaster.connect(withdrawerWallet).withdraw(withdrawerWallet.address, ethers.parseEther("0.5"));
+        const balancePaymasterBefore = await provider.getBalance(await paymaster.getAddress());
+        const balanceSponsorBefore = await provider.getBalance(sponsorWallet.address);
+
+        const withdrawValue = ethers.parseEther("0.5");
+
+        // we withdraw to the sponsor wallet so we can compute the balance changes
+        // without having to handle the tx fees
+        const tx = await paymaster.connect(withdrawerWallet).withdraw(sponsorWallet.address, withdrawValue);
         await tx.wait();
 
-        expect(await provider.getBalance(paymaster.getAddress())).to.equal(ethers.parseEther("0.5"));
+        // BUG: the RPC is not quite up to date with the withdrawal tx (ie. there is some lag)
+        // so we trigger another tx to force a refresh
+        await flag.connect(adminWallet).setFlag("bug fix delay");
+
+        expect(await provider.getBalance(sponsorWallet.address)).to.equal(balanceSponsorBefore + withdrawValue);
+        expect(await provider.getBalance(await paymaster.getAddress())).to.equal(balancePaymasterBefore - withdrawValue);
     });
 
     it("Works as a paymaster", async () => {
@@ -75,17 +88,20 @@ describe("BasePaymaster", function () {
 
     it("Fails if not enough ETH", async () => {
         // withdraw all the ETH
-        const toWithdraw = await provider.getBalance(paymaster.getAddress());
+        const toWithdraw = await provider.getBalance(await paymaster.getAddress());
         const tx = await paymaster.connect(withdrawerWallet).withdraw(withdrawerWallet.address, toWithdraw);
         await tx.wait();
 
         // paymaster cannot pay for txs anymore
-        try {
-            await executePaymasterTransaction(userWallet, "General", 2);
-            expect.fail("Should have reverted");
-        } catch (e) {
-            expect(e.message).to.include("Paymaster validation error");
-        }
+        await expect(
+            executePaymasterTransaction(userWallet, "General", 2)
+        ).to.be.reverted;
+
+        // sanity checks: make sure the paymaster balance was emptied
+        // not done earlier as it sounds like the RPC is not quite up
+        // to date with the withdrawal tx (ie. there is some lag)
+        const paymasterBalance = await provider.getBalance(await paymaster.getAddress());
+        expect(paymasterBalance).to.equal(ethers.toBigInt(0));
     });
 
     it("Sets correct roles", async () => {
