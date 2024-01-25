@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.20;
 
-import "./BasePaymaster.sol";
+import {BasePaymaster} from "./BasePaymaster.sol";
 
 /// @notice a paymaster that allow whitelisted users to do free txs to restricted contracts
 contract WhitelistPaymaster is BasePaymaster {
@@ -19,14 +19,6 @@ contract WhitelistPaymaster is BasePaymaster {
     error UserIsNotWhitelisted();
     error DestIsNotWhitelisted();
 
-    modifier onlyWhitelistAdmin() {
-        require(
-            hasRole(WHITELIST_ADMIN_ROLE, msg.sender),
-            "Only whitelist admin can call this method"
-        );
-        _;
-    }
-
     constructor(
         address admin,
         address whitelistAdmin,
@@ -38,13 +30,13 @@ contract WhitelistPaymaster is BasePaymaster {
 
     function addWhitelistedContracts(
         address[] memory whitelistedContracts
-    ) external onlyWhitelistAdmin {
+    ) external onlyRole(WHITELIST_ADMIN_ROLE) {
         _setContractWhitelist(whitelistedContracts);
     }
 
     function removeWhitelistedContracts(
         address[] memory whitelistedContracts
-    ) external onlyWhitelistAdmin {
+    ) external onlyRole(WHITELIST_ADMIN_ROLE) {
         for (uint256 i = 0; i < whitelistedContracts.length; i++) {
             isWhitelistedContract[whitelistedContracts[i]] = false;
         }

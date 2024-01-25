@@ -55,13 +55,13 @@ describe("WhitelistPaymaster", function () {
         try {
             await paymaster.connect(userWallet).addWhitelistedContracts([newFlagAddress]);
         } catch (e) {
-            expect(e.message).to.contain("Only whitelist admin can call this method");
+            expect(e.message).to.contain("execution reverted");
         }
 
         try {
             await paymaster.connect(userWallet).removeWhitelistedContracts([newFlagAddress]);
         } catch (e) {
-            expect(e.message).to.contain("Only whitelist admin can call this method");
+            expect(e.message).to.contain("execution reverted");
         }
 
         const nonce = await whitelistAdminWallet.getNonce();

@@ -4,33 +4,25 @@ pragma solidity ^0.8.20;
 
 import {IPaymaster, ExecutionResult, PAYMASTER_VALIDATION_SUCCESS_MAGIC} from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymaster.sol";
 import {IPaymasterFlow} from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymasterFlow.sol";
-import {TransactionHelper, Transaction} from "@matterlabs/zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
+import {Transaction} from "@matterlabs/zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
+import {BOOTLOADER_FORMAL_ADDRESS} from "@matterlabs/zksync-contracts/l2/system-contracts/Constants.sol";
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
-
-import "@matterlabs/zksync-contracts/l2/system-contracts/Constants.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @notice This smart contract serves as a base for any other paymaster contract.
 abstract contract BasePaymaster is IPaymaster, AccessControl {
     bytes32 public constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
 
+    error AccessRestrictedToBootloader();
     error PaymasterFlowNotSupported();
     error NotEnoughETHInPaymasterToPayForTransaction();
+    error InvalidPaymasterInput(string message);
+    error FailedToWithdraw();
 
     modifier onlyBootloader() {
-        require(
-            msg.sender == BOOTLOADER_FORMAL_ADDRESS,
-            "Only bootloader can call this method"
-        );
-        // Continue execution if called from the bootloader.
-        _;
-    }
-
-    modifier onlyWithdrawer() {
-        require(
-            hasRole(WITHDRAWER_ROLE, msg.sender),
-            "Only withdrawer can call this method"
-        );
+        if (msg.sender != BOOTLOADER_FORMAL_ADDRESS) {
+            revert AccessRestrictedToBootloader();
+        }
         _;
     }
 
@@ -54,10 +46,9 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         // By default no context will be returned unless the paymaster flow requires a post transaction call.
         context = new bytes(0);
 
-        require(
-            transaction.paymasterInput.length >= 4,
-            "The standard paymaster input must be at least 4 bytes long"
-        );
+        if (transaction.paymasterInput.length < 4) {
+            revert InvalidPaymasterInput("The standard paymaster input must be at least 4 bytes long");
+        }
 
         bytes4 paymasterInputSelector = bytes4(
             transaction.paymasterInput[0:4]
@@ -122,13 +113,14 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         bytes32,
         ExecutionResult txResult,
         uint256 maxRefundedGas
+        // solhint-disable-next-line no-empty-blocks
     ) external payable override onlyBootloader {
         // Refunds are not supported yet.
     }
 
-    function withdraw(address to, uint256 amount) external onlyWithdrawer {
+    function withdraw(address to, uint256 amount) external onlyRole(WITHDRAWER_ROLE) {
         (bool success, ) = payable(to).call{value: amount}("");
-        require(success, "Failed to withdraw");
+        if (!success) revert FailedToWithdraw();
     }
 
     receive() external payable {}
