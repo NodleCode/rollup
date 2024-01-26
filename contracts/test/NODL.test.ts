@@ -21,24 +21,28 @@ describe("NODL", function () {
   });
 
   it("Should be mintable", async () => {
+    const balanceBefore = await tokenContract.balanceOf(userWallet.address);
     const mintAmount = ethers.parseEther("1000");
     const initialSupply = await tokenContract.totalSupply();
+
     await tokenContract.mint(userWallet.address, mintAmount);
 
-    const balance = await tokenContract.balanceOf(userWallet.address);
-    expect(balance.toString()).to.equal(mintAmount.toString());
+    const balanceAfter = await tokenContract.balanceOf(userWallet.address);
+    expect(balanceAfter).to.equal(balanceBefore + mintAmount);
 
     const finalSupply = await tokenContract.totalSupply();
     expect(finalSupply).to.equal(initialSupply + mintAmount);
   });
 
   it("Should be burnable", async () => {
+    const balanceBefore = await tokenContract.balanceOf(userWallet.address);
     const burnAmount = ethers.parseEther("1000");
     const initialSupply = await tokenContract.totalSupply();
+
     await tokenContract.connect(userWallet).burn(burnAmount);
 
-    const balance = await tokenContract.balanceOf(userWallet.address);
-    expect(balance.toString()).to.equal("0");
+    const balanceAfter = await tokenContract.balanceOf(userWallet.address);
+    expect(balanceAfter).to.equal(balanceBefore - burnAmount);
 
     const finalSupply = await tokenContract.totalSupply();
     expect(finalSupply).to.equal(initialSupply - burnAmount);
@@ -56,12 +60,11 @@ describe("NODL", function () {
 
     const maxMint = cap - currentSupply;
     await tokenContract.mint(userWallet.address, maxMint);
-    
-    try {
-      await tokenContract.mint(userWallet.address, 1);
-      expect.fail("Should have reverted");
-    } catch (e) {
-      expect(e.message).to.contain("execution reverted");
-    }
+
+    await expect(
+      tokenContract.mint(userWallet.address, 1)
+    ).to.be
+      .revertedWithCustomError(tokenContract, "ERC20ExceededCap")
+      .withArgs(cap + 1n, cap);
   });
 });
