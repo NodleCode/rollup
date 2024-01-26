@@ -86,7 +86,7 @@ type DeployContractOptions = {
    */
   skipChecks?: boolean
 }
-export const deployContract = async (contractArtifactName: string, constructorArguments?: any[], options?: DeployContractOptions) => {
+export const deployContract = async (contractArtifactName: string, constructorArguments?: any[], options?: DeployContractOptions, nonce?: number) => {
   const log = (message: string) => {
     if (!options?.silent) console.log(message);
   }
@@ -113,7 +113,7 @@ export const deployContract = async (contractArtifactName: string, constructorAr
   }
 
   // Deploy the contract to zkSync but behind a transparent proxy
-  const contract = await deployer.deploy(artifact, constructorArguments);
+  const contract = await deployer.deploy(artifact, constructorArguments, { nonce });
   await contract.waitForDeployment();
   const contractAddress = await contract.getAddress();
 
