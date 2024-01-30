@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { Contract, Wallet } from "zksync-ethers";
+import { Contract, Wallet, utils } from "zksync-ethers";
 import * as ethers from "ethers";
 import { LOCAL_RICH_WALLETS, deployContract, getProvider, getWallet } from '../../deploy/utils';
 
@@ -68,5 +68,32 @@ describe("Erc20Paymaster", function () {
         const newOracleWallet = Wallet.createRandom(getProvider());
         await expect(paymaster.connect(oracleWallet).grantPriceOracleRole(newOracleWallet.address)).to.be.revertedWithCustomError(paymaster, "AccessControlUnauthorizedAccount").withArgs(oracleWallet.address, adminRole);
         await expect(paymaster.connect(newOracleWallet).revokePriceOracleRole(oracleWallet.address)).to.be.revertedWithCustomError(paymaster, "AccessControlUnauthorizedAccount").withArgs(newOracleWallet.address, adminRole);
+    });
+
+    it("Random user can mint NFT using paymaster", async () => {
+        const userWallet = Wallet.createRandom(getProvider());
+        const userNonce = await userWallet.getNonce();
+
+        const nftContract = await deployContract("ContentSignNFT", ["Click", "CLK", adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true }, adminNonce++);
+        const minterRole = await nftContract.MINTER_ROLE();
+
+        await nftContract.connect(adminWallet).grantRole(minterRole, userWallet.address, { nonce: adminNonce++ });
+        expect(await nftContract.hasRole(minterRole, userWallet.address)).to.be.true;
+
+        const paymasterParams = utils.getPaymasterParams(await paymaster.getAddress(), {
+            type: "ApprovalBased",
+            token: await nodl.getAddress(),
+            minimalAllowance: ethers.toBigInt(0),
+            innerInput: new Uint8Array(),
+        });
+
+        const tokenURI = "https://www.google.com";
+        const tx = await nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
+            nonce: userNonce,
+            customData: {
+                gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
+                paymasterParams,
+            },
+        });
     });
 });
