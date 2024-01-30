@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import { Contract, Wallet } from "zksync-ethers";
 import * as ethers from "ethers";
-import { LOCAL_RICH_WALLETS, deployContract, getWallet } from '../../deploy/utils';
+import { LOCAL_RICH_WALLETS, deployContract, getProvider, getWallet } from '../../deploy/utils';
 
 describe("Erc20Paymaster", function () {
     let paymaster: Contract;
@@ -35,7 +35,8 @@ describe("Erc20Paymaster", function () {
         await transactionResponse.wait();    
     });
 
-    it("Oracle role is set correctly", async () => {
+    it("Roles are set correctly", async () => {
+        expect(await paymaster.hasRole(adminRole, adminWallet.address)).to.be.true;
         expect(await paymaster.hasRole(oracleRole, oracleWallet.address)).to.be.true;
     });
 
@@ -63,10 +64,9 @@ describe("Erc20Paymaster", function () {
         expect(await paymaster.hasRole(oracleRole, oracleWallet.address)).to.be.false;
     });
 
-    // TODO: Fix this test
-    // it("Non Admin cannot grant or revoke roles", async () => {  
-    //     const newOracleWallet = Wallet.createRandom();
-    //     await expect(paymaster.connect(oracleWallet).grantPriceOracleRole(newOracleWallet.address)).to.be.revertedWithCustomError(paymaster, "AccessControlUnauthorizedAccount").withArgs(oracleWallet.address, adminRole);
-    //     await expect(paymaster.connect(newOracleWallet).revokePriceOracleRole(oracleWallet.address)).to.be.revertedWithCustomError(paymaster, "AccessControlUnauthorizedAccount").withArgs(oracleWallet.address, adminRole);
-    // });
+    it("Non Admin cannot grant or revoke roles", async () => {  
+        const newOracleWallet = Wallet.createRandom(getProvider());
+        await expect(paymaster.connect(oracleWallet).grantPriceOracleRole(newOracleWallet.address)).to.be.revertedWithCustomError(paymaster, "AccessControlUnauthorizedAccount").withArgs(oracleWallet.address, adminRole);
+        await expect(paymaster.connect(newOracleWallet).revokePriceOracleRole(oracleWallet.address)).to.be.revertedWithCustomError(paymaster, "AccessControlUnauthorizedAccount").withArgs(newOracleWallet.address, adminRole);
+    });
 });
