@@ -20,8 +20,12 @@ contract Erc20Paymaster is BasePaymaster {
         feePrice = initialFeePrice;
     }
 
-    function updatePriceOracle(address priceOracle) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        _grantRole(PRICE_ORACLE_ROLE, priceOracle);
+    function grantPriceOracleRole(address oracle) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        _grantRole(PRICE_ORACLE_ROLE, oracle);
+    }
+
+    function revokePriceOracleRole(address oracle) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        _revokeRole(PRICE_ORACLE_ROLE, oracle);
     }
 
     function updateFeePrice(uint256 newFeePrice) public onlyRole(PRICE_ORACLE_ROLE) {
