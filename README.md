@@ -1,4 +1,6 @@
 # Nodle's Eth L2 rollup powered by zkSync stack
+![Banner](https://github.com/NodleCode/rollup/assets/10683430/b50803ff-41d1-4faa-99eb-72c9eeaf3194)
+
 This mono repo will contain all the required smart-contracts and the services that we would need to develop aroung them. This is a proof of concept targeting the needs of our Click dApp as its initial goal.
 
 Each sub-package should feature a `README.md` file explaining how to test and use it.
