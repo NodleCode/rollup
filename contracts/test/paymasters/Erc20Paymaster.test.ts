@@ -1,11 +1,13 @@
 import { expect } from 'chai';
 import { Contract, Wallet, utils } from "zksync-ethers";
 import * as ethers from "ethers";
-import { LOCAL_RICH_WALLETS, deployContract, getProvider, getWallet } from '../../deploy/utils';
+import { LOCAL_RICH_WALLETS, deployContract, getProvider, getWallet} from '../../deploy/utils';
 
 describe("Erc20Paymaster", function () {
     let paymaster: Contract;
+    let paymasterAddress: string;
     let nodl: Contract;
+    let nodlAddress: string;
     let adminWallet: Wallet;
     let oracleWallet: Wallet;
     let oracleRole: string;
@@ -15,19 +17,18 @@ describe("Erc20Paymaster", function () {
     const initialFeePrice = 1; // Means 1 nodle per 1 wei
 
     before(async function () {
-        const emptyWallet = Wallet.createRandom();
-
         adminWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
         oracleWallet = getWallet(LOCAL_RICH_WALLETS[1].privateKey);
-
         
         adminNonce = await adminWallet.getNonce(); 
 
         nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true }, adminNonce++);
-        const nodlAddress = await nodl.getAddress();
+        await nodl.waitForDeployment();
+        nodlAddress = await nodl.getAddress();
 
         paymaster = await deployContract("Erc20Paymaster", [adminWallet.address, oracleWallet.address, nodlAddress, initialFeePrice], { wallet: adminWallet, silent: true, skipChecks: true }, adminNonce++);
-        const paymasterAddress = await paymaster.getAddress();
+        await paymaster.waitForDeployment();
+        paymasterAddress = await paymaster.getAddress();
         oracleRole = await paymaster.PRICE_ORACLE_ROLE();
         adminRole = await paymaster.DEFAULT_ADMIN_ROLE();
         
@@ -41,10 +42,15 @@ describe("Erc20Paymaster", function () {
     });
 
     it("Oracle can update fee price", async () => {
-        expect(await paymaster.feePrice()).to.be.equal(initialFeePrice);
+        let feePrice = await paymaster.feePrice();
+        expect(feePrice).to.be.equal(initialFeePrice);
+
         const newFeePrice = 2;
-        await paymaster.connect(oracleWallet).updateFeePrice(newFeePrice);
-        expect(await paymaster.feePrice()).to.be.equal(newFeePrice);
+        const updateFeePriceTx = await paymaster.connect(oracleWallet).updateFeePrice(newFeePrice);
+        await updateFeePriceTx.wait();
+        
+        feePrice = await paymaster.feePrice();
+        expect(feePrice).to.be.equal(newFeePrice);
     });
 
     it("None oracle can't update fee price", async () => {
@@ -71,29 +77,42 @@ describe("Erc20Paymaster", function () {
     });
 
     it("Random user can mint NFT using paymaster", async () => {
-        const userWallet = Wallet.createRandom(getProvider());
+        const provider = getProvider();
+        const userWallet = Wallet.createRandom(provider);
         const userNonce = await userWallet.getNonce();
+        expect(await provider.getBalance(userWallet.address)).to.equal(ethers.toBigInt(0));
+
+        const cap = await nodl.cap();
+        const currentSupply = await nodl.totalSupply();
+        const maxMint = cap - currentSupply;
+        const nodlMintTx = await nodl.connect(adminWallet).mint(userWallet.address, maxMint, { nonce: adminNonce++ });
+        await nodlMintTx.wait();
+        expect(await nodl.balanceOf(userWallet.address)).to.equal(maxMint);
 
         const nftContract = await deployContract("ContentSignNFT", ["Click", "CLK", adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true }, adminNonce++);
-        const minterRole = await nftContract.MINTER_ROLE();
+        await nftContract.waitForDeployment();
 
-        await nftContract.connect(adminWallet).grantRole(minterRole, userWallet.address, { nonce: adminNonce++ });
+        const minterRole = await nftContract.MINTER_ROLE();
+        const grantRoleTx = await nftContract.connect(adminWallet).grantRole(minterRole, userWallet.address, { nonce: adminNonce++ });
+        await grantRoleTx.wait();
+
         expect(await nftContract.hasRole(minterRole, userWallet.address)).to.be.true;
 
-        const paymasterParams = utils.getPaymasterParams(await paymaster.getAddress(), {
+        const paymasterParams = utils.getPaymasterParams(paymasterAddress, {
             type: "ApprovalBased",
-            token: await nodl.getAddress(),
-            minimalAllowance: ethers.toBigInt(0),
+            token: nodlAddress,
+            minimalAllowance: ethers.toBigInt(1),
             innerInput: new Uint8Array(),
         });
 
         const tokenURI = "https://www.google.com";
-        const tx = await nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
+        const safeMintTx = await nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
             nonce: userNonce,
             customData: {
                 gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                 paymasterParams,
             },
         });
+        await safeMintTx.wait();
     });
 });

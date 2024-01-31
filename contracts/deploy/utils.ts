@@ -1,8 +1,8 @@
 import { Provider, Wallet } from "zksync-ethers";
 import * as hre from "hardhat";
+import * as ethers from "ethers";
 import { Deployer } from "@matterlabs/hardhat-zksync-deploy";
 import dotenv from "dotenv";
-import { BigNumberish, formatEther } from "ethers";
 
 import "@matterlabs/hardhat-zksync-node/dist/type-extensions";
 import "@matterlabs/hardhat-zksync-verify/dist/src/type-extensions";
@@ -47,7 +47,7 @@ export const getWhitelistAdmin = () => {
 export const verifyEnoughBalance = async (wallet: Wallet, amount: bigint) => {
   // Check if the wallet has enough balance
   const balance = await wallet.getBalance();
-  if (balance < amount) throw `⛔️ Wallet balance is too low! Required ${formatEther(amount)} ETH, but current ${wallet.address} balance is ${formatEther(balance)} ETH`;
+  if (balance < amount) throw `⛔️ Wallet balance is too low! Required ${ethers.formatEther(amount)} ETH, but current ${wallet.address} balance is ${ethers.formatEther(balance)} ETH`;
 }
 
 /**
@@ -107,7 +107,7 @@ export const deployContract = async (contractArtifactName: string, constructorAr
   if (!options?.skipChecks) {
     const deploymentFee = await deployer.estimateDeployFee(artifact, constructorArguments || []);
 
-    log(`Estimated total deployment cost: ${formatEther(deploymentFee)} ETH`)
+    log(`Estimated total deployment cost: ${ethers.formatEther(deploymentFee)} ETH`)
 
     await verifyEnoughBalance(wallet, deploymentFee);
   }
@@ -138,6 +138,19 @@ export const deployContract = async (contractArtifactName: string, constructorAr
 
   return contract;
 }
+
+/**
+ * Get a deployed contract given its name and address connected to the provided wallet
+ * @param name 
+ * @param address 
+ * @param wallet 
+ * @returns the specified contract
+ */
+export function getContract(name: string, address: string, wallet: Wallet) {
+  const artifact = hre.artifacts.readArtifactSync(name);
+  return new ethers.Contract(address, artifact.abi, wallet);
+}
+
 
 /**
  * Rich wallets can be used for testing purposes.

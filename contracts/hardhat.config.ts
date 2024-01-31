@@ -56,6 +56,9 @@ const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.20",
   },
+  mocha: {
+    timeout: 120000 // Timeout in milliseconds
+  }
 };
 
 export default config;
