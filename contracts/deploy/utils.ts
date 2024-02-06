@@ -1,6 +1,6 @@
 import { Provider, Wallet } from "zksync-ethers";
 import * as hre from "hardhat";
-import * as ethers from "ethers";
+import { ethers } from "ethers";
 import { Deployer } from "@matterlabs/hardhat-zksync-deploy";
 import dotenv from "dotenv";
 
@@ -13,25 +13,19 @@ dotenv.config();
 export const getProvider = () => {
   const rpcUrl = hre.network.config.url;
   if (!rpcUrl) throw `⛔️ RPC URL wasn't found in "${hre.network.name}"! Please add a "url" field to the network config in hardhat.config.ts`;
+  return new Provider(rpcUrl);;
+}
 
-  // Initialize zkSync Provider
-  const provider = new Provider(rpcUrl);
-
-  return provider;
+export const getEthProvider = () => {
+  return hre.network.config.ethNetwork ?? ethers.getDefaultProvider(hre.network.config.ethNetwork);
 }
 
 export const getWallet = (privateKey?: string) => {
   if (!privateKey) {
-    // Get wallet private key from .env file
-    if (!process.env.WALLET_PRIVATE_KEY) throw "⛔️ Wallet private key wasn't found in .env file!";
+    const randomWallet = Wallet.createRandom();
+    return new Wallet(randomWallet.privateKey, getProvider(), getEthProvider());
   }
-
-  const provider = getProvider();
-
-  // Initialize zkSync Wallet
-  const wallet = new Wallet(privateKey ?? process.env.WALLET_PRIVATE_KEY!, provider);
-
-  return wallet;
+  return new Wallet(privateKey ?? process.env.WALLET_PRIVATE_KEY!, getProvider(), getEthProvider());
 }
 
 export const getGovernance = () => {

@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { Contract, Wallet, utils } from "zksync-ethers";
-import * as ethers from "ethers";
+import { ethers } from "ethers";
 import { LOCAL_RICH_WALLETS, deployContract, getProvider, getWallet} from '../../deploy/utils';
 
 describe("Erc20Paymaster", function () {
@@ -32,8 +32,9 @@ describe("Erc20Paymaster", function () {
         oracleRole = await paymaster.PRICE_ORACLE_ROLE();
         adminRole = await paymaster.DEFAULT_ADMIN_ROLE();
         
-        const transactionResponse = await adminWallet.sendTransaction({ to: paymasterAddress, value: ethers.parseEther("1"), nonce: adminNonce++ });
-        await transactionResponse.wait();    
+        const chargePaymaster = await adminWallet.transfer( {to: paymasterAddress, amount: ethers.parseEther("0.5"), overrides: {nonce: adminNonce++} });
+        await chargePaymaster.wait();    
+        expect(await getProvider().getBalance(paymasterAddress)).to.equal(ethers.parseEther("0.5"));
     });
 
     it("Roles are set correctly", async () => {
@@ -78,9 +79,19 @@ describe("Erc20Paymaster", function () {
 
     it("Random user can mint NFT using paymaster", async () => {
         const provider = getProvider();
-        const userWallet = Wallet.createRandom(provider);
-        const userNonce = await userWallet.getNonce();
+        const userWallet= getWallet();
+        
+        console.log(`User balance before tranfer: ${await userWallet.getBalance()}`);
+        console.log(`Admin balance before tranfer: ${await adminWallet.getBalance()}`);
+    
+        const adminBalance = await provider.getBalance(adminWallet.address);
+        expect(adminBalance).to.be.gt(ethers.parseEther("0.5"));
         expect(await provider.getBalance(userWallet.address)).to.equal(ethers.toBigInt(0));
+        const chargeUserWallet = await adminWallet.transfer({ to: userWallet.address, amount: ethers.parseEther("0.5"), overrides: {nonce: adminNonce++} });
+        const tx = await chargeUserWallet.waitFinalize(); 
+        console.log(tx.toJSON());
+        console.log(`Admin balance after tranfer: ${await adminWallet.getBalance()}`);
+        console.log(`User balance after  tranfer: ${await userWallet.getBalance()}`);
 
         const cap = await nodl.cap();
         const currentSupply = await nodl.totalSupply();
@@ -105,9 +116,21 @@ describe("Erc20Paymaster", function () {
             innerInput: new Uint8Array(),
         });
 
-        const tokenURI = "https://www.google.com";
+        // TODO remove after testing
+        // const flagContract = await deployContract("MockFlag", [], { wallet: adminWallet, silent: true, skipChecks: true }, adminNonce++);
+        // await flagContract.waitForDeployment();
+        // await flagContract.connect(userWallet).setFlag("flagValue", {
+        //     nonce: 0,
+        //     customData: {
+        //         gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
+        //         paymasterParams,
+        //     },
+        // });
+        // expect(await flagContract.flag()).to.equal("flagValue");
+        
+        const tokenURI = "https://ipfs.io/ipfs/QmXuYh3h1e8zZ5r9w8X4LZQv3B7qQ9mZQz5o4Jr2A4FzY6";
         const safeMintTx = await nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
-            nonce: userNonce,
+            nonce: 0,
             customData: {
                 gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                 paymasterParams,

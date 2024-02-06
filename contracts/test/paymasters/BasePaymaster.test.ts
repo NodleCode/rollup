@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import { Contract, Provider, Wallet, utils } from "zksync-ethers";
 import * as ethers from "ethers";
 import { setupEnv } from './helpers';
-import { deployContract } from '../../deploy/utils';
+import { deployContract, getProvider } from '../../deploy/utils';
 
 describe("BasePaymaster", function () {
     let paymaster: Contract;
@@ -23,7 +23,8 @@ describe("BasePaymaster", function () {
         withdrawerWallet = result.withdrawerWallet;
         sponsorWallet = result.sponsorWallet;
         userWallet = result.userWallet;
-        provider = result.provider;
+        
+        provider = getProvider();
 
         // using the admin or sponsor wallet to deploy seem to have us run into
         // a nonce management bug in zksync-ethers

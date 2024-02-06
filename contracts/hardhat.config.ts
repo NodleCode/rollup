@@ -7,7 +7,7 @@ import "@matterlabs/hardhat-zksync-deploy";
 import "@matterlabs/hardhat-zksync-verify";
 
 const config: HardhatUserConfig = {
-  defaultNetwork: "dockerizedNode",
+  defaultNetwork: "localNode",
   networks: {
     zkSyncSepoliaTestnet: {
       url: "https://sepolia.era.zksync.dev",
@@ -27,7 +27,7 @@ const config: HardhatUserConfig = {
       zksync: true,
       verifyURL: "https://zksync2-testnet-explorer.zksync.dev/contract_verification",
     },
-    dockerizedNode: {
+    localNode: {
       url: "http://localhost:3050",
       ethNetwork: "http://localhost:8545",
       zksync: true,
@@ -41,10 +41,7 @@ const config: HardhatUserConfig = {
       url: "http://zksync:3050",
       ethNetwork: "http://geth:8545",
       zksync: true,
-    },
-    hardhat: {
-      zksync: true,
-    },
+    }
   },
   zksolc: {
     version: "latest",

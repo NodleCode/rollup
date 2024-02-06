@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { Contract, Provider, Wallet, utils } from "zksync-ethers";
+import { Contract, Wallet, utils } from "zksync-ethers";
 import * as ethers from "ethers";
 import { setupEnv } from './helpers';
 import { LOCAL_RICH_WALLETS, deployContract, getWallet } from '../../deploy/utils';
@@ -15,8 +15,6 @@ describe("WhitelistPaymaster", function () {
     let sponsorWallet: Wallet;
     let userWallet: Wallet;
 
-    let provider: Provider;
-
     before(async function () {
         adminWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
         whitelistAdminWallet = getWallet(LOCAL_RICH_WALLETS[3].privateKey);
@@ -28,7 +26,6 @@ describe("WhitelistPaymaster", function () {
         withdrawerWallet = result.withdrawerWallet;
         sponsorWallet = result.sponsorWallet;
         userWallet = result.userWallet;
-        provider = result.provider;
 
         nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true });
 

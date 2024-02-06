@@ -5,8 +5,8 @@
         "type": "node",
         "request": "launch",
         "name": "Launch Hardhat Test",
-        "program": "${workspaceFolder}/node_modules/.bin/hardhat",
-        "args": ["test", "--network", "hardhat"],
+        "program": "${workspaceFolder}/contracts/node_modules/.bin/hardhat",
+        "args": ["test", "--network", "localNode"],
         "cwd": "${workspaceFolder}/contracts",
         "console": "integratedTerminal",
         "skipFiles": ["<node_internals>/**"]

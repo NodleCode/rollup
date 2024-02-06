@@ -6,8 +6,8 @@
     "deploy": "hardhat deploy-zksync --script deploy.ts",
     "compile": "hardhat compile",
     "clean": "hardhat clean",
-    "test": "hardhat test --network hardhat",
-    "mint": "hardhat run scripts/mint.ts --network dockerizedNode",
+    "test": "hardhat test --network localNode",
+    "mint": "hardhat run scripts/mint.ts --network localNode",
     "lint": "solhint \"contracts/**/*.sol\""
   },
   "devDependencies": {
