@@ -13,6 +13,7 @@ contract Erc20Paymaster is BasePaymaster {
 
     error AllowanceNotEnough(uint256 provided, uint256 required);
     error FeeTransferFailed(bytes reason);
+    error TokenNotAllowed();
 
     constructor(address admin, address priceOracle, address erc20, uint256 initialFeePrice) BasePaymaster(admin, admin) {
         _grantRole(PRICE_ORACLE_ROLE, priceOracle);
@@ -44,28 +45,34 @@ contract Erc20Paymaster is BasePaymaster {
         address userAddress,
         address /* destAddress */,
         address token,
-        uint256 /* amount */,
+        uint256 amount,
         bytes memory /* data */,
         uint256 requiredETH
     ) internal override {
-            address thisAddress = address(this);
 
-            uint256 providedAllowance = IERC20(token).allowance(
-                userAddress,
-                thisAddress
-            );
-            uint256 requiredToken = requiredETH * feePrice;
+        if (token != allowedToken) {
+            revert TokenNotAllowed();
+        }
 
-            if (providedAllowance < requiredToken) {
-                revert AllowanceNotEnough(providedAllowance, requiredToken);
-            }
+        address thisAddress = address(this);
 
-            try 
-                IERC20(token).transferFrom(userAddress, thisAddress, requiredToken)
-            {
-                return;
-            } catch (bytes memory revertReason) {
-                revert FeeTransferFailed(revertReason);
-            }
+        uint256 providedAllowance = IERC20(token).allowance(
+            userAddress,
+            thisAddress
+        );
+
+        uint256 requiredToken = requiredETH * feePrice;
+
+        if (providedAllowance < requiredToken) {
+            revert AllowanceNotEnough(providedAllowance, requiredToken);
+        }
+
+        try 
+            IERC20(token).transferFrom(userAddress, thisAddress, requiredToken)
+        {
+            return;
+        } catch (bytes memory revertReason) {
+            revert FeeTransferFailed(revertReason);
+        }
     }
 }

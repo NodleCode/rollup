@@ -14,7 +14,7 @@ describe("Erc20Paymaster", function () {
     let adminRole: string;
     let adminNonce: number;
 
-    const initialFeePrice = 1; // Means 1 nodle per 1 wei
+    const initialFeePrice = 1n;
 
     before(async function () {
         adminWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
@@ -61,13 +61,18 @@ describe("Erc20Paymaster", function () {
 
     it("Admin can grant oracle role", async () => {       
         const newOracleWallet = Wallet.createRandom();
-        await paymaster.connect(adminWallet).grantPriceOracleRole(newOracleWallet.address, { nonce: adminNonce++ });
+        
+        const tx = await paymaster.connect(adminWallet).grantPriceOracleRole(newOracleWallet.address, { nonce: adminNonce++ });
+        await tx.wait();
+        
         expect(await paymaster.hasRole(oracleRole, newOracleWallet.address)).to.be.true;
         expect(await paymaster.hasRole(oracleRole, oracleWallet.address)).to.be.true;
     });
 
     it("Admin can revoke oracle role", async () => {
-        await paymaster.connect(adminWallet).revokePriceOracleRole(oracleWallet.address, { nonce: adminNonce++ });
+        const tx = await paymaster.connect(adminWallet).revokePriceOracleRole(oracleWallet.address, { nonce: adminNonce++ });
+        await tx.wait();
+
         expect(await paymaster.hasRole(oracleRole, oracleWallet.address)).to.be.false;
     });
 
@@ -79,26 +84,26 @@ describe("Erc20Paymaster", function () {
 
     it("Random user can mint NFT using paymaster", async () => {
         const provider = getProvider();
-        const userWallet= getWallet();
-        
-        console.log(`User balance before tranfer: ${await userWallet.getBalance()}`);
-        console.log(`Admin balance before tranfer: ${await adminWallet.getBalance()}`);
-    
-        const adminBalance = await provider.getBalance(adminWallet.address);
-        expect(adminBalance).to.be.gt(ethers.parseEther("0.5"));
-        expect(await provider.getBalance(userWallet.address)).to.equal(ethers.toBigInt(0));
-        const chargeUserWallet = await adminWallet.transfer({ to: userWallet.address, amount: ethers.parseEther("0.5"), overrides: {nonce: adminNonce++} });
-        const tx = await chargeUserWallet.waitFinalize(); 
-        console.log(tx.toJSON());
-        console.log(`Admin balance after tranfer: ${await adminWallet.getBalance()}`);
-        console.log(`User balance after  tranfer: ${await userWallet.getBalance()}`);
 
-        const cap = await nodl.cap();
-        const currentSupply = await nodl.totalSupply();
-        const maxMint = cap - currentSupply;
-        const nodlMintTx = await nodl.connect(adminWallet).mint(userWallet.address, maxMint, { nonce: adminNonce++ });
+        const userWallet= getWallet();
+        expect(await provider.getBalance(userWallet.address)).to.equal(0n);
+
+        const ethFund = ethers.parseEther("0.00005"); // Very small amount of ETH only needed for approving paymaster
+        const transferEthTx = await adminWallet.transfer({ to: userWallet.address, amount: ethFund, overrides: {nonce: adminNonce++} });
+        await transferEthTx.wait();
+
+        const userBalance = await provider.getBalance(userWallet.address);
+        expect(userBalance).to.equal(ethFund);
+
+        const gasLimit = 400000n;
+        const gasPrice = ethers.parseEther("0.00001");
+        const requiredEth = gasLimit * gasPrice;
+        const requiredNodl = requiredEth * initialFeePrice;
+        const nodlMintTx = await nodl.connect(adminWallet).mint(userWallet.address, requiredNodl, { nonce: adminNonce++ });
         await nodlMintTx.wait();
-        expect(await nodl.balanceOf(userWallet.address)).to.equal(maxMint);
+
+        const userNodlBalance = ethers.toBigInt(await nodl.balanceOf(userWallet.address));
+        expect(userNodlBalance).to.equal(requiredNodl);
 
         const nftContract = await deployContract("ContentSignNFT", ["Click", "CLK", adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true }, adminNonce++);
         await nftContract.waitForDeployment();
@@ -109,33 +114,34 @@ describe("Erc20Paymaster", function () {
 
         expect(await nftContract.hasRole(minterRole, userWallet.address)).to.be.true;
 
-        const paymasterParams = utils.getPaymasterParams(paymasterAddress, {
-            type: "ApprovalBased",
-            token: nodlAddress,
-            minimalAllowance: ethers.toBigInt(1),
-            innerInput: new Uint8Array(),
-        });
+        const nodlAllowance = requiredNodl;
+        const approveTx = await nodl.connect(userWallet).approve(paymasterAddress, nodlAllowance, { nonce: 0 });
+        await approveTx.wait();
+    
+        expect(await nodl.allowance(userWallet.address, paymasterAddress)).to.equal(nodlAllowance);
 
-        // TODO remove after testing
-        // const flagContract = await deployContract("MockFlag", [], { wallet: adminWallet, silent: true, skipChecks: true }, adminNonce++);
-        // await flagContract.waitForDeployment();
-        // await flagContract.connect(userWallet).setFlag("flagValue", {
-        //     nonce: 0,
-        //     customData: {
-        //         gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
-        //         paymasterParams,
-        //     },
-        // });
-        // expect(await flagContract.flag()).to.equal("flagValue");
-        
+        const nextNFTTokenId = await nftContract.nextTokenId();
         const tokenURI = "https://ipfs.io/ipfs/QmXuYh3h1e8zZ5r9w8X4LZQv3B7qQ9mZQz5o4Jr2A4FzY6";
         const safeMintTx = await nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
-            nonce: 0,
+            nonce: 1,
+            gasLimit,
+            gasPrice,
             customData: {
                 gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
-                paymasterParams,
+                paymasterParams: utils.getPaymasterParams(paymasterAddress, {
+                    type: "ApprovalBased",
+                    token: nodlAddress,
+                    minimalAllowance: nodlAllowance,
+                    innerInput: new Uint8Array(),
+                }),
             },
         });
         await safeMintTx.wait();
+
+        expect(await nftContract.ownerOf(nextNFTTokenId)).to.equal(userWallet.address);
+        expect(await nftContract.tokenURI(nextNFTTokenId)).to.equal(tokenURI);
+
+        const mintNodlCost = userNodlBalance - await nodl.balanceOf(userWallet.address);
+        expect(Number(mintNodlCost)).to.lessThanOrEqual(Number(nodlAllowance));
     });
 });
