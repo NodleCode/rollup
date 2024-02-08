@@ -1,6 +1,6 @@
 import { Wallet } from "zksync-ethers";
 import * as ethers from "ethers";
-import { LOCAL_RICH_WALLETS, deployContract, getProvider, getWallet } from "../../deploy/utils";
+import { LOCAL_RICH_WALLETS, deployContract, getWallet } from "../../deploy/utils";
 
 export const setupEnv = async (paymasterContract: string, additionalArgs: any[] = []) => {
     const adminWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
@@ -14,5 +14,5 @@ export const setupEnv = async (paymasterContract: string, additionalArgs: any[] 
 
     const userWallet = getWallet();
 
-    return { paymaster, adminWallet, withdrawerWallet, sponsorWallet, userWallet, provider };
+    return { paymaster, adminWallet, withdrawerWallet, sponsorWallet, userWallet };
 }

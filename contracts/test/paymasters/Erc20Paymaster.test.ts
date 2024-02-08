@@ -96,7 +96,7 @@ describe("Erc20Paymaster", function () {
         expect(userBalance).to.equal(ethFund);
 
         const gasLimit = 400000n;
-        const gasPrice = ethers.parseEther("0.00001");
+        const gasPrice = await provider.getGasPrice();
         const requiredEth = gasLimit * gasPrice;
         const requiredNodl = requiredEth * initialFeePrice;
         const nodlMintTx = await nodl.connect(adminWallet).mint(userWallet.address, requiredNodl, { nonce: adminNonce++ });
@@ -125,7 +125,6 @@ describe("Erc20Paymaster", function () {
         const safeMintTx = await nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
             nonce: 1,
             gasLimit,
-            gasPrice,
             customData: {
                 gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                 paymasterParams: utils.getPaymasterParams(paymasterAddress, {
