@@ -88,13 +88,6 @@ describe("Erc20Paymaster", function () {
         const userWallet= getWallet();
         expect(await provider.getBalance(userWallet.address)).to.equal(0n);
 
-        const ethFund = ethers.parseEther("0.00005"); // Very small amount of ETH only needed for approving paymaster
-        const transferEthTx = await adminWallet.transfer({ to: userWallet.address, amount: ethFund, overrides: {nonce: adminNonce++} });
-        await transferEthTx.wait();
-
-        const userBalance = await provider.getBalance(userWallet.address);
-        expect(userBalance).to.equal(ethFund);
-
         const gasLimit = 400000n;
         const gasPrice = await provider.getGasPrice();
         const requiredEth = gasLimit * gasPrice;
