@@ -115,15 +115,14 @@ describe("Erc20Paymaster", function () {
         expect(await nftContract.hasRole(minterRole, userWallet.address)).to.be.true;
 
         const nodlAllowance = requiredNodl;
-        const approveTx = await nodl.connect(userWallet).approve(paymasterAddress, nodlAllowance, { nonce: 0 });
-        await approveTx.wait();
-    
-        expect(await nodl.allowance(userWallet.address, paymasterAddress)).to.equal(nodlAllowance);
+
+        // User doesn't need to approve the paymaster, it will be done automatically
+        expect(await nodl.allowance(userWallet.address, paymasterAddress)).to.equal(0);
 
         const nextNFTTokenId = await nftContract.nextTokenId();
         const tokenURI = "https://ipfs.io/ipfs/QmXuYh3h1e8zZ5r9w8X4LZQv3B7qQ9mZQz5o4Jr2A4FzY6";
         const safeMintTx = await nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
-            nonce: 1,
+            nonce: 0,
             gasLimit,
             customData: {
                 gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
