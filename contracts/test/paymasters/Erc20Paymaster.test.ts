@@ -91,7 +91,8 @@ describe("Erc20Paymaster", function () {
         const gasLimit = 400000n;
         const gasPrice = await provider.getGasPrice();
         const requiredEth = gasLimit * gasPrice;
-        const requiredNodl = requiredEth * initialFeePrice;
+        const feePrice = await paymaster.feePrice();
+        const requiredNodl = requiredEth * feePrice;
         const nodlMintTx = await nodl.connect(adminWallet).mint(userWallet.address, requiredNodl, { nonce: adminNonce++ });
         await nodlMintTx.wait();
 
