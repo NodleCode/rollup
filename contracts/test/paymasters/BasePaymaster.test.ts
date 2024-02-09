@@ -48,14 +48,15 @@ describe("BasePaymaster", function () {
             });
         }
 
-        await flag.connect(user).setFlag(flagValue, {
+        const flagTx = await flag.connect(user).setFlag(flagValue, {
             nonce,
             customData: {
                 gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                 paymasterParams,
             },
         });
-
+        await flagTx.wait();
+        
         expect(await flag.flag()).to.equal(flagValue);
     }
 

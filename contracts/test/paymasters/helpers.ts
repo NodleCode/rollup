@@ -8,6 +8,7 @@ export const setupEnv = async (paymasterContract: string, additionalArgs: any[] 
     const sponsorWallet = getWallet(LOCAL_RICH_WALLETS[2].privateKey);
 
     const paymaster = await deployContract(paymasterContract, [adminWallet.address, ...additionalArgs], { wallet: adminWallet, silent: true, skipChecks: true });
+    await paymaster.waitForDeployment();
 
     await paymaster.connect(adminWallet).grantRole(await paymaster.WITHDRAWER_ROLE(), withdrawerWallet.address);
     await sponsorWallet.sendTransaction({ to: await paymaster.getAddress(), value: ethers.parseEther("1") });

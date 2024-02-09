@@ -22,7 +22,8 @@ describe("ContentSignNFT", function () {
   it("Should mint token", async function () {
     const tokenURI = "https://example.com";
 
-    await tokenContract.safeMint(userWallet.address, tokenURI);
+    const mintTx = await tokenContract.safeMint(userWallet.address, tokenURI);
+    await mintTx.wait();
     const tokenURIResult = await tokenContract.tokenURI(0);
 
     expect(tokenURIResult).to.equal(tokenURI);

@@ -19,6 +19,7 @@ describe("WhitelistPaymaster", function () {
         adminWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
         whitelistAdminWallet = getWallet(LOCAL_RICH_WALLETS[3].privateKey);
         flag = await deployContract("MockFlag", [], { wallet: adminWallet, silent: true, skipChecks: true });
+        await flag.waitForDeployment();
 
         const result = await setupEnv("WhitelistPaymaster", [whitelistAdminWallet.address, [await flag.getAddress()]]);
         paymaster = result.paymaster;
@@ -28,6 +29,7 @@ describe("WhitelistPaymaster", function () {
         userWallet = result.userWallet;
 
         nodl = await deployContract("NODL", [adminWallet.address, adminWallet.address], { wallet: adminWallet, silent: true, skipChecks: true });
+        await nodl.waitForDeployment();
 
         // whitelist user
         const whitelistedRole = await paymaster.WHITELISTED_USER_ROLE();
@@ -67,11 +69,15 @@ describe("WhitelistPaymaster", function () {
 
         const nonce = await whitelistAdminWallet.getNonce();
 
-        await paymaster.connect(whitelistAdminWallet).addWhitelistedContracts([newFlagAddress], { nonce: nonce });
+        const whitelistContractTx = await paymaster.connect(whitelistAdminWallet).addWhitelistedContracts([newFlagAddress], { nonce: nonce });
+        await whitelistContractTx.wait();
+
         expect(await paymaster.isWhitelistedContract(newFlagAddress)).to.be.true;
         expect(await paymaster.isWhitelistedContract(await flag.getAddress())).to.be.true;
 
-        await paymaster.connect(whitelistAdminWallet).removeWhitelistedContracts([newFlagAddress], { nonce: nonce + 1 });
+        const rmWhitelistContractTx = await paymaster.connect(whitelistAdminWallet).removeWhitelistedContracts([newFlagAddress], { nonce: nonce + 1 });
+        await rmWhitelistContractTx.wait();
+
         expect(await paymaster.isWhitelistedContract(newFlagAddress)).to.be.false;
         expect(await paymaster.isWhitelistedContract(await flag.getAddress())).to.be.true;
     });
@@ -89,6 +95,7 @@ describe("WhitelistPaymaster", function () {
         // would not work
         await expect(
             flag.connect(userWallet).setFlag("flag captured", {
+                gasLimit: 400000n,
                 customData: {
                     gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                     paymasterParams,
@@ -103,12 +110,13 @@ describe("WhitelistPaymaster", function () {
             innerInput: new Uint8Array(),
         });
         
-        await flag.connect(userWallet).setFlag("flag captured", {
+        const setFlagTx = await flag.connect(userWallet).setFlag("flag captured", {
             customData: {
                 gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                 paymasterParams,
             },
         });
+        await setFlagTx.wait();
 
         expect(await flag.flag()).to.equal("flag captured");
     });
@@ -123,6 +131,7 @@ describe("WhitelistPaymaster", function () {
 
         await expect(
             newFlag.connect(userWallet).setFlag("flag captured", {
+                gasLimit: 400000n,
                 customData: {
                     gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                     paymasterParams,
@@ -139,6 +148,7 @@ describe("WhitelistPaymaster", function () {
 
         await expect(
             flag.connect(sponsorWallet).setFlag("flag captured", {
+                gasLimit: 400000n,
                 customData: {
                     gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
                     paymasterParams,
