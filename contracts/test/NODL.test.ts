@@ -63,7 +63,8 @@ describe("NODL", function () {
   });
 
   it("Has a max supply of 21 billion", async () => {
-    const maxSupply = ethers.parseUnits("21000000000", 11);
+    const decimals = await tokenContract.decimals();
+    const maxSupply = ethers.parseUnits("21000000000", decimals);
     const cap = await tokenContract.cap();
     expect(cap).to.equal(maxSupply);
   });

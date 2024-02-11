@@ -9,13 +9,20 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract NODL is ERC20Burnable, ERC20Capped, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    uint256 public constant MAX_SUPPLY = 21_000_000_000;
-    uint8 public constant DECIMALS = 11;
 
-
-    constructor(address defaultAdmin, address minter) ERC20("Nodle Token", "NODL") ERC20Capped(MAX_SUPPLY * (10 ** DECIMALS)) {
+    constructor(address defaultAdmin, address minter) ERC20("Nodle Token", "NODL") ERC20Capped(21_000_000_000 * (10 ** decimals())) {
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(MINTER_ROLE, minter);
+    }
+
+/**
+     * @dev Returns the number of decimals used to get NODL's user representation.
+     * NOTE: This information is only used for _display_ purposes: it in
+     * no way affects any of the arithmetic of the contract, including
+     * {IERC20-balanceOf} and {IERC20-transfer}.
+     */
+    function decimals() public view virtual override returns (uint8) {
+        return 11;
     }
 
     function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
