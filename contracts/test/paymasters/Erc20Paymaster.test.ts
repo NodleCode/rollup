@@ -54,7 +54,7 @@ describe("Erc20Paymaster", function () {
         expect(feePrice).to.be.equal(newFeePrice);
     });
 
-    it("None oracle can't update fee price", async () => {
+    it("Non oracle can't update fee price", async () => {
         const newFeePrice = 3;
         await expect(paymaster.connect(adminWallet).updateFeePrice(newFeePrice, { nonce: adminNonce })).to.be.revertedWithCustomError(paymaster, "AccessControlUnauthorizedAccount").withArgs(adminWallet.address, oracleRole);
     });
