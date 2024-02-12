@@ -13,19 +13,23 @@ const config: HardhatUserConfig = {
       url: "https://sepolia.era.zksync.dev",
       ethNetwork: "sepolia",
       zksync: true,
-      verifyURL: "https://explorer.sepolia.era.zksync.dev/contract_verification",
+      verifyURL:
+        "https://explorer.sepolia.era.zksync.dev/contract_verification",
     },
     zkSyncMainnet: {
       url: "https://mainnet.era.zksync.io",
       ethNetwork: "mainnet",
       zksync: true,
-      verifyURL: "https://zksync2-mainnet-explorer.zksync.io/contract_verification",
+      verifyURL:
+        "https://zksync2-mainnet-explorer.zksync.io/contract_verification",
     },
-    zkSyncGoerliTestnet: { // deprecated network
+    zkSyncGoerliTestnet: {
+      // deprecated network
       url: "https://testnet.era.zksync.dev",
       ethNetwork: "goerli",
       zksync: true,
-      verifyURL: "https://zksync2-testnet-explorer.zksync.dev/contract_verification",
+      verifyURL:
+        "https://zksync2-testnet-explorer.zksync.dev/contract_verification",
     },
     localNode: {
       url: "http://localhost:3050",
@@ -35,13 +39,13 @@ const config: HardhatUserConfig = {
     inMemoryNode: {
       url: "http://127.0.0.1:8011",
       ethNetwork: "", // in-memory node doesn't support eth node; removing this line will cause an error
-      zksync: true
+      zksync: true,
     },
     dockerComposeNode: {
       url: "http://zksync:3050",
       ethNetwork: "http://geth:8545",
       zksync: true,
-    }
+    },
   },
   zksolc: {
     version: "latest",
@@ -54,8 +58,8 @@ const config: HardhatUserConfig = {
     version: "0.8.20",
   },
   mocha: {
-    timeout: 120000 // Timeout in milliseconds
-  }
+    timeout: 120000, // Timeout in milliseconds
+  },
 };
 
 export default config;

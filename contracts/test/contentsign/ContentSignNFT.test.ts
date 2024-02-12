@@ -1,6 +1,10 @@
-import { expect } from 'chai';
+import { expect } from "chai";
 import { Contract, Wallet } from "zksync-ethers";
-import { getWallet, deployContract, LOCAL_RICH_WALLETS } from '../../deploy/utils';
+import {
+  getWallet,
+  deployContract,
+  LOCAL_RICH_WALLETS,
+} from "../../deploy/utils";
 
 describe("ContentSignNFT", function () {
   let tokenContract: Contract;
@@ -11,7 +15,11 @@ describe("ContentSignNFT", function () {
     ownerWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
     userWallet = getWallet(LOCAL_RICH_WALLETS[1].privateKey);
 
-    tokenContract = await deployContract("ContentSignNFT", ["Mock", "MCK", ownerWallet.address], { wallet: ownerWallet, silent: true, skipChecks: true });
+    tokenContract = await deployContract(
+      "ContentSignNFT",
+      ["Mock", "MCK", ownerWallet.address],
+      { wallet: ownerWallet, silent: true, skipChecks: true },
+    );
   });
 
   it("Set the right metadata", async function () {
@@ -34,11 +42,12 @@ describe("ContentSignNFT", function () {
 
     const minterRole = await tokenContract.MINTER_ROLE();
     await expect(
-      tokenContract
-        .connect(userWallet)
-        .safeMint(userWallet.address, tokenURI)
-    ).to.be
-      .revertedWithCustomError(tokenContract, "AccessControlUnauthorizedAccount")
+      tokenContract.connect(userWallet).safeMint(userWallet.address, tokenURI),
+    )
+      .to.be.revertedWithCustomError(
+        tokenContract,
+        "AccessControlUnauthorizedAccount",
+      )
       .withArgs(userWallet.address, minterRole);
   });
 });

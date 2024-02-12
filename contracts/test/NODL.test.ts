@@ -1,6 +1,6 @@
-import { expect } from 'chai';
+import { expect } from "chai";
 import { Contract, Wallet } from "zksync-ethers";
-import { getWallet, deployContract, LOCAL_RICH_WALLETS } from '../deploy/utils';
+import { getWallet, deployContract, LOCAL_RICH_WALLETS } from "../deploy/utils";
 import * as ethers from "ethers";
 
 describe("NODL", function () {
@@ -13,7 +13,11 @@ describe("NODL", function () {
     ownerWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
     userWallet = getWallet(LOCAL_RICH_WALLETS[1].privateKey);
 
-    tokenContract = await deployContract("NODL", [ownerWallet.address, ownerWallet.address], { wallet: ownerWallet, silent: true, skipChecks: true });
+    tokenContract = await deployContract(
+      "NODL",
+      [ownerWallet.address, ownerWallet.address],
+      { wallet: ownerWallet, silent: true, skipChecks: true },
+    );
     await tokenContract.waitForDeployment();
   });
 
@@ -26,7 +30,9 @@ describe("NODL", function () {
     const balanceBefore = await tokenContract.balanceOf(userWallet.address);
     const initialSupply = await tokenContract.totalSupply();
 
-    const minTx = await tokenContract.connect(ownerWallet).mint(userWallet.address, mintAmount);
+    const minTx = await tokenContract
+      .connect(ownerWallet)
+      .mint(userWallet.address, mintAmount);
     await minTx.wait();
 
     const balanceAfter = await tokenContract.balanceOf(userWallet.address);
@@ -39,23 +45,31 @@ describe("NODL", function () {
   it("Should be burnable", async () => {
     const balanceBefore = await tokenContract.balanceOf(userWallet.address);
     const initialSupply = await tokenContract.totalSupply();
-    const burnAmount = mintAmount/2n;
+    const burnAmount = mintAmount / 2n;
 
     const userBurnTx = await tokenContract.connect(userWallet).burn(burnAmount);
     await userBurnTx.wait();
 
-    const balanceAfterUserBurn = await tokenContract.balanceOf(userWallet.address);
+    const balanceAfterUserBurn = await tokenContract.balanceOf(
+      userWallet.address,
+    );
     expect(balanceAfterUserBurn).to.equal(balanceBefore - burnAmount);
     const supplyAfterUserBurn = await tokenContract.totalSupply();
     expect(supplyAfterUserBurn).to.equal(initialSupply - burnAmount);
 
-    const userApproveTx = await tokenContract.connect(userWallet).approve(ownerWallet.address, burnAmount);
+    const userApproveTx = await tokenContract
+      .connect(userWallet)
+      .approve(ownerWallet.address, burnAmount);
     await userApproveTx.wait();
 
-    const approvedBurnTx = await tokenContract.connect(ownerWallet).burnFrom(userWallet.address, burnAmount);
+    const approvedBurnTx = await tokenContract
+      .connect(ownerWallet)
+      .burnFrom(userWallet.address, burnAmount);
     await approvedBurnTx.wait();
 
-    const balanceAfterApprovedBurn = await tokenContract.balanceOf(userWallet.address);
+    const balanceAfterApprovedBurn = await tokenContract.balanceOf(
+      userWallet.address,
+    );
     expect(balanceAfterApprovedBurn).to.equal(balanceBefore - mintAmount);
 
     const supplyAfterApprovedBurn = await tokenContract.totalSupply();
@@ -74,13 +88,19 @@ describe("NODL", function () {
     const currentSupply = await tokenContract.totalSupply();
 
     const maxMint = cap - currentSupply;
-    const mintAllTx = await tokenContract.connect(ownerWallet).mint(userWallet.address, maxMint);
+    const mintAllTx = await tokenContract
+      .connect(ownerWallet)
+      .mint(userWallet.address, maxMint);
     await mintAllTx.wait();
 
     expect(await tokenContract.balanceOf(userWallet.address)).to.equal(maxMint);
     expect(await tokenContract.totalSupply()).to.equal(cap);
 
-    const mintAboveCapTx = tokenContract.connect(ownerWallet).mint(userWallet.address, 1);
-    await expect(mintAboveCapTx).to.be.revertedWithCustomError(tokenContract, "ERC20ExceededCap").withArgs(cap + 1n, cap);
+    const mintAboveCapTx = tokenContract
+      .connect(ownerWallet)
+      .mint(userWallet.address, 1);
+    await expect(mintAboveCapTx)
+      .to.be.revertedWithCustomError(tokenContract, "ERC20ExceededCap")
+      .withArgs(cap + 1n, cap);
   });
 });
