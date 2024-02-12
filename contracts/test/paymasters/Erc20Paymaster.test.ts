@@ -299,7 +299,7 @@ describe("Erc20Paymaster", function () {
 
   it("Transaction fails if fee is too high", async () => {
     const userWallet = getWallet();
-    const gasLimit = 400000n;
+    const highGasLimit = await provider.getBlock("latest").then((block) => block.gasLimit) / 2n;
     const largestPossibleNodlBalance = await nodl.cap() - await nodl.totalSupply();
 
     const nodlMintTx = await nodl
@@ -307,7 +307,7 @@ describe("Erc20Paymaster", function () {
       .mint(userWallet.address, largestPossibleNodlBalance, { nonce: adminNonce++ });
     await nodlMintTx.wait();
 
-    const highFeePrice = 2n ** 64n;
+    const highFeePrice = 2n ** 256n - 1n;
     const updateFeePriceTx = await paymaster
       .connect(oracleWallet)
       .updateFeePrice(highFeePrice);
@@ -327,7 +327,7 @@ describe("Erc20Paymaster", function () {
       "https://ipfs.io/ipfs/QmXuYh3h1e8zZ5r9w8X4LZQv3B7qQ9mZQz5o4Jr2A4FzY6";
     await expect(nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
       nonce: 0,
-      gasLimit,
+      gasLimit: highGasLimit,
       customData: {
         gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
         paymasterParams: utils.getPaymasterParams(paymasterAddress, {
