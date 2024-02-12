@@ -29,7 +29,6 @@ describe("Erc20Paymaster", function () {
   let oracleWallet: Wallet;
   let oracleRole: string;
   let adminRole: string;
-  let adminNonce: number;
 
   const initialFeePrice = 1n;
 
@@ -39,13 +38,10 @@ describe("Erc20Paymaster", function () {
     adminWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
     oracleWallet = getWallet(LOCAL_RICH_WALLETS[1].privateKey);
 
-    adminNonce = await adminWallet.getNonce();
-
     nodl = await deployContract(
       "NODL",
       [adminWallet.address, adminWallet.address],
       { wallet: adminWallet, silent: true, skipChecks: true },
-      adminNonce++,
     );
     await nodl.waitForDeployment();
     nodlAddress = await nodl.getAddress();
@@ -54,7 +50,6 @@ describe("Erc20Paymaster", function () {
       "Erc20Paymaster",
       [adminWallet.address, oracleWallet.address, nodlAddress, initialFeePrice],
       { wallet: adminWallet, silent: true, skipChecks: true },
-      adminNonce++,
     );
     await paymaster.waitForDeployment();
     paymasterAddress = await paymaster.getAddress();
@@ -64,7 +59,6 @@ describe("Erc20Paymaster", function () {
     const chargePaymaster = await adminWallet.transfer({
       to: paymasterAddress,
       amount: ethers.parseEther("0.5"),
-      overrides: { nonce: adminNonce++ },
     });
     await chargePaymaster.wait();
     expect(await provider.getBalance(paymasterAddress)).to.equal(
@@ -75,7 +69,6 @@ describe("Erc20Paymaster", function () {
       "ContentSignNFT",
       ["Click", "CLK", adminWallet.address],
       { wallet: adminWallet, silent: true, skipChecks: true },
-      adminNonce++,
     );
     await nftContract.waitForDeployment();
   });
@@ -105,7 +98,7 @@ describe("Erc20Paymaster", function () {
     await expect(
       paymaster
         .connect(adminWallet)
-        .updateFeePrice(newFeePrice, { nonce: adminNonce }),
+        .updateFeePrice(newFeePrice),
     )
       .to.be.revertedWithCustomError(
         paymaster,
@@ -119,7 +112,7 @@ describe("Erc20Paymaster", function () {
 
     const tx = await paymaster
       .connect(adminWallet)
-      .grantPriceOracleRole(newOracleWallet.address, { nonce: adminNonce++ });
+      .grantPriceOracleRole(newOracleWallet.address);
     await tx.wait();
 
     expect(await paymaster.hasRole(oracleRole, newOracleWallet.address)).to.be
@@ -131,7 +124,7 @@ describe("Erc20Paymaster", function () {
   it("Admin can revoke oracle role", async () => {
     const revokeTx = await paymaster
       .connect(adminWallet)
-      .revokePriceOracleRole(oracleWallet.address, { nonce: adminNonce++ });
+      .revokePriceOracleRole(oracleWallet.address);
     await revokeTx.wait();
 
     expect(await paymaster.hasRole(oracleRole, oracleWallet.address)).to.be
@@ -140,7 +133,7 @@ describe("Erc20Paymaster", function () {
     // grant the role back after testing revoke
     const grantBackTx = await paymaster
       .connect(adminWallet)
-      .grantPriceOracleRole(oracleWallet.address, { nonce: adminNonce++ });
+      .grantPriceOracleRole(oracleWallet.address);
     await grantBackTx.wait();
     expect(await paymaster.hasRole(oracleRole, oracleWallet.address)).to.be
       .true;
@@ -182,7 +175,7 @@ describe("Erc20Paymaster", function () {
 
     const nodlMintTx = await nodl
       .connect(adminWallet)
-      .mint(userWallet.address, requiredNodl, { nonce: adminNonce++ });
+      .mint(userWallet.address, requiredNodl);
     await nodlMintTx.wait();
 
     const userNodlBalance = ethers.toBigInt(
@@ -193,7 +186,7 @@ describe("Erc20Paymaster", function () {
     const minterRole = await nftContract.MINTER_ROLE();
     const grantRoleTx = await nftContract
       .connect(adminWallet)
-      .grantRole(minterRole, userWallet.address, { nonce: adminNonce++ });
+      .grantRole(minterRole, userWallet.address);
     await grantRoleTx.wait();
 
     expect(await nftContract.hasRole(minterRole, userWallet.address)).to.be
@@ -205,7 +198,6 @@ describe("Erc20Paymaster", function () {
     const safeMintTx = await nftContract
       .connect(userWallet)
       .safeMint(userWallet.address, tokenURI, {
-        nonce: 0,
         gasLimit,
         customData: {
           gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
@@ -240,20 +232,19 @@ describe("Erc20Paymaster", function () {
 
     const nodlMintTx = await nodl
       .connect(adminWallet)
-      .mint(userWallet.address, requiredNodl, { nonce: adminNonce++ });
+      .mint(userWallet.address, requiredNodl);
     await nodlMintTx.wait();
 
     const minterRole = await nftContract.MINTER_ROLE();
     const grantRoleTx = await nftContract
       .connect(adminWallet)
-      .grantRole(minterRole, userWallet.address, { nonce: adminNonce++ });
+      .grantRole(minterRole, userWallet.address);
     await grantRoleTx.wait();
 
     const expectedErrorSelector = getErrorSelector('AllowanceNotEnough(uint256,uint256)');
     const tokenURI =
       "https://ipfs.io/ipfs/QmXuYh3h1e8zZ5r9w8X4LZQv3B7qQ9mZQz5o4Jr2A4FzY6";
     await expect(nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
-      nonce: 0,
       gasLimit,
       customData: {
         gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
@@ -278,20 +269,19 @@ describe("Erc20Paymaster", function () {
 
     const nodlMintTx = await nodl
       .connect(adminWallet)
-      .mint(userWallet.address, insufficientUserBalance, { nonce: adminNonce++ });
+      .mint(userWallet.address, insufficientUserBalance);
     await nodlMintTx.wait();
 
     const minterRole = await nftContract.MINTER_ROLE();
     const grantRoleTx = await nftContract
       .connect(adminWallet)
-      .grantRole(minterRole, userWallet.address, { nonce: adminNonce++ });
+      .grantRole(minterRole, userWallet.address);
     await grantRoleTx.wait();
 
     const expectedErrorSelector = getErrorSelector('FeeTransferFailed(bytes)');
     const tokenURI =
       "https://ipfs.io/ipfs/QmXuYh3h1e8zZ5r9w8X4LZQv3B7qQ9mZQz5o4Jr2A4FzY6";
     await expect(nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
-      nonce: 0,
       gasLimit,
       customData: {
         gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
@@ -312,7 +302,7 @@ describe("Erc20Paymaster", function () {
 
     const nodlMintTx = await nodl
       .connect(adminWallet)
-      .mint(userWallet.address, largestPossibleNodlBalance, { nonce: adminNonce++ });
+      .mint(userWallet.address, largestPossibleNodlBalance);
     await nodlMintTx.wait();
 
     const highFeePrice = 2n ** 256n - 1n;
@@ -327,14 +317,13 @@ describe("Erc20Paymaster", function () {
     const minterRole = await nftContract.MINTER_ROLE();
     const grantRoleTx = await nftContract
       .connect(adminWallet)
-      .grantRole(minterRole, userWallet.address, { nonce: adminNonce++ });
+      .grantRole(minterRole, userWallet.address);
     await grantRoleTx.wait();
 
     const expectedErrorSelector = getErrorSelector('FeeTooHigh(uint256,uint256)');
     const tokenURI =
       "https://ipfs.io/ipfs/QmXuYh3h1e8zZ5r9w8X4LZQv3B7qQ9mZQz5o4Jr2A4FzY6";
     await expect(nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
-      nonce: 0,
       gasLimit: highGasLimit,
       customData: {
         gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
