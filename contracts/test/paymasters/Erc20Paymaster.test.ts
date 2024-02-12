@@ -9,12 +9,12 @@ import {
 } from "../../deploy/utils";
 
 /**
- * 
+ *
  * @param errorSignature e.g. "AllowanceNotEnough(uint256,uint256)"
  * @returns the first 4 bytes (8 characters after '0x') of the hash as the selector
  */
 function getErrorSelector(errorSignature: string): string {
-  const hash = ethers.keccak256(Buffer.from(errorSignature, 'utf-8'));
+  const hash = ethers.keccak256(Buffer.from(errorSignature, "utf-8"));
   return hash.slice(0, 10);
 }
 
@@ -95,11 +95,7 @@ describe("Erc20Paymaster", function () {
 
   it("Non oracle cannot update fee price", async () => {
     const newFeePrice = 3;
-    await expect(
-      paymaster
-        .connect(adminWallet)
-        .updateFeePrice(newFeePrice),
-    )
+    await expect(paymaster.connect(adminWallet).updateFeePrice(newFeePrice))
       .to.be.revertedWithCustomError(
         paymaster,
         "AccessControlUnauthorizedAccount",
@@ -241,21 +237,31 @@ describe("Erc20Paymaster", function () {
       .grantRole(minterRole, userWallet.address);
     await grantRoleTx.wait();
 
-    const expectedErrorSelector = getErrorSelector('AllowanceNotEnough(uint256,uint256)');
+    const expectedErrorSelector = getErrorSelector(
+      "AllowanceNotEnough(uint256,uint256)",
+    );
     const tokenURI =
       "https://ipfs.io/ipfs/QmXuYh3h1e8zZ5r9w8X4LZQv3B7qQ9mZQz5o4Jr2A4FzY6";
-    await expect(nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
-      gasLimit,
-      customData: {
-        gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
-        paymasterParams: utils.getPaymasterParams(paymasterAddress, {
-          type: "ApprovalBased",
-          token: nodlAddress,
-          minimalAllowance: insufficientNodlAllowance,
-          innerInput: new Uint8Array(),
-        }),
-      },
-    })).to.be.rejected.and.eventually.have.property('message').that.matches(new RegExp(`error.*Paymaster.*function_selector\\s*=\\s*${expectedErrorSelector}`));
+    await expect(
+      nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
+        gasLimit,
+        customData: {
+          gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
+          paymasterParams: utils.getPaymasterParams(paymasterAddress, {
+            type: "ApprovalBased",
+            token: nodlAddress,
+            minimalAllowance: insufficientNodlAllowance,
+            innerInput: new Uint8Array(),
+          }),
+        },
+      }),
+    )
+      .to.be.rejected.and.eventually.have.property("message")
+      .that.matches(
+        new RegExp(
+          `error.*Paymaster.*function_selector\\s*=\\s*${expectedErrorSelector}`,
+        ),
+      );
   });
 
   it("User cannot use paymaster with insufficient balance", async () => {
@@ -278,27 +284,37 @@ describe("Erc20Paymaster", function () {
       .grantRole(minterRole, userWallet.address);
     await grantRoleTx.wait();
 
-    const expectedErrorSelector = getErrorSelector('FeeTransferFailed(bytes)');
+    const expectedErrorSelector = getErrorSelector("FeeTransferFailed(bytes)");
     const tokenURI =
       "https://ipfs.io/ipfs/QmXuYh3h1e8zZ5r9w8X4LZQv3B7qQ9mZQz5o4Jr2A4FzY6";
-    await expect(nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
-      gasLimit,
-      customData: {
-        gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
-        paymasterParams: utils.getPaymasterParams(paymasterAddress, {
-          type: "ApprovalBased",
-          token: nodlAddress,
-          minimalAllowance: requiredNodl,
-          innerInput: new Uint8Array(),
-        }),
-      },
-    })).to.be.rejected.and.eventually.have.property('message').that.matches(new RegExp(`error.*Paymaster.*function_selector\\s*=\\s*${expectedErrorSelector}`));
+    await expect(
+      nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
+        gasLimit,
+        customData: {
+          gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
+          paymasterParams: utils.getPaymasterParams(paymasterAddress, {
+            type: "ApprovalBased",
+            token: nodlAddress,
+            minimalAllowance: requiredNodl,
+            innerInput: new Uint8Array(),
+          }),
+        },
+      }),
+    )
+      .to.be.rejected.and.eventually.have.property("message")
+      .that.matches(
+        new RegExp(
+          `error.*Paymaster.*function_selector\\s*=\\s*${expectedErrorSelector}`,
+        ),
+      );
   });
 
   it("Transaction fails if fee is too high", async () => {
     const userWallet = getWallet();
-    const highGasLimit = await provider.getBlock("latest").then((block) => block.gasLimit) / 2n;
-    const largestPossibleNodlBalance = await nodl.cap() - await nodl.totalSupply();
+    const highGasLimit =
+      (await provider.getBlock("latest").then((block) => block.gasLimit)) / 2n;
+    const largestPossibleNodlBalance =
+      (await nodl.cap()) - (await nodl.totalSupply());
 
     const nodlMintTx = await nodl
       .connect(adminWallet)
@@ -320,20 +336,30 @@ describe("Erc20Paymaster", function () {
       .grantRole(minterRole, userWallet.address);
     await grantRoleTx.wait();
 
-    const expectedErrorSelector = getErrorSelector('FeeTooHigh(uint256,uint256)');
+    const expectedErrorSelector = getErrorSelector(
+      "FeeTooHigh(uint256,uint256)",
+    );
     const tokenURI =
       "https://ipfs.io/ipfs/QmXuYh3h1e8zZ5r9w8X4LZQv3B7qQ9mZQz5o4Jr2A4FzY6";
-    await expect(nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
-      gasLimit: highGasLimit,
-      customData: {
-        gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
-        paymasterParams: utils.getPaymasterParams(paymasterAddress, {
-          type: "ApprovalBased",
-          token: nodlAddress,
-          minimalAllowance: largestPossibleNodlBalance,
-          innerInput: new Uint8Array(),
-        }),
-      },
-    })).to.be.rejected.and.eventually.have.property('message').that.matches(new RegExp(`error.*Paymaster.*function_selector\\s*=\\s*${expectedErrorSelector}`));
+    await expect(
+      nftContract.connect(userWallet).safeMint(userWallet.address, tokenURI, {
+        gasLimit: highGasLimit,
+        customData: {
+          gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
+          paymasterParams: utils.getPaymasterParams(paymasterAddress, {
+            type: "ApprovalBased",
+            token: nodlAddress,
+            minimalAllowance: largestPossibleNodlBalance,
+            innerInput: new Uint8Array(),
+          }),
+        },
+      }),
+    )
+      .to.be.rejected.and.eventually.have.property("message")
+      .that.matches(
+        new RegExp(
+          `error.*Paymaster.*function_selector\\s*=\\s*${expectedErrorSelector}`,
+        ),
+      );
   });
 });

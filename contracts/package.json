@@ -9,9 +9,8 @@
     "test": "hardhat test --network localNode",
     "mint": "hardhat run scripts/mint.ts --network localNode",
     "lint": "solhint 'contracts/**/*.sol'",
-    "fmt:sol": "prettier --write --plugin=prettier-plugin-solidity 'contracts/**/*.sol'",
-    "fmt:ts": "prettier --write '**/*.ts'",
-    "fmt": "yarn fmt:sol && yarn fmt:ts"
+    "fmt:check": "prettier --check --plugin=prettier-plugin-solidity 'contracts/**/*.sol' '**/*.ts'",
+    "fmt:fix": "prettier --write --plugin=prettier-plugin-solidity 'contracts/**/*.sol' '**/*.ts'"
   },
   "devDependencies": {
     "@matterlabs/hardhat-zksync-chai-matchers": "^1.2.1",

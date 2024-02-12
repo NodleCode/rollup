@@ -107,11 +107,7 @@ describe("BasePaymaster", function () {
     );
 
     // yet it works
-    await executePaymasterTransaction(
-      userWallet,
-      "General",
-      "flag captured 1",
-    );
+    await executePaymasterTransaction(userWallet, "General", "flag captured 1");
     await executePaymasterTransaction(
       userWallet,
       "ApprovalBased",
