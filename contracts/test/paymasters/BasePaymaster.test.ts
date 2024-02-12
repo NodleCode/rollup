@@ -43,7 +43,6 @@ describe("BasePaymaster", function () {
   async function executePaymasterTransaction(
     user: Wallet,
     type: "General" | "ApprovalBased",
-    nonce: number,
     flagValue: string = "flag captured",
   ) {
     let paymasterParams;
@@ -62,7 +61,6 @@ describe("BasePaymaster", function () {
     }
 
     const flagTx = await flag.connect(user).setFlag(flagValue, {
-      nonce,
       customData: {
         gasPerPubdata: utils.DEFAULT_GAS_PER_PUBDATA_LIMIT,
         paymasterParams,
@@ -112,13 +110,11 @@ describe("BasePaymaster", function () {
     await executePaymasterTransaction(
       userWallet,
       "General",
-      0,
       "flag captured 1",
     );
     await executePaymasterTransaction(
       userWallet,
       "ApprovalBased",
-      1,
       "flag captured 2",
     );
   });
@@ -132,7 +128,7 @@ describe("BasePaymaster", function () {
     await tx.wait();
 
     // paymaster cannot pay for txs anymore
-    await expect(executePaymasterTransaction(userWallet, "General", 2)).to.be
+    await expect(executePaymasterTransaction(userWallet, "General")).to.be
       .reverted;
 
     // sanity checks: make sure the paymaster balance was emptied

@@ -48,12 +48,10 @@ describe("WhitelistPaymaster", function () {
 
     // whitelist user
     const whitelistedRole = await paymaster.WHITELISTED_USER_ROLE();
-    await paymaster
+    const grantTx = await paymaster
       .connect(adminWallet)
-      .grantRole(whitelistedRole, userWallet.address, {
-        // somehow if we do not do this, the underlying lib will not use an up to date nonce value
-        nonce: await adminWallet.getNonce(),
-      });
+      .grantRole(whitelistedRole, userWallet.address);
+    await grantTx.wait();
   });
 
   it("Sets correct roles", async () => {
@@ -99,11 +97,9 @@ describe("WhitelistPaymaster", function () {
       )
       .withArgs(userWallet.address, whitelistAdminRole);
 
-    const nonce = await whitelistAdminWallet.getNonce();
-
     const whitelistContractTx = await paymaster
       .connect(whitelistAdminWallet)
-      .addWhitelistedContracts([newFlagAddress], { nonce: nonce });
+      .addWhitelistedContracts([newFlagAddress]);
     await whitelistContractTx.wait();
 
     expect(await paymaster.isWhitelistedContract(newFlagAddress)).to.be.true;
@@ -112,7 +108,7 @@ describe("WhitelistPaymaster", function () {
 
     const rmWhitelistContractTx = await paymaster
       .connect(whitelistAdminWallet)
-      .removeWhitelistedContracts([newFlagAddress], { nonce: nonce + 1 });
+      .removeWhitelistedContracts([newFlagAddress]);
     await rmWhitelistContractTx.wait();
 
     expect(await paymaster.isWhitelistedContract(newFlagAddress)).to.be.false;
