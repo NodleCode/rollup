@@ -129,13 +129,21 @@ describe("Erc20Paymaster", function () {
   });
 
   it("Admin can revoke oracle role", async () => {
-    const tx = await paymaster
+    const revokeTx = await paymaster
       .connect(adminWallet)
       .revokePriceOracleRole(oracleWallet.address, { nonce: adminNonce++ });
-    await tx.wait();
+    await revokeTx.wait();
 
     expect(await paymaster.hasRole(oracleRole, oracleWallet.address)).to.be
       .false;
+
+    // grant the role back after testing revoke
+    const grantBackTx = await paymaster
+      .connect(adminWallet)
+      .grantPriceOracleRole(oracleWallet.address, { nonce: adminNonce++ });
+    await grantBackTx.wait();
+    expect(await paymaster.hasRole(oracleRole, oracleWallet.address)).to.be
+      .true;
   });
 
   it("Non Admin cannot grant or revoke roles", async () => {
