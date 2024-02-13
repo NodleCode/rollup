@@ -27,11 +27,9 @@ jobs:
         run: |
           yarn fmt
           yarn lint
-      - name: Start zksync service
+      - name: Run tests
         run: |
-          docker compose up zksync -d &
-      - name: Wait for zksync service to be ready
-        run: |
+          docker compose up zksync -d
           echo "Waiting for zksync to be up..."
           while ! nc -z localhost 3050 || ! nc -z localhost 8545; do
             echo "zksync is not yet running, waiting..."
@@ -39,5 +37,4 @@ jobs:
           done
           echo "zksync ports are up! Just wait an extra 1 minutes to be sure..."
           docker compose logs --until 1m
-      - name: Run tests
-        run: yarn test
+          yarn test      
