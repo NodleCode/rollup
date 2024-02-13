@@ -37,5 +37,6 @@ jobs:
             echo "zksync is not yet running, waiting..."
             sleep 10
           done
+          sleep 30
       - name: Run tests
         run: yarn test
