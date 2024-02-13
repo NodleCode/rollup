@@ -16,7 +16,7 @@ export const setupEnv = async (
 
   const paymaster = await deployContract(
     paymasterContract,
-    [adminWallet.address, ...additionalArgs],
+    [adminWallet.address, withdrawerWallet.address, ...additionalArgs],
     { wallet: adminWallet, silent: true, skipChecks: true },
   );
   await paymaster.waitForDeployment();

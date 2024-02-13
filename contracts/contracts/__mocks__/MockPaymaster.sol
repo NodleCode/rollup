@@ -7,7 +7,10 @@ import {BasePaymaster} from "../paymasters/BasePaymaster.sol";
 contract MockPaymaster is BasePaymaster {
     event MockPaymasterCalled();
 
-    constructor(address admin) BasePaymaster(admin, admin) {}
+    constructor(
+        address admin,
+        address withdrawer
+    ) BasePaymaster(admin, withdrawer) {}
 
     function _validateAndPayGeneralFlow(
         address,
