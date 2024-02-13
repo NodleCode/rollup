@@ -33,7 +33,7 @@ jobs:
       - name: Wait for zksync service to be ready
         run: |
           echo "Waiting for zksync to be up..."
-          while ! nc -z localhost 3050; do 
+          while ! nc -z localhost 3050 || ! nc -z localhost 8545; do
             echo "zksync is not yet running, waiting..."
             sleep 10
           done
