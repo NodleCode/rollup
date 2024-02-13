@@ -35,9 +35,9 @@ jobs:
             echo "zksync is not yet running, waiting..."
             sleep 10
           done
-          echo "zksync ports are up! Just wait an extra 1 minutes to be sure..."
+          echo "zksync ports are up! Just wait extra 3 minutes to be sure..."
           docker compose logs -f &
-          sleep 60
+          sleep 180
           kill %1
           yarn test
         env:
