@@ -2,7 +2,11 @@ import { expect } from "chai";
 import { Contract, Provider, Wallet, utils } from "zksync-ethers";
 import * as ethers from "ethers";
 import { setupEnv } from "./helpers";
-import { deployContract, getProvider, getRandomWallet } from "../../deploy/utils";
+import {
+  deployContract,
+  getProvider,
+  getRandomWallet,
+} from "../../deploy/utils";
 
 describe("BasePaymaster", function () {
   let paymaster: Contract;
