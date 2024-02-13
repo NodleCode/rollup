@@ -29,13 +29,10 @@ export const setupEnv = async (
     value: ethers.parseEther("1"),
   });
 
-  const userWallet = getWallet();
-
   return {
     paymaster,
     adminWallet,
     withdrawerWallet,
     sponsorWallet,
-    userWallet,
   };
 };

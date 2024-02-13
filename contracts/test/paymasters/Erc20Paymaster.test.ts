@@ -6,6 +6,7 @@ import {
   deployContract,
   getProvider,
   getWallet,
+  getRandomWallet,
 } from "../../deploy/utils";
 
 /**
@@ -136,7 +137,7 @@ describe("Erc20Paymaster", function () {
   });
 
   it("Non Admin cannot grant or revoke roles", async () => {
-    const newOracleWallet = getWallet();
+    const newOracleWallet = getRandomWallet();
     await expect(
       paymaster
         .connect(oracleWallet)
@@ -160,7 +161,7 @@ describe("Erc20Paymaster", function () {
   });
 
   it("Random user can mint NFT using paymaster", async () => {
-    const userWallet = getWallet();
+    const userWallet = getRandomWallet();
     expect(await provider.getBalance(userWallet.address)).to.equal(0n);
 
     const gasLimit = 400000n;
@@ -218,7 +219,7 @@ describe("Erc20Paymaster", function () {
   });
 
   it("User cannot use paymaster with insufficient allowance", async () => {
-    const userWallet = getWallet();
+    const userWallet = getRandomWallet();
     const gasLimit = 400000n;
     const gasPrice = await provider.getGasPrice();
     const requiredEth = gasLimit * gasPrice;
@@ -265,7 +266,7 @@ describe("Erc20Paymaster", function () {
   });
 
   it("User cannot use paymaster with insufficient balance", async () => {
-    const userWallet = getWallet();
+    const userWallet = getRandomWallet();
     const gasLimit = 400000n;
     const gasPrice = await provider.getGasPrice();
     const requiredEth = gasLimit * gasPrice;
@@ -310,7 +311,7 @@ describe("Erc20Paymaster", function () {
   });
 
   it("Transaction fails if fee is too high", async () => {
-    const userWallet = getWallet();
+    const userWallet = getRandomWallet();
     const highGasLimit =
       (await provider.getBlock("latest").then((block) => block.gasLimit)) / 2n;
     const largestPossibleNodlBalance =

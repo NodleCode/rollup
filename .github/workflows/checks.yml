@@ -15,20 +15,27 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: ./.devcontainer/install-tools.sh
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          ./.devcontainer/install-tools.sh
+          yarn
         env:
           SKIP_FOUNDRY: 1
-      - run: yarn
-      - run: yarn fmt:check
-      - run: yarn lint
-
-  tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: ./.devcontainer/install-tools.sh
-        env:
-          SKIP_FOUNDRY: 1
-      - run: yarn
-      - run: yarn test
+      - name: Lint
+        run: |
+          yarn fmt
+          yarn lint
+      - name: Start zksync service
+        run: |
+          docker compose up zksync
+      - name: Wait for zksync service to be ready
+        run: |
+          echo "Waiting for zksync to be up..."
+          while [ -z "$(docker compose ps --status running zksync --quiet)" ]; do
+            echo "zksync is not yet running, waiting..."
+            sleep 10
+          done
+      - name: Run tests
+        run: yarn test

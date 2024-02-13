@@ -5,6 +5,7 @@ import { setupEnv } from "./helpers";
 import {
   LOCAL_RICH_WALLETS,
   deployContract,
+  getRandomWallet,
   getWallet,
 } from "../../deploy/utils";
 
@@ -20,7 +21,6 @@ describe("WhitelistPaymaster", function () {
   let userWallet: Wallet;
 
   before(async function () {
-    adminWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
     whitelistAdminWallet = getWallet(LOCAL_RICH_WALLETS[3].privateKey);
     flag = await deployContract("MockFlag", [], {
       wallet: adminWallet,
@@ -33,11 +33,12 @@ describe("WhitelistPaymaster", function () {
       whitelistAdminWallet.address,
       [await flag.getAddress()],
     ]);
+    adminWallet = result.adminWallet;
     paymaster = result.paymaster;
-    // adminWallet = result.adminWallet;
     withdrawerWallet = result.withdrawerWallet;
     sponsorWallet = result.sponsorWallet;
-    userWallet = result.userWallet;
+
+    userWallet = getRandomWallet();
 
     nodl = await deployContract(
       "NODL",

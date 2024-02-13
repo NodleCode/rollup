@@ -25,15 +25,16 @@ export const getEthProvider = () => {
 };
 
 export const getWallet = (privateKey?: string) => {
-  if (!privateKey) {
-    const randomWallet = Wallet.createRandom();
-    return new Wallet(randomWallet.privateKey, getProvider(), getEthProvider());
-  }
   return new Wallet(
     privateKey ?? process.env.WALLET_PRIVATE_KEY!,
     getProvider(),
     getEthProvider(),
   );
+};
+
+export const getRandomWallet = (privateKey?: string) => {
+  const randomWallet = Wallet.createRandom();
+  return new Wallet(randomWallet.privateKey, getProvider(), getEthProvider());
 };
 
 export const getGovernance = () => {

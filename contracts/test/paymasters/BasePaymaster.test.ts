@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { Contract, Provider, Wallet, utils } from "zksync-ethers";
 import * as ethers from "ethers";
 import { setupEnv } from "./helpers";
-import { deployContract, getProvider } from "../../deploy/utils";
+import { deployContract, getProvider, getRandomWallet } from "../../deploy/utils";
 
 describe("BasePaymaster", function () {
   let paymaster: Contract;
@@ -22,8 +22,8 @@ describe("BasePaymaster", function () {
     adminWallet = result.adminWallet;
     withdrawerWallet = result.withdrawerWallet;
     sponsorWallet = result.sponsorWallet;
-    userWallet = result.userWallet;
 
+    userWallet = getRandomWallet();
     provider = getProvider();
 
     // using the admin or sponsor wallet to deploy seem to have us run into
