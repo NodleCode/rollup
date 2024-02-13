@@ -116,8 +116,8 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         external
         payable
         override
-        // solhint-disable-next-line no-empty-blocks
         onlyBootloader
+    // solhint-disable-next-line no-empty-blocks
     {
         // Refunds are not supported yet.
     }
