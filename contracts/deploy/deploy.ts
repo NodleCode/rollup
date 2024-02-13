@@ -13,6 +13,7 @@ export default async function () {
   const nftAddress = await nft.getAddress();
   await deployContract("WhitelistPaymaster", [
     getGovernance(),
+    getGovernance(),
     getWhitelistAdmin(),
     [nftAddress],
   ]);

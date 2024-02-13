@@ -23,7 +23,7 @@ describe("WhitelistPaymaster", function () {
   before(async function () {
     whitelistAdminWallet = getWallet(LOCAL_RICH_WALLETS[3].privateKey);
     flag = await deployContract("MockFlag", [], {
-      wallet: adminWallet,
+      wallet: whitelistAdminWallet,
       silent: true,
       skipChecks: true,
     });
@@ -48,10 +48,9 @@ describe("WhitelistPaymaster", function () {
     await nodl.waitForDeployment();
 
     // whitelist user
-    const whitelistedRole = await paymaster.WHITELISTED_USER_ROLE();
     const grantTx = await paymaster
-      .connect(adminWallet)
-      .grantRole(whitelistedRole, userWallet.address);
+      .connect(whitelistAdminWallet)
+      .addWhitelistedUsers([userWallet.address]);
     await grantTx.wait();
   });
 

@@ -66,32 +66,27 @@ For the sake of making our life easier, let's define a few environment variables
 ##### Add a user to the Paymaster contract
 The Paymaster is used to allow users not to pay for their transactions when interacting with the `ContentSignNFT` contract. To prevent abuse, users must be whitelisted.
 
-First, fetch the whitelist role contant, which is used to track whitelisted users.
-```sh
-export ROLE_WHITELIST=`cast call $ADDR_PAYMASTER "WHITELISTED_USER_ROLE()(bytes32)"`
-```
-
 Let's check if the user is already whitelisted:
 ```sh
-$ cast call $ADDR_PAYMASTER "hasRole(bytes32,address)(bool)" $ROLE_WHITELIST $ADDR_USER
+$ cast call $ADDR_PAYMASTER "isWhitelistedUser(address)(bool)" $ADDR_USER
 false
 ```
 
 As expected, the user is not whitelisted yet. Let's whitelist him:
 ```sh
-cast send --private-key $PK_WHITELIST $ADDR_PAYMASTER "grantRole(bytes32,address)" $ROLE_WHITELIST $ADDR_USER
+cast send --private-key $PK_WHITELIST $ADDR_PAYMASTER "addWhitelistedUsers(address[])" "[${ADDR_USER}]"
 ```
 
 And let's check the whitelist status of the user:
 ```sh
-$ cast call $ADDR_PAYMASTER "hasRole(bytes32,address)(bool)" $ROLE_WHITELIST $ADDR_USER
+$ cast call $ADDR_PAYMASTER "isWhitelistedUser(address)(bool)" $ADDR_USER
 true
 ```
 
 It worked!
 
 ##### Add a user to the NFT contract
-Whitelisting a user on the paymaster is not enough. They also need to be allowed to mint NFTs. The flow is very similar with some slight differences.
+Whitelisting a user on the paymaster is not enough. They also need to be allowed to mint NFTs.
 
 First, fetch the minter role contant, which is used to track users allowed to mint tokens.
 ```sh

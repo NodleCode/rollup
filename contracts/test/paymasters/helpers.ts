@@ -16,14 +16,11 @@ export const setupEnv = async (
 
   const paymaster = await deployContract(
     paymasterContract,
-    [adminWallet.address, ...additionalArgs],
+    [adminWallet.address, withdrawerWallet.address, ...additionalArgs],
     { wallet: adminWallet, silent: true, skipChecks: true },
   );
   await paymaster.waitForDeployment();
 
-  await paymaster
-    .connect(adminWallet)
-    .grantRole(await paymaster.WITHDRAWER_ROLE(), withdrawerWallet.address);
   await sponsorWallet.sendTransaction({
     to: await paymaster.getAddress(),
     value: ethers.parseEther("1"),
