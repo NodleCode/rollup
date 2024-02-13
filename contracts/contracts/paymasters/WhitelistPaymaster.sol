@@ -11,8 +11,10 @@ contract WhitelistPaymaster is BasePaymaster {
     // role to whitelisted users.
     // This allows us to avoid reinventing the wheel and to piggy back on existing code and methods
     // that are already audited and tested.
-    bytes32 public constant WHITELISTED_USER_ROLE = keccak256("WHITELISTED_USER_ROLE");
-    bytes32 public constant WHITELIST_ADMIN_ROLE = keccak256("WHITELIST_ADMIN_ROLE");
+    bytes32 public constant WHITELISTED_USER_ROLE =
+        keccak256("WHITELISTED_USER_ROLE");
+    bytes32 public constant WHITELIST_ADMIN_ROLE =
+        keccak256("WHITELIST_ADMIN_ROLE");
 
     mapping(address => bool) public isWhitelistedContract;
 
@@ -46,9 +48,9 @@ contract WhitelistPaymaster is BasePaymaster {
         return hasRole(WHITELISTED_USER_ROLE, user);
     }
 
-    function _setContractWhitelist(address[] memory whitelistedContracts)
-        internal
-    {
+    function _setContractWhitelist(
+        address[] memory whitelistedContracts
+    ) internal {
         for (uint256 i = 0; i < whitelistedContracts.length; i++) {
             isWhitelistedContract[whitelistedContracts[i]] = true;
         }
