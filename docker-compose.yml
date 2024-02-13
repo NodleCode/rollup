@@ -12,12 +12,14 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
+    restart: unless-stopped
   ipfs:
     image: ipfs/kubo:v0.14.0
     ports:
       - '5001:5001'
     volumes:
       - ipfs:/data/ipfs
+    restart: unless-stopped
   
   postgres-zksync:
     image: "postgres:14"
@@ -30,6 +32,7 @@ services:
       - postgres-zksync:/var/lib/postgresql/data
     environment:
       - POSTGRES_HOST_AUTH_METHOD=trust
+    restart: unless-stopped
   postgres-graph:
     image: postgres:14
     healthcheck:
@@ -48,6 +51,7 @@ services:
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
     volumes:
       - postgres-graph:/var/lib/postgresql/data
+    restart: unless-stopped
   postgres-explorer:
     image: "postgres:14"
     volumes:
@@ -61,6 +65,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=block-explorer
+    restart: unless-stopped
   
   explorer-app:
     image: "matterlabs/block-explorer-app"
@@ -72,6 +77,7 @@ services:
         restart: true
     volumes:
       - ./.maintain/explorer.config.js:/usr/src/app/packages/app/dist/config.js
+    restart: unless-stopped
   explorer-worker:
     image: "matterlabs/block-explorer-worker"
     environment:
@@ -89,6 +95,7 @@ services:
       zksync:
         condition: service_healthy
         restart: true
+    restart: unless-stopped
   explorer-api:
     image: "matterlabs/block-explorer-api"
     environment:
@@ -103,6 +110,7 @@ services:
       explorer-worker:
         condition: service_started
         restart: true
+    restart: unless-stopped
   explorer-data-fetcher:
     image: "matterlabs/block-explorer-data-fetcher"
     environment:
@@ -116,6 +124,7 @@ services:
       zksync:
         condition: service_healthy
         restart: true
+    restart: unless-stopped
 
   zksync:
     stdin_open: true
@@ -144,6 +153,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 30
+    restart: unless-stopped
   graph-node:
     image: graphprotocol/graph-node
     ports:
@@ -173,19 +183,21 @@ services:
       ipfs: 'ipfs:5001'
       ethereum: 'zksync-era:http://zksync:3050'
       GRAPH_LOG: info
+    restart: unless-stopped
   portal:
     build:
       context: .
       dockerfile: ./.maintain/Dockerfile.dapp-portal
     ports:
       - "3000:3000"
+    restart: unless-stopped
 
   deploy-contracts:
     image: node
     volumes:
-      - ./contracts:/app
+      - ./:/app
     working_dir: /app
-    command: ["bash", "-c", "yarn && yarn compile && yarn deploy --network dockerComposeNode"]
+    command: ["bash", "-c", "cd ./contracts && yarn && yarn compile && yarn deploy --network dockerComposeNode"]
     depends_on:
       geth:
         condition: service_healthy
@@ -200,6 +212,7 @@ services:
       - WALLET_PRIVATE_KEY=0xd293c684d884d56f8d6abd64fc76757d3664904e309a0645baf8522ab6366d9e
       - GOVERNANCE_ADDRESS=0x36615Cf349d7F6344891B1e7CA7C72883F5dc049
       - WHITELIST_ADMIN_ADDRESS=0xa61464658AfeAf65CccaaFD3a512b69A83B77618
+    restart: no
   deploy-graph:
     image: node
     volumes:
@@ -210,6 +223,7 @@ services:
       deploy-contracts:
         condition: service_completed_successfully
         restart: true
+    restart: no
 
 volumes:
   ipfs:
