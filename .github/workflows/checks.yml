@@ -29,7 +29,7 @@ jobs:
           yarn lint
       - name: Start zksync service
         run: |
-          docker compose up zksync -d
+          docker compose up zksync -d &
       - name: Wait for zksync service to be ready
         run: |
           echo "Waiting for zksync to be up..."
@@ -37,7 +37,7 @@ jobs:
             echo "zksync is not yet running, waiting..."
             sleep 10
           done
-          echo "zksync ports are up! Just wait extra 3 minutes to be sure..."
-          docker compose logs --until 3m
+          echo "zksync ports are up! Just wait an extra 1 minutes to be sure..."
+          docker compose logs --until 1m
       - name: Run tests
         run: yarn test
