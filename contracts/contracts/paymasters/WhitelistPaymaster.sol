@@ -31,13 +31,13 @@ contract WhitelistPaymaster is BasePaymaster {
     }
 
     function addWhitelistedContracts(
-        address[] memory whitelistedContracts
+        address[] calldata whitelistedContracts
     ) external onlyRole(WHITELIST_ADMIN_ROLE) {
         _setContractWhitelist(whitelistedContracts);
     }
 
     function removeWhitelistedContracts(
-        address[] memory whitelistedContracts
+        address[] calldata whitelistedContracts
     ) external onlyRole(WHITELIST_ADMIN_ROLE) {
         for (uint256 i = 0; i < whitelistedContracts.length; i++) {
             isWhitelistedContract[whitelistedContracts[i]] = false;
@@ -45,7 +45,7 @@ contract WhitelistPaymaster is BasePaymaster {
     }
 
     function addWhitelistedUsers(
-        address[] memory users
+        address[] calldata users
     ) external onlyRole(WHITELIST_ADMIN_ROLE) {
         for (uint256 i = 0; i < users.length; i++) {
             isWhitelistedUser[users[i]] = true;
@@ -53,7 +53,7 @@ contract WhitelistPaymaster is BasePaymaster {
     }
 
     function removeWhitelistedUsers(
-        address[] memory users
+        address[] calldata users
     ) external onlyRole(WHITELIST_ADMIN_ROLE) {
         for (uint256 i = 0; i < users.length; i++) {
             isWhitelistedUser[users[i]] = false;
