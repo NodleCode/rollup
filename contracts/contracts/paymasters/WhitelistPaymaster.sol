@@ -11,9 +11,10 @@ contract WhitelistPaymaster is BasePaymaster {
     // role to whitelisted users.
     // This allows us to avoid reinventing the wheel and to piggy back on existing code and methods
     // that are already audited and tested.
-    bytes32 public constant WHITELISTED_USER_ROLE = keccak256("WHITELISTED_USER_ROLE");
-    bytes32 public constant WHITELIST_ADMIN_ROLE = keccak256("WHITELIST_ADMIN_ROLE");
+    bytes32 public constant WHITELIST_ADMIN_ROLE =
+        keccak256("WHITELIST_ADMIN_ROLE");
 
+    mapping(address => bool) public isWhitelistedUser;
     mapping(address => bool) public isWhitelistedContract;
 
     error UserIsNotWhitelisted();
@@ -21,34 +22,47 @@ contract WhitelistPaymaster is BasePaymaster {
 
     constructor(
         address admin,
+        address withdrawer,
         address whitelistAdmin,
         address[] memory whitelistedContracts
-    ) BasePaymaster(admin, admin) {
+    ) BasePaymaster(admin, withdrawer) {
         _grantRole(WHITELIST_ADMIN_ROLE, whitelistAdmin);
         _setContractWhitelist(whitelistedContracts);
     }
 
     function addWhitelistedContracts(
-        address[] memory whitelistedContracts
+        address[] calldata whitelistedContracts
     ) external onlyRole(WHITELIST_ADMIN_ROLE) {
         _setContractWhitelist(whitelistedContracts);
     }
 
     function removeWhitelistedContracts(
-        address[] memory whitelistedContracts
+        address[] calldata whitelistedContracts
     ) external onlyRole(WHITELIST_ADMIN_ROLE) {
         for (uint256 i = 0; i < whitelistedContracts.length; i++) {
             isWhitelistedContract[whitelistedContracts[i]] = false;
         }
     }
 
-    function isWhitelistedUser(address user) public view returns (bool) {
-        return hasRole(WHITELISTED_USER_ROLE, user);
+    function addWhitelistedUsers(
+        address[] calldata users
+    ) external onlyRole(WHITELIST_ADMIN_ROLE) {
+        for (uint256 i = 0; i < users.length; i++) {
+            isWhitelistedUser[users[i]] = true;
+        }
     }
 
-    function _setContractWhitelist(address[] memory whitelistedContracts)
-        internal
-    {
+    function removeWhitelistedUsers(
+        address[] calldata users
+    ) external onlyRole(WHITELIST_ADMIN_ROLE) {
+        for (uint256 i = 0; i < users.length; i++) {
+            isWhitelistedUser[users[i]] = false;
+        }
+    }
+
+    function _setContractWhitelist(
+        address[] memory whitelistedContracts
+    ) internal {
         for (uint256 i = 0; i < whitelistedContracts.length; i++) {
             isWhitelistedContract[whitelistedContracts[i]] = true;
         }
@@ -63,7 +77,7 @@ contract WhitelistPaymaster is BasePaymaster {
             revert DestIsNotWhitelisted();
         }
 
-        if (!isWhitelistedUser(from)) {
+        if (!isWhitelistedUser[from]) {
             revert UserIsNotWhitelisted();
         }
     }

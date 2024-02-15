@@ -39,20 +39,18 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         external
         payable
         onlyBootloader
-        returns (bytes4 magic, bytes memory context)
+        returns (bytes4 magic, bytes memory /* context */)
     {
         // By default we consider the transaction as accepted.
         magic = PAYMASTER_VALIDATION_SUCCESS_MAGIC;
-        // By default no context will be returned unless the paymaster flow requires a post transaction call.
-        context = new bytes(0);
 
         if (transaction.paymasterInput.length < 4) {
-            revert InvalidPaymasterInput("The standard paymaster input must be at least 4 bytes long");
+            revert InvalidPaymasterInput(
+                "The standard paymaster input must be at least 4 bytes long"
+            );
         }
 
-        bytes4 paymasterInputSelector = bytes4(
-            transaction.paymasterInput[0:4]
-        );
+        bytes4 paymasterInputSelector = bytes4(transaction.paymasterInput[0:4]);
 
         // Note, that while the minimal amount of ETH needed is tx.gasPrice * tx.gasLimit,
         // neither paymaster nor account are allowed to access this context variable.
@@ -65,16 +63,17 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         } else if (
             paymasterInputSelector == IPaymasterFlow.approvalBased.selector
         ) {
-            (address token, uint256 amount, bytes memory data) = abi.decode(
-                transaction.paymasterInput[4:],
-                (address, uint256, bytes)
-            );
+            (address token, uint256 minimalAllowance, bytes memory data) = abi
+                .decode(
+                    transaction.paymasterInput[4:],
+                    (address, uint256, bytes)
+                );
 
             _validateAndPayApprovalBasedFlow(
                 userAddress,
                 destAddress,
                 token,
-                amount,
+                minimalAllowance,
                 data,
                 requiredETH
             );
@@ -113,12 +112,20 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         bytes32,
         ExecutionResult txResult,
         uint256 maxRefundedGas
-        // solhint-disable-next-line no-empty-blocks
-    ) external payable override onlyBootloader {
+    )
+        external
+        payable
+        override
+        onlyBootloader
+    // solhint-disable-next-line no-empty-blocks
+    {
         // Refunds are not supported yet.
     }
 
-    function withdraw(address to, uint256 amount) external onlyRole(WITHDRAWER_ROLE) {
+    function withdraw(
+        address to,
+        uint256 amount
+    ) external onlyRole(WITHDRAWER_ROLE) {
         (bool success, ) = payable(to).call{value: amount}("");
         if (!success) revert FailedToWithdraw();
     }
