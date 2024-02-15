@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  zk-setup:
+    build:
+      context: .
+      dockerfile: /docker/zk-setup/Dockerfile
+    volumes:
+      - /envs:/envs
