@@ -4,6 +4,7 @@ services:
   zk-setup:
     build:
       context: .
-      dockerfile: /docker/zk-setup/Dockerfile
+      dockerfile: ./docker/zk-setup/Dockerfile
     volumes:
-      - /envs:/envs
+      - ./envs:/envs
+      - ./zk-setup.sh:/zk-setup.sh
