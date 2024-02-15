@@ -45,7 +45,12 @@ git clone https://github.com/matter-labs/zksync-era
 
 # Copy hyperchain-custom.env file
 echo "Copying hyperchain-custom.env file..."
-cp envs/hyperchain-custom.env zksync-era/envs/
+cp envs/hyperchain-custom.env zksync-era/etc/env/.init.env
+cp envs/hyperchain-custom.env zksync-era/etc/env/
+
+#create .current file
+echo "Creating .current file..."
+touch zksync-era/etc/env/.current
 
 cd zksync-era
 
