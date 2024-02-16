@@ -6,11 +6,6 @@ import {BasePaymaster} from "./BasePaymaster.sol";
 
 /// @notice a paymaster that allow whitelisted users to do free txs to restricted contracts
 contract WhitelistPaymaster is BasePaymaster {
-    // We could build our own whitelist feature, however we already have access control built in
-    // via BasePaymaster and OZ's AccessControl contract. So we can just use that and grant a dedicated
-    // role to whitelisted users.
-    // This allows us to avoid reinventing the wheel and to piggy back on existing code and methods
-    // that are already audited and tested.
     bytes32 public constant WHITELIST_ADMIN_ROLE =
         keccak256("WHITELIST_ADMIN_ROLE");
 
