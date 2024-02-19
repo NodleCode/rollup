@@ -148,6 +148,8 @@ services:
     environment:
       - DATABASE_URL=postgres://postgres@postgres-zksync/zksync_local
       - ETH_CLIENT_WEB3_URL=http://geth:8545
+    env_file:
+      - ./envs/hyperchain-custom.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3071/health"]
       interval: 30s

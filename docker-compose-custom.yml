@@ -1,0 +1,44 @@
+version: '3.2'
+networks:
+  zksync-era_zkstack:
+    external: true
+volumes:
+  artifacts:
+services:
+  zkstack-core:
+    container_name: zkstack-core
+    networks:
+      - zksync-era_zkstack
+    image: 5cb6c78916ad4f34893c26eed25f1e5b500eafabbe6d0eb3a4de0266d97ec149
+    command: ["--components", "tree,eth,state_keeper,housekeeper,proof_data_handler"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3071/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    env_file:
+      - ./envs/testing-dos.env
+    environment:
+      ZKSYNC_HOME: /
+    ports: # assumes default ports in .env
+      #- "3312:3312" # prometheus metrics # we need a separate metrics port for each component
+      - "3320:3320" # proof_data_handler api
+    volumes:
+      - artifacts:/test
+
+  zkstack-apis:
+    networks:
+      - zksync-era_zkstack
+    image: 5cb6c78916ad4f34893c26eed25f1e5b500eafabbe6d0eb3a4de0266d97ec149
+    command: ["--components", "http_api,ws_api"]
+    env_file:
+      - ./envs/testing-dos.env
+    environment:
+      ZKSYNC_HOME: /
+      FRI_PROVER_GATEWAY_API_URL: http://zkstack-core:3320
+    ports: # assumes default ports in .env
+      - "3071:3071" # health
+      - "3312:3312" # prometheus metrics # we need a separate metrics port for each component
+      - "3050:3050" # http_api
+      - "3051:3051" # ws_api
+
