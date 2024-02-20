@@ -17,7 +17,7 @@ yarn global add zksync-cli
 yarn global add @graphprotocol/graph-cli
 
 if [ -z "$SKIP_FOUNDRY" ]; then
-    curl -L https://foundry.paradigm.xyz | sh
+    curl -L https://foundry.paradigm.xyz | bash
     ~/.foundry/bin/foundryup
 fi
 
