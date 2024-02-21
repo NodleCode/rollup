@@ -61,7 +61,7 @@ For the sake of making our life easier, let's define a few environment variables
 - `ETH_RPC_URL`: URL of the your rollup node, typically `http://localhost:3050`. This is automatically preset in the devcontainer too!
 - `ADDR_NFT` and `ADDR_PAYMASTER`: addresses of the deployed `ContentSignNFT` and `WhitelistPaymaster` contracts. If you use the docker compose setup, this can fetched via `docker compose logs -f deploy-contracts`.
 - `ADDR_USER` the address of the user you would like to whitelist.
-- `PK_WHITELIST` the address of the whitelist admin configured on the paymaster and nft contracts. On the docker compose setup this should be `0xac1e735be8536c6534bb4f17f06f6afc73b2b5ba84ac2cfb12f7461b20c0bbe3`.
+- `PK_WHITELIST` the private key of the whitelist admin configured on the paymaster and nft contracts. On the docker compose setup this should be `0xd293c684d884d56f8d6abd64fc76757d3664904e309a0645baf8522ab6366d9e`.
 
 ##### Add a user to the `WhitelistPaymaster` contract
 The Paymaster is used to allow users not to pay for their transactions when interacting with the `ContentSignNFT` contract. To prevent abuse, users must be whitelisted. Additionally, the `ContentSignNFT` contract also expects depends on the user being whitelisted in the `WhitelistPaymaster` before allowing them to mint tokens.
