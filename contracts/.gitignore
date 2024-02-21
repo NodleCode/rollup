@@ -114,4 +114,4 @@ dist
 .tern-port
 
 #custom
-.nft-contract-address
+.contracts.env
