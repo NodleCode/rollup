@@ -20,9 +20,9 @@ export default async function () {
   const contractTx = await paymaster
     .connect(getWallet())
     .addWhitelistedContracts([await nft.getAddress()]);
-  const contractHash = await contractTx.wait().then((tx) => tx.transactionHash);
+  await contractTx.wait();
 
-  console.log(`Whitelist configured at ${await contractHash}`);
+  console.log(`Whitelist configured at ${await contractTx.hash}`);
 
   // unused for now
   // const initialFeePrice = 1; // Means 1 nodl per 1 wei
