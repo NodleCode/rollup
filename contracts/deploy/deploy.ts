@@ -27,6 +27,9 @@ export default async function () {
     initialFeePrice,
   ]);
 
+  // used by some of microservices
+  const multicallContract = await deployContract("MulticallBatcher");
+
   // used for docker compose setup so we can deploy a The Graph indexer on the NFT contract
   execSync(`echo "${nftAddress}" > .nft-contract-address`);
 }
