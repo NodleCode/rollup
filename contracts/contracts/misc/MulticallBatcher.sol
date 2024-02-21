@@ -6,5 +6,5 @@ import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 
 /// @notice A simple contract to re-expose Multicall and make it easy to deploy.
 contract MulticallBatcher is Multicall {
-
+    constructor() Multicall() {}
 }

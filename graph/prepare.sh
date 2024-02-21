@@ -1,17 +1,18 @@
 #!/bin/bash
 
-# Get the address from .nft-contract-address file
-address=$(cat ../contracts/.nft-contract-address)
+set -o allexport
+source ../contracts/.contracts.env
+set +o allexport
 
-if [ -z "$address" ]
+if [ -z "$NFT_ADDRESS" ]
 then
       echo "Factory address is empty. Please make sure you have deployed the contract"
       exit 1
 fi
 
 # Replace the old address in the generated/*.yaml files
-echo "Adding address $address to generated/*.yaml files..."
-sed -i "s/address: \".*\"/address: \"$address\"/g" generated/content-sign.subgraph.yaml
+echo "Adding address $NFT_ADDRESS to generated/*.yaml files..."
+sed -i "s/address: \".*\"/address: \"$NFT_ADDRESS\"/g" generated/content-sign.subgraph.yaml
 
 # run the build command and deploy command
 yarn build

@@ -30,6 +30,11 @@ export default async function () {
   // used by some of microservices
   const multicallContract = await deployContract("MulticallBatcher");
 
-  // used for docker compose setup so we can deploy a The Graph indexer on the NFT contract
-  execSync(`echo "${nftAddress}" > .nft-contract-address`);
+  // create env var dump with all contract addresses
+  const env = `\
+NODL_ADDRESS=${nodlAddress}
+NFT_ADDRESS=${nftAddress}
+PAYMASTER_ADDRESS=${await paymasterContract.getAddress()}
+MULTICALL_ADDRESS=${await multicallContract.getAddress()}`;
+  execSync(`echo "${env}" > .contracts.env`);
 }
