@@ -23,6 +23,10 @@ services:
       - zksync-era_zkstack
     image: douglasacost/zk-nodle-server:latest
     command: ["--components", "tree,eth,state_keeper,housekeeper,proof_data_handler"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3071/health"]
       interval: 10s
@@ -46,6 +50,10 @@ services:
     command: ["--components", "http_api,ws_api"]
     env_file:
       - ./envs/hyperchain-custom.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
     environment:
       ZKSYNC_HOME: /
       FRI_PROVER_GATEWAY_API_URL: http://zkstack-core:3320
