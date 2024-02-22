@@ -4,12 +4,24 @@ networks:
     external: true
 volumes:
   artifacts:
+  db:
 services:
+  postgres:
+    image: postgres:14
+    container_name: postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_PASSWORD: notsecurepassword
+    volumes:
+      - db:/var/lib/postgresql/data
+    networks:
+      - zksync-era_zkstack
   zkstack-core:
     container_name: zkstack-core
     networks:
       - zksync-era_zkstack
-    image: 5cb6c78916ad4f34893c26eed25f1e5b500eafabbe6d0eb3a4de0266d97ec149
+    image: douglasacost/zk-nodle-server:latest
     command: ["--components", "tree,eth,state_keeper,housekeeper,proof_data_handler"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3071/health"]
@@ -17,25 +29,27 @@ services:
       timeout: 5s
       retries: 10
     env_file:
-      - ./envs/testing-dos.env
+      - ./envs/hyperchain-custom.env
     environment:
       ZKSYNC_HOME: /
+      DATABASE_URL: postgres://postgres:notsecurepassword@postgres/zksync_local
     ports: # assumes default ports in .env
       #- "3312:3312" # prometheus metrics # we need a separate metrics port for each component
       - "3320:3320" # proof_data_handler api
     volumes:
-      - artifacts:/test
+      - artifacts:/zk-sync
 
   zkstack-apis:
     networks:
       - zksync-era_zkstack
-    image: 5cb6c78916ad4f34893c26eed25f1e5b500eafabbe6d0eb3a4de0266d97ec149
+    image: douglasacost/zk-nodle-server:latest
     command: ["--components", "http_api,ws_api"]
     env_file:
-      - ./envs/testing-dos.env
+      - ./envs/hyperchain-custom.env
     environment:
       ZKSYNC_HOME: /
       FRI_PROVER_GATEWAY_API_URL: http://zkstack-core:3320
+      DATABASE_URL: postgres://postgres:notsecurepassword@postgres/zksync_local
     ports: # assumes default ports in .env
       - "3071:3071" # health
       - "3312:3312" # prometheus metrics # we need a separate metrics port for each component
