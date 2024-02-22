@@ -4,27 +4,33 @@ pragma solidity ^0.8.20;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+
+import {WhitelistPaymaster} from "../paymasters/WhitelistPaymaster.sol";
 
 /// @notice a simple NFT contract for contentsign data where each nft is mapped to a one-time
 /// configurable URL
-contract ContentSignNFT is ERC721, ERC721URIStorage, AccessControl {
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+contract ContentSignNFT is ERC721, ERC721URIStorage {
     uint256 public nextTokenId;
+    WhitelistPaymaster public whitelistPaymaster;
+
+    error UserIsNotWhitelisted();
+
+    modifier onlyWhitelised() {
+        if (!whitelistPaymaster.isWhitelistedUser(msg.sender)) {
+            revert UserIsNotWhitelisted();
+        }
+        _;
+    }
 
     constructor(
         string memory name,
         string memory symbol,
-        address admin
+        address payable whitelistAddress
     ) ERC721(name, symbol) {
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(MINTER_ROLE, admin);
+        whitelistPaymaster = WhitelistPaymaster(whitelistAddress);
     }
 
-    function safeMint(
-        address to,
-        string memory uri
-    ) public onlyRole(MINTER_ROLE) {
+    function safeMint(address to, string memory uri) public onlyWhitelised {
         uint256 tokenId = nextTokenId++;
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
@@ -38,12 +44,7 @@ contract ContentSignNFT is ERC721, ERC721URIStorage, AccessControl {
 
     function supportsInterface(
         bytes4 interfaceId
-    )
-        public
-        view
-        override(ERC721, ERC721URIStorage, AccessControl)
-        returns (bool)
-    {
+    ) public view override(ERC721, ERC721URIStorage) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 }

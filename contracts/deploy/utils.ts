@@ -43,12 +43,6 @@ export const getGovernance = () => {
   return process.env.GOVERNANCE_ADDRESS;
 };
 
-export const getWhitelistAdmin = () => {
-  if (!process.env.WHITELIST_ADMIN_ADDRESS)
-    throw "⛔️ Whitelist admin address wasn't found in .env file!";
-  return process.env.WHITELIST_ADMIN_ADDRESS;
-};
-
 export const verifyEnoughBalance = async (wallet: Wallet, amount: bigint) => {
   // Check if the wallet has enough balance
   const balance = await wallet.getBalance();

@@ -1,40 +1,44 @@
-import { deployContract, getGovernance, getWhitelistAdmin } from "./utils";
+import { deployContract, getGovernance, getWallet } from "./utils";
 import { execSync } from "child_process";
 
 export default async function () {
   const nodl = await deployContract("NODL", [getGovernance(), getGovernance()]);
-  const nodlAddress = await nodl.getAddress();
-
+  const paymaster = await deployContract("WhitelistPaymaster", [
+    getGovernance(),
+    getGovernance(),
+    getWallet().address,
+    [],
+  ]);
   const nft = await deployContract("ContentSignNFT", [
     "Click",
     "CLK",
-    getWhitelistAdmin(),
-  ]);
-  const nftAddress = await nft.getAddress();
-  await deployContract("WhitelistPaymaster", [
-    getGovernance(),
-    getGovernance(),
-    getWhitelistAdmin(),
-    [nftAddress],
+    await paymaster.getAddress(),
   ]);
 
-  const initialFeePrice = 1; // Means 1 nodl per 1 wei
-  const priceOracle = getWhitelistAdmin(); // For now we assume that the whitelist admin is the same as the price oracle for NODL paymaster
-  const paymasterContract = await deployContract("Erc20Paymaster", [
-    getGovernance(),
-    priceOracle,
-    nodlAddress,
-    initialFeePrice,
-  ]);
+  console.log("Configuring whitelist...");
 
-  // used by some of microservices
-  const multicallContract = await deployContract("MulticallBatcher");
+  const contractTx = await paymaster
+    .connect(getWallet())
+    .addWhitelistedContracts([await nft.getAddress()]);
+  await contractTx.wait();
+
+  console.log(`Whitelist configured at ${await contractTx.hash}`);
+
+  // unused for now
+  // const initialFeePrice = 1; // Means 1 nodl per 1 wei
+  // const priceOracle = getWallet(); // For now we assume that the whitelist admin is the same as the price oracle for NODL paymaster
+  // const paymasterContract = await deployContract("Erc20Paymaster", [
+  //   getGovernance(),
+  //   priceOracle,
+  //   nodlAddress,
+  //   initialFeePrice,
+  // ]);
 
   // create env var dump with all contract addresses
   const env = `\
-NODL_ADDRESS=${nodlAddress}
-NFT_ADDRESS=${nftAddress}
-PAYMASTER_ADDRESS=${await paymasterContract.getAddress()}
-MULTICALL_ADDRESS=${await multicallContract.getAddress()}`;
+NODL_ADDRESS=${await nodl.getAddress()}
+NFT_ADDRESS=${await nft.getAddress()}
+WHITELIST_PAYMASTER_ADDRESS=${await paymaster.getAddress()}`;
+
   execSync(`echo "${env}" > .contracts.env`);
 }
