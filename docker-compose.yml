@@ -8,7 +8,7 @@ services:
     volumes:
       - geth:/var/lib/geth/data
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:8545"]
+      test: [ "CMD", "wget", "--spider", "http://localhost:8545" ]
       interval: 2s
       timeout: 5s
       retries: 30
@@ -20,7 +20,7 @@ services:
     volumes:
       - ipfs:/data/ipfs
     restart: unless-stopped
-  
+
   postgres-zksync:
     image: "postgres:14"
     healthcheck:
@@ -66,7 +66,7 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=block-explorer
     restart: unless-stopped
-  
+
   explorer-app:
     image: "matterlabs/block-explorer-app"
     ports:
@@ -151,7 +151,7 @@ services:
     env_file:
       - ./envs/hyperchain-custom.env
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3071/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:3071/health" ]
       interval: 30s
       timeout: 5s
       retries: 30
@@ -199,7 +199,12 @@ services:
     volumes:
       - ./:/app
     working_dir: /app
-    command: ["bash", "-c", "cd ./contracts && yarn && yarn compile && yarn deploy --network dockerComposeNode"]
+    command:
+      [
+        "bash",
+        "-c",
+        "cd ./contracts && yarn && yarn compile && yarn deploy --network dockerComposeNode"
+      ]
     depends_on:
       geth:
         condition: service_healthy
@@ -213,14 +218,13 @@ services:
       # when they are just trying to run tests / deploy against this stack
       - WALLET_PRIVATE_KEY=0xd293c684d884d56f8d6abd64fc76757d3664904e309a0645baf8522ab6366d9e
       - GOVERNANCE_ADDRESS=0x36615Cf349d7F6344891B1e7CA7C72883F5dc049
-      - WHITELIST_ADMIN_ADDRESS=0xa61464658AfeAf65CccaaFD3a512b69A83B77618
     restart: no
   deploy-graph:
     image: node
     volumes:
       - ./:/app
     working_dir: /app/graph
-    command: ["bash", "-c", "yarn prepare"]
+    command: [ "bash", "-c", "yarn prepare" ]
     depends_on:
       deploy-contracts:
         condition: service_completed_successfully
