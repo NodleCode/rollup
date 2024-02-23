@@ -1,0 +1,8 @@
+FROM matterlabs/zk-environment:latest2.0-lightweight-nightly
+
+RUN git clone https://github.com/matter-labs/zksync-era /usr/src/zksync
+WORKDIR /usr/src/zksync
+
+RUN zk
+
+ENTRYPOINT [ "zk" ]
