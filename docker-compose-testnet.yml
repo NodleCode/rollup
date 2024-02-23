@@ -154,4 +154,5 @@ services:
       - ./envs/nodle-l2-testnet.env
     environment:
       DATABASE_URL: postgres://postgres:@postgres-zksync/zksync_local
-    command: [ "CMD-SHELL", "zk db setup" ]
+      DATABASE_PROVER_URL: postgres://postgres:@postgres-zksync/prover_local
+    command: [ "db", "setup" ]
