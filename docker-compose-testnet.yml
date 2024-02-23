@@ -1,9 +1,5 @@
 version: '3.2'
 
-networks:
-  zksync-era_zkstack:
-    external: true
-
 volumes:
   zksync-data:
   postgres-explorer:
@@ -13,8 +9,6 @@ volumes:
 services:
   postgres-explorer:
     image: "postgres:14"
-    networks:
-      - zksync-era_zkstack
     volumes:
       - postgres-explorer:/var/lib/postgresql/data
     healthcheck:
@@ -40,8 +34,6 @@ services:
     restart: unless-stopped
   explorer-worker:
     image: "matterlabs/block-explorer-worker"
-    networks:
-      - zksync-era_zkstack
     environment:
       - PORT=3001
       - LOG_LEVEL=verbose
@@ -60,8 +52,6 @@ services:
     restart: unless-stopped
   explorer-api:
     image: "matterlabs/block-explorer-api"
-    networks:
-      - zksync-era_zkstack
     environment:
       - PORT=3020
       - METRICS_PORT=3005
@@ -77,8 +67,6 @@ services:
     restart: unless-stopped
   explorer-data-fetcher:
     image: "matterlabs/block-explorer-data-fetcher"
-    networks:
-      - zksync-era_zkstack
     environment:
       - PORT=3040
       - LOG_LEVEL=verbose
@@ -100,13 +88,9 @@ services:
     environment:
       POSTGRES_PASSWORD: notsecurepassword
       POSTGRES_HOST_AUTH_METHOD: trust
-    networks:
-      - zksync-era_zkstack
 
   zkstack-core:
     container_name: zkstack-core
-    networks:
-      - zksync-era_zkstack
     image: douglasacost/zk-nodle-server
     command:
       [
@@ -116,6 +100,9 @@ services:
     depends_on:
       postgres-zksync:
         condition: service_healthy
+      zk-postgres-setup:
+        condition: service_completed_successfully
+    restart: always
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:3071/health" ]
       interval: 10s
@@ -133,14 +120,15 @@ services:
       - zksync-data:/zk-sync
 
   zkstack-apis:
-    networks:
-      - zksync-era_zkstack
     image: douglasacost/zk-nodle-server
     depends_on:
       zkstack-core:
         condition: service_healthy
       postgres-zksync:
         condition: service_healthy
+      zk-postgres-setup:
+        condition: service_completed_successfully
+    restart: always
     command: [ "--components", "http_api,ws_api" ]
     env_file:
       - ./envs/nodle-l2-testnet.env
@@ -153,10 +141,17 @@ services:
       - "3312:3312" # prometheus metrics # we need a separate metrics port for each component
       - "3050:3050" # http_api
       - "3051:3051" # ws_api
-  # zk-postgres-setup:
-  #    # (?) This is supposed to contain the command to setup the database, thus we do not need to download the zksync repo
-  #   image: matterlabs/zk-environment:latest2.0-lightweight-nightly
-  #   volumes:
-  #     - ${ZKSYNC_HOME}:/app
-  #   working_dir: /app
-  #   command: ["bash", "-c", "sleep 10 && export ZKSYNC_HOME=/app/ && cd /app && ./bin/zk db setup"]
+
+  zk-postgres-setup:
+    build:
+      context: .
+      dockerfile: ./.maintain/Dockerfile.zk-postgres-setup
+    depends_on:
+      postgres-zksync:
+        condition: service_healthy
+    restart: on-failure
+    env_file:
+      - ./envs/nodle-l2-testnet.env
+    environment:
+      DATABASE_URL: postgres://postgres:@postgres-zksync/zksync_local
+    command: [ "CMD-SHELL", "zk db setup" ]

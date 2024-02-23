@@ -1,0 +1,9 @@
+FROM matterlabs/zk-environment:latest2.0-lightweight-nightly
+
+RUN git clone https://github.com/matter-labs/zksync-era /zksync-era
+WORKDIR /zksync-era
+
+ENV ZKSYNC_HOME=/zksync-era
+ENV PATH=$ZKSYNC_HOME/bin:$PATH
+
+RUN zk
