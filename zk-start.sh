@@ -13,9 +13,6 @@ echo "hyperchain-custom.env" > $ZKSYNC_HOME/etc/env/.current
 
 cd $ZKSYNC_HOME
 
-export DOCKER_DEFAULT_PLATFORM=linux/amd64
-
-
 # Start zk tools
 echo "Starting zk tools..."
 zk init

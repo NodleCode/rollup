@@ -14,11 +14,13 @@ echo "Installation complete."
 
 echo "export ZKSYNC_HOME=/home/$USER/zksync-era/repo" >> ~/.zshrc
 echo "export PATH=\$ZKSYNC_HOME/bin:\$PATH" >> ~/.zshrc
+echo "export PATH=\$ZKSYNC_HOME/target/debug:\$PATH" >> ~/.zshrc
+
+# save POSTGRES_DATA_PATH
+
+echo "export POSTGRES_DATA_PATH=\$ZKSYNC_HOME/volumes/postgres" >> ~/.zshrc
 
 source ~/.zshrc
-
-# clean yarn cache 
-yarn cache clean --force
 
 export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
