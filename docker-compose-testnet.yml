@@ -1,10 +1,15 @@
 version: '3.2'
+
 networks:
   zksync-era_zkstack:
     external: true
+
 volumes:
-  artifacts:
+  zksync-data:
   postgres-explorer:
+  postgres-zksync:
+
+
 services:
   postgres-explorer:
     image: "postgres:14"
@@ -22,7 +27,6 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=block-explorer
     restart: unless-stopped
-  
   explorer-app:
     image: "matterlabs/block-explorer-app"
     ports:
@@ -71,7 +75,6 @@ services:
         condition: service_started
         restart: true
     restart: unless-stopped
-  
   explorer-data-fetcher:
     image: "matterlabs/block-explorer-data-fetcher"
     networks:
@@ -85,9 +88,8 @@ services:
       - '3040:3040'
     restart: unless-stopped
 
-  postgres:
+  postgres-zksync:
     image: postgres:14
-    container_name: postgres
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -100,43 +102,57 @@ services:
       POSTGRES_HOST_AUTH_METHOD: trust
     networks:
       - zksync-era_zkstack
+
   zkstack-core:
     container_name: zkstack-core
     networks:
       - zksync-era_zkstack
     image: douglasacost/zk-nodle-server
-    command: ["--components", "tree,eth,state_keeper,proof_data_handler"]
+    command:
+      [
+        "--components",
+        "tree,eth,state_keeper,proof_data_handler"
+      ]
+    depends_on:
+      postgres-zksync:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3071/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:3071/health" ]
       interval: 10s
       timeout: 5s
       retries: 10
     env_file:
       - ./envs/nodle-l2-testnet.env
     environment:
-      DATABASE_URL: postgres://postgres@postgres/zksync_local
-    ports: # assumes default ports in .env
+      DATABASE_URL: postgres://postgres@postgres-zksync/zksync_local
+    ports:
+      # assumes default ports in .env
       #- "3312:3312" # prometheus metrics # we need a separate metrics port for each component
       - "3320:3320" # proof_data_handler api
     volumes:
-      - artifacts:/zk-sync
+      - zksync-data:/zk-sync
 
   zkstack-apis:
     networks:
       - zksync-era_zkstack
     image: douglasacost/zk-nodle-server
-    command: ["--components", "http_api,ws_api"]
+    depends_on:
+      zkstack-core:
+        condition: service_healthy
+      postgres-zksync:
+        condition: service_healthy
+    command: [ "--components", "http_api,ws_api" ]
     env_file:
       - ./envs/nodle-l2-testnet.env
     environment:
       FRI_PROVER_GATEWAY_API_URL: http://zkstack-core:3320
-      DATABASE_URL: postgres://postgres:@postgres/zksync_local
-    ports: # assumes default ports in .env
+      DATABASE_URL: postgres://postgres:@postgres-zksync/zksync_local
+    ports:
+      # assumes default ports in .env
       - "3071:3071" # health
       - "3312:3312" # prometheus metrics # we need a separate metrics port for each component
       - "3050:3050" # http_api
       - "3051:3051" # ws_api
-
   # zk-postgres-setup:
   #    # (?) This is supposed to contain the command to setup the database, thus we do not need to download the zksync repo
   #   image: matterlabs/zk-environment:latest2.0-lightweight-nightly
