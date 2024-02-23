@@ -4,39 +4,117 @@ networks:
     external: true
 volumes:
   artifacts:
-  db:
+  postgres-explorer:
 services:
+  postgres-explorer:
+    image: "postgres:14"
+    networks:
+      - zksync-era_zkstack
+    volumes:
+      - postgres-explorer:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=block-explorer
+    restart: unless-stopped
+  
+  explorer-app:
+    image: "matterlabs/block-explorer-app"
+    ports:
+      - '3010:3010'
+    depends_on:
+      explorer-api:
+        condition: service_started
+        restart: true
+    volumes:
+      - ./.maintain/explorer.config.js:/usr/src/app/packages/app/dist/config.js
+    restart: unless-stopped
+  explorer-worker:
+    image: "matterlabs/block-explorer-worker"
+    networks:
+      - zksync-era_zkstack
+    environment:
+      - PORT=3001
+      - LOG_LEVEL=verbose
+      - NODE_ENV=development
+      - DATABASE_HOST=postgres-explorer
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=postgres
+      - DATABASE_NAME=block-explorer
+      - BLOCKCHAIN_RPC_URL=http://zkstack-apis:3051
+      - DATA_FETCHER_URL=http://explorer-data-fetcher:3040
+      - BATCHES_PROCESSING_POLLING_INTERVAL=10000
+    depends_on:
+      zkstack-apis:
+        condition: service_started
+        restart: true
+    restart: unless-stopped
+  explorer-api:
+    image: "matterlabs/block-explorer-api"
+    networks:
+      - zksync-era_zkstack
+    environment:
+      - PORT=3020
+      - METRICS_PORT=3005
+      - LOG_LEVEL=verbose
+      - NODE_ENV=development
+      - DATABASE_URL=postgres://postgres:postgres@postgres-explorer:5432/block-explorer
+    ports:
+      - '3020:3020'
+    depends_on:
+      explorer-worker:
+        condition: service_started
+        restart: true
+    restart: unless-stopped
+  
+  explorer-data-fetcher:
+    image: "matterlabs/block-explorer-data-fetcher"
+    networks:
+      - zksync-era_zkstack
+    environment:
+      - PORT=3040
+      - LOG_LEVEL=verbose
+      - NODE_ENV=development
+      - BLOCKCHAIN_RPC_URL=http://zkstack-apis:3050/
+    ports:
+      - '3040:3040'
+    restart: unless-stopped
+
   postgres:
     image: postgres:14
     container_name: postgres
     ports:
       - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     environment:
       POSTGRES_PASSWORD: notsecurepassword
-    volumes:
-      - db:/var/lib/postgresql/data
+      POSTGRES_HOST_AUTH_METHOD: trust
     networks:
       - zksync-era_zkstack
   zkstack-core:
     container_name: zkstack-core
     networks:
       - zksync-era_zkstack
-    image: douglasacost/zk-nodle-server:latest
-    command: ["--components", "tree,eth,state_keeper,housekeeper,proof_data_handler"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-        restart: true
+    image: douglasacost/zk-nodle-server
+    command: ["--components", "tree,eth,state_keeper,proof_data_handler"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3071/health"]
       interval: 10s
       timeout: 5s
       retries: 10
     env_file:
-      - ./envs/hyperchain-custom.env
+      - ./envs/nodle-l2-testnet.env
     environment:
-      ZKSYNC_HOME: /
-      DATABASE_URL: postgres://postgres:notsecurepassword@postgres/zksync_local
+      DATABASE_URL: postgres://postgres@postgres/zksync_local
     ports: # assumes default ports in .env
       #- "3312:3312" # prometheus metrics # we need a separate metrics port for each component
       - "3320:3320" # proof_data_handler api
@@ -46,21 +124,29 @@ services:
   zkstack-apis:
     networks:
       - zksync-era_zkstack
-    image: douglasacost/zk-nodle-server:latest
+    image: douglasacost/zk-nodle-server
     command: ["--components", "http_api,ws_api"]
     env_file:
-      - ./envs/hyperchain-custom.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-        restart: true
+      - ./envs/nodle-l2-testnet.env
     environment:
-      ZKSYNC_HOME: /
       FRI_PROVER_GATEWAY_API_URL: http://zkstack-core:3320
-      DATABASE_URL: postgres://postgres:notsecurepassword@postgres/zksync_local
+      DATABASE_URL: postgres://postgres:@postgres/zksync_local
     ports: # assumes default ports in .env
       - "3071:3071" # health
       - "3312:3312" # prometheus metrics # we need a separate metrics port for each component
       - "3050:3050" # http_api
       - "3051:3051" # ws_api
+
+  # zk-postgres-setup:
+  #   image: matterlabs/zk-environment:latest2.0-lightweight-nightly
+  #   volumes:
+  #     - ${ZKSYNC_HOME}:/app
+  #   working_dir: /app
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #       restart: true
+  #   command: ["bash", "-c", "sleep 10 && export ZKSYNC_HOME=/app/ && cd /app && ./bin/zk db setup"]
+        
+
 
