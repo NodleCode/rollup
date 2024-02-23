@@ -1,5 +1,5 @@
 # Create network
-# docker network create zksync-era_zkstack
+docker network create zksync-era_zkstack
 
 # create volume for postgres
 mkdir -p ./volumes/postgres
