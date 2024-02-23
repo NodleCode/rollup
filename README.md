@@ -28,17 +28,9 @@ The docker compose should auto deploy the contracts for you. You should be able 
 If developing on this repo, you will need a number of dependencies, you may install them yourself by running `./.devcontainer/install-tools.sh`. This is not necessary if you simply want to use docker compose to start a local testnet.
 
 
-### Handle ZK CLI 
+## Using with the Zk Stack
 
-## Running own rollup testnet
+### Running own rollup testnet
 
-1 - Run `zk-setup.sh` to prepare zksync enviroment in the dev container
-2 - Once this finished make sure you have the `<your_chain_name_slug>.env` file with the required information
-3 - Run `zk-custom-start.sh`
-
-## How to create <your_chain_name_slug>.env? [IN DEVELOPMENT]
-
-1 - Create a file (or Edit if exist) in `envs/<your_chain_name_slug>.env`, fill it with the required information
-2 - Run `zk-setup.sh`, if first time
-3 - Run `zk-start.sh` this will initialize the process
-
+1. Make sure you `./envs/nodle-l2-testnet.env` filled with the right environment variables
+2. `docker compose -f docker-compose-testnet.yml up` should be sufficient to get you up and running!
