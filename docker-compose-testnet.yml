@@ -44,7 +44,7 @@ services:
       - DATABASE_NAME=block-explorer
       - BLOCKCHAIN_RPC_URL=http://zkstack-apis:3051
       - DATA_FETCHER_URL=http://explorer-data-fetcher:3040
-      - BATCHES_PROCESSING_POLLING_INTERVAL=10000
+      - BATCHES_PROCESSING_POLLING_INTERVAL=10000 # NOTE: original value was 1000
     depends_on:
       zkstack-apis:
         condition: service_started
@@ -57,6 +57,7 @@ services:
       - METRICS_PORT=3005
       - LOG_LEVEL=verbose
       - NODE_ENV=development
+      - CONTRACT_VERIFICATION_API_URL=http://zkstack-apis:3070
       - DATABASE_URL=postgres://postgres:postgres@postgres-explorer:5432/block-explorer
     ports:
       - '3020:3020'
