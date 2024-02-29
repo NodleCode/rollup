@@ -34,8 +34,8 @@ type ERC721Token @entity {
 	timestamp: BigInt!
 	content: String
 	name: String
+	transactionHash: Bytes
 	description: String
-	external_url: String
 	transfers: [ERC721Transfer!]! @derivedFrom(field: "token")
 }
 type ERC721Operator @entity {

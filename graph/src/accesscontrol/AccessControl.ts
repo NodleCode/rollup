@@ -191,7 +191,7 @@ export class RenounceRoleCall__Inputs {
     return this._call.inputValues[0].value.toBytes();
   }
 
-  get callerConfirmation(): Address {
+  get account(): Address {
     return this._call.inputValues[1].value.toAddress();
   }
 }

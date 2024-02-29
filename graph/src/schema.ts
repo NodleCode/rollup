@@ -23,7 +23,7 @@ export class Account extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.BYTES,
-        `Entities of type Account must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type Account must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("Account", id.toBytes().toHexString(), this);
     }
@@ -31,7 +31,7 @@ export class Account extends Entity {
 
   static loadInBlock(id: Bytes): Account | null {
     return changetype<Account | null>(
-      store.get_in_block("Account", id.toHexString())
+      store.get_in_block("Account", id.toHexString()),
     );
   }
 
@@ -73,7 +73,7 @@ export class Account extends Entity {
     return new ERC721TokenLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "ERC721tokens"
+      "ERC721tokens",
     );
   }
 
@@ -81,7 +81,7 @@ export class Account extends Entity {
     return new ERC721OperatorLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "ERC721operatorOwner"
+      "ERC721operatorOwner",
     );
   }
 
@@ -89,7 +89,7 @@ export class Account extends Entity {
     return new ERC721OperatorLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "ERC721operatorOperator"
+      "ERC721operatorOperator",
     );
   }
 
@@ -97,7 +97,7 @@ export class Account extends Entity {
     return new ERC721TransferLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "ERC721transferFromEvent"
+      "ERC721transferFromEvent",
     );
   }
 
@@ -105,7 +105,7 @@ export class Account extends Entity {
     return new ERC721TransferLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "ERC721transferToEvent"
+      "ERC721transferToEvent",
     );
   }
 
@@ -130,7 +130,7 @@ export class Account extends Entity {
     return new AccessControlRoleMemberLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "membership"
+      "membership",
     );
   }
 
@@ -138,7 +138,7 @@ export class Account extends Entity {
     return new RoleGrantedLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "roleGranted"
+      "roleGranted",
     );
   }
 
@@ -146,7 +146,7 @@ export class Account extends Entity {
     return new RoleGrantedLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "roleGrantedSender"
+      "roleGrantedSender",
     );
   }
 
@@ -154,7 +154,7 @@ export class Account extends Entity {
     return new RoleRevokedLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "roleRevoked"
+      "roleRevoked",
     );
   }
 
@@ -162,7 +162,7 @@ export class Account extends Entity {
     return new RoleRevokedLoader(
       "Account",
       this.get("id")!.toBytes().toHexString(),
-      "roleRevokedSender"
+      "roleRevokedSender",
     );
   }
 }
@@ -179,7 +179,7 @@ export class ERC721Contract extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.BYTES,
-        `Entities of type ERC721Contract must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type ERC721Contract must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("ERC721Contract", id.toBytes().toHexString(), this);
     }
@@ -187,13 +187,13 @@ export class ERC721Contract extends Entity {
 
   static loadInBlock(id: Bytes): ERC721Contract | null {
     return changetype<ERC721Contract | null>(
-      store.get_in_block("ERC721Contract", id.toHexString())
+      store.get_in_block("ERC721Contract", id.toHexString()),
     );
   }
 
   static load(id: Bytes): ERC721Contract | null {
     return changetype<ERC721Contract | null>(
-      store.get("ERC721Contract", id.toHexString())
+      store.get("ERC721Contract", id.toHexString()),
     );
   }
 
@@ -274,7 +274,7 @@ export class ERC721Contract extends Entity {
     return new ERC721TokenLoader(
       "ERC721Contract",
       this.get("id")!.toBytes().toHexString(),
-      "tokens"
+      "tokens",
     );
   }
 
@@ -282,7 +282,7 @@ export class ERC721Contract extends Entity {
     return new ERC721OperatorLoader(
       "ERC721Contract",
       this.get("id")!.toBytes().toHexString(),
-      "operators"
+      "operators",
     );
   }
 
@@ -290,7 +290,7 @@ export class ERC721Contract extends Entity {
     return new ERC721TransferLoader(
       "ERC721Contract",
       this.get("id")!.toBytes().toHexString(),
-      "transfers"
+      "transfers",
     );
   }
 }
@@ -307,7 +307,7 @@ export class ERC721Token extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type ERC721Token must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type ERC721Token must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("ERC721Token", id.toString(), this);
     }
@@ -315,7 +315,7 @@ export class ERC721Token extends Entity {
 
   static loadInBlock(id: string): ERC721Token | null {
     return changetype<ERC721Token | null>(
-      store.get_in_block("ERC721Token", id)
+      store.get_in_block("ERC721Token", id),
     );
   }
 
@@ -452,6 +452,23 @@ export class ERC721Token extends Entity {
     }
   }
 
+  get transactionHash(): Bytes | null {
+    let value = this.get("transactionHash");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toBytes();
+    }
+  }
+
+  set transactionHash(value: Bytes | null) {
+    if (!value) {
+      this.unset("transactionHash");
+    } else {
+      this.set("transactionHash", Value.fromBytes(<Bytes>value));
+    }
+  }
+
   get description(): string | null {
     let value = this.get("description");
     if (!value || value.kind == ValueKind.NULL) {
@@ -469,28 +486,11 @@ export class ERC721Token extends Entity {
     }
   }
 
-  get external_url(): string | null {
-    let value = this.get("external_url");
-    if (!value || value.kind == ValueKind.NULL) {
-      return null;
-    } else {
-      return value.toString();
-    }
-  }
-
-  set external_url(value: string | null) {
-    if (!value) {
-      this.unset("external_url");
-    } else {
-      this.set("external_url", Value.fromString(<string>value));
-    }
-  }
-
   get transfers(): ERC721TransferLoader {
     return new ERC721TransferLoader(
       "ERC721Token",
       this.get("id")!.toString(),
-      "transfers"
+      "transfers",
     );
   }
 }
@@ -507,7 +507,7 @@ export class ERC721Operator extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type ERC721Operator must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type ERC721Operator must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("ERC721Operator", id.toString(), this);
     }
@@ -515,7 +515,7 @@ export class ERC721Operator extends Entity {
 
   static loadInBlock(id: string): ERC721Operator | null {
     return changetype<ERC721Operator | null>(
-      store.get_in_block("ERC721Operator", id)
+      store.get_in_block("ERC721Operator", id),
     );
   }
 
@@ -601,7 +601,7 @@ export class ERC721Transfer extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type ERC721Transfer must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type ERC721Transfer must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("ERC721Transfer", id.toString(), this);
     }
@@ -609,7 +609,7 @@ export class ERC721Transfer extends Entity {
 
   static loadInBlock(id: string): ERC721Transfer | null {
     return changetype<ERC721Transfer | null>(
-      store.get_in_block("ERC721Transfer", id)
+      store.get_in_block("ERC721Transfer", id),
     );
   }
 
@@ -734,7 +734,7 @@ export class AccessControl extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.BYTES,
-        `Entities of type AccessControl must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type AccessControl must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("AccessControl", id.toBytes().toHexString(), this);
     }
@@ -742,13 +742,13 @@ export class AccessControl extends Entity {
 
   static loadInBlock(id: Bytes): AccessControl | null {
     return changetype<AccessControl | null>(
-      store.get_in_block("AccessControl", id.toHexString())
+      store.get_in_block("AccessControl", id.toHexString()),
     );
   }
 
   static load(id: Bytes): AccessControl | null {
     return changetype<AccessControl | null>(
-      store.get("AccessControl", id.toHexString())
+      store.get("AccessControl", id.toHexString()),
     );
   }
 
@@ -782,7 +782,7 @@ export class AccessControl extends Entity {
     return new AccessControlRoleLoader(
       "AccessControl",
       this.get("id")!.toBytes().toHexString(),
-      "roles"
+      "roles",
     );
   }
 }
@@ -799,7 +799,7 @@ export class Role extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.BYTES,
-        `Entities of type Role must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type Role must have an ID of type Bytes but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("Role", id.toBytes().toHexString(), this);
     }
@@ -807,7 +807,7 @@ export class Role extends Entity {
 
   static loadInBlock(id: Bytes): Role | null {
     return changetype<Role | null>(
-      store.get_in_block("Role", id.toHexString())
+      store.get_in_block("Role", id.toHexString()),
     );
   }
 
@@ -832,7 +832,7 @@ export class Role extends Entity {
     return new AccessControlRoleLoader(
       "Role",
       this.get("id")!.toBytes().toHexString(),
-      "roleOf"
+      "roleOf",
     );
   }
 }
@@ -849,7 +849,7 @@ export class AccessControlRole extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type AccessControlRole must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type AccessControlRole must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("AccessControlRole", id.toString(), this);
     }
@@ -857,13 +857,13 @@ export class AccessControlRole extends Entity {
 
   static loadInBlock(id: string): AccessControlRole | null {
     return changetype<AccessControlRole | null>(
-      store.get_in_block("AccessControlRole", id)
+      store.get_in_block("AccessControlRole", id),
     );
   }
 
   static load(id: string): AccessControlRole | null {
     return changetype<AccessControlRole | null>(
-      store.get("AccessControlRole", id)
+      store.get("AccessControlRole", id),
     );
   }
 
@@ -923,7 +923,7 @@ export class AccessControlRole extends Entity {
     return new AccessControlRoleLoader(
       "AccessControlRole",
       this.get("id")!.toString(),
-      "adminOf"
+      "adminOf",
     );
   }
 
@@ -931,7 +931,7 @@ export class AccessControlRole extends Entity {
     return new AccessControlRoleMemberLoader(
       "AccessControlRole",
       this.get("id")!.toString(),
-      "members"
+      "members",
     );
   }
 
@@ -939,7 +939,7 @@ export class AccessControlRole extends Entity {
     return new RoleGrantedLoader(
       "AccessControlRole",
       this.get("id")!.toString(),
-      "roleGranted"
+      "roleGranted",
     );
   }
 
@@ -947,7 +947,7 @@ export class AccessControlRole extends Entity {
     return new RoleRevokedLoader(
       "AccessControlRole",
       this.get("id")!.toString(),
-      "roleRevoked"
+      "roleRevoked",
     );
   }
 
@@ -955,7 +955,7 @@ export class AccessControlRole extends Entity {
     return new RoleAdminChangedLoader(
       "AccessControlRole",
       this.get("id")!.toString(),
-      "roleAdminChanged"
+      "roleAdminChanged",
     );
   }
 }
@@ -970,12 +970,12 @@ export class AccessControlRoleMember extends Entity {
     let id = this.get("id");
     assert(
       id != null,
-      "Cannot save AccessControlRoleMember entity without an ID"
+      "Cannot save AccessControlRoleMember entity without an ID",
     );
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type AccessControlRoleMember must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type AccessControlRoleMember must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("AccessControlRoleMember", id.toString(), this);
     }
@@ -983,13 +983,13 @@ export class AccessControlRoleMember extends Entity {
 
   static loadInBlock(id: string): AccessControlRoleMember | null {
     return changetype<AccessControlRoleMember | null>(
-      store.get_in_block("AccessControlRoleMember", id)
+      store.get_in_block("AccessControlRoleMember", id),
     );
   }
 
   static load(id: string): AccessControlRoleMember | null {
     return changetype<AccessControlRoleMember | null>(
-      store.get("AccessControlRoleMember", id)
+      store.get("AccessControlRoleMember", id),
     );
   }
 
@@ -1045,7 +1045,7 @@ export class RoleAdminChanged extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type RoleAdminChanged must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type RoleAdminChanged must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("RoleAdminChanged", id.toString(), this);
     }
@@ -1053,13 +1053,13 @@ export class RoleAdminChanged extends Entity {
 
   static loadInBlock(id: string): RoleAdminChanged | null {
     return changetype<RoleAdminChanged | null>(
-      store.get_in_block("RoleAdminChanged", id)
+      store.get_in_block("RoleAdminChanged", id),
     );
   }
 
   static load(id: string): RoleAdminChanged | null {
     return changetype<RoleAdminChanged | null>(
-      store.get("RoleAdminChanged", id)
+      store.get("RoleAdminChanged", id),
     );
   }
 
@@ -1167,7 +1167,7 @@ export class RoleGranted extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type RoleGranted must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type RoleGranted must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("RoleGranted", id.toString(), this);
     }
@@ -1175,7 +1175,7 @@ export class RoleGranted extends Entity {
 
   static loadInBlock(id: string): RoleGranted | null {
     return changetype<RoleGranted | null>(
-      store.get_in_block("RoleGranted", id)
+      store.get_in_block("RoleGranted", id),
     );
   }
 
@@ -1287,7 +1287,7 @@ export class RoleRevoked extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type RoleRevoked must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type RoleRevoked must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("RoleRevoked", id.toString(), this);
     }
@@ -1295,7 +1295,7 @@ export class RoleRevoked extends Entity {
 
   static loadInBlock(id: string): RoleRevoked | null {
     return changetype<RoleRevoked | null>(
-      store.get_in_block("RoleRevoked", id)
+      store.get_in_block("RoleRevoked", id),
     );
   }
 
@@ -1407,7 +1407,7 @@ export class Transaction extends Entity {
     if (id) {
       assert(
         id.kind == ValueKind.STRING,
-        `Entities of type Transaction must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`
+        `Entities of type Transaction must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
       );
       store.set("Transaction", id.toString(), this);
     }
@@ -1415,7 +1415,7 @@ export class Transaction extends Entity {
 
   static loadInBlock(id: string): Transaction | null {
     return changetype<Transaction | null>(
-      store.get_in_block("Transaction", id)
+      store.get_in_block("Transaction", id),
     );
   }
 
