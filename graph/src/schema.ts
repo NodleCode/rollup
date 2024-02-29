@@ -405,17 +405,21 @@ export class ERC721Token extends Entity {
     }
   }
 
-  get timestamp(): BigInt {
+  get timestamp(): BigInt | null {
     let value = this.get("timestamp");
     if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
+      return null;
     } else {
       return value.toBigInt();
     }
   }
 
-  set timestamp(value: BigInt) {
-    this.set("timestamp", Value.fromBigInt(value));
+  set timestamp(value: BigInt | null) {
+    if (!value) {
+      this.unset("timestamp");
+    } else {
+      this.set("timestamp", Value.fromBigInt(<BigInt>value));
+    }
   }
 
   get content(): string | null {

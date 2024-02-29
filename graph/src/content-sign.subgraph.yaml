@@ -1,12 +1,14 @@
 specVersion: 0.0.4
 schema:
   file: ./content-sign.schema.graphql
+features:
+  - ipfsOnEthereumContracts
 dataSources:
   - kind: ethereum/contract
     name: erc721
     network: zksync-era
     source:
-      address: "0x27d45764490b8C4135d1EC70130163791BDE6db5"
+      address: "0x2178368114dB20b34a5855f9886Ef67F434Cbe1E"
       abi: IERC721
       startBlock: 1
     mapping:
@@ -26,11 +28,12 @@ dataSources:
         - event: Transfer(indexed address,indexed address,indexed uint256)
           handler: handleTransfer
       file: mappings/erc721.ts
+
   - kind: ethereum/contract
     name: accesscontrol
     network: zksync-era
     source:
-      address: "0x27d45764490b8C4135d1EC70130163791BDE6db5"
+      address: "0x6BEB7D5416b1A2bb8619e988785676c0aEdde7b8"
       abi: AccessControl
       startBlock: 1
     mapping:

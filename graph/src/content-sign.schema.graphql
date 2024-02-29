@@ -31,7 +31,7 @@ type ERC721Token @entity {
 	owner: Account!
 	approval: Account!
 	uri: String
-	timestamp: BigInt!
+	timestamp: BigInt
 	content: String
 	name: String
 	transactionHash: Bytes

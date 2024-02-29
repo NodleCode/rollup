@@ -53,6 +53,7 @@ export function handleApproval(event: ApprovalEvent): void {
     token.owner = owner.id; // this should not be necessary, owner changed is signaled by a transfer event
     token.approval = approved.id;
     token.timestamp = event.block.timestamp;
+    token.transactionHash = event.transaction.hash;
     
     let metadata = ipfs.cat(token.uri!);
     if (metadata) {
