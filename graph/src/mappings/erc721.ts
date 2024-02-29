@@ -1,4 +1,4 @@
-import { Address } from "@graphprotocol/graph-ts";
+import { Address, ipfs, json } from "@graphprotocol/graph-ts";
 
 import { ERC721Transfer } from "../schema";
 
@@ -52,7 +52,22 @@ export function handleApproval(event: ApprovalEvent): void {
 
     token.owner = owner.id; // this should not be necessary, owner changed is signaled by a transfer event
     token.approval = approved.id;
-    token.tim
+    token.timestamp = event.block.timestamp;
+    
+    let metadata = ipfs.cat(token.uri!);
+    if (metadata) {
+      const value = json.fromBytes(metadata).toObject();
+      if (value) {
+        const image = value.get("image");
+        const content = value.get("content");
+        const name = value.get("name");
+        const description = value.get("description");
+
+        token.content = content?.toString() || image?.toString() || "";
+        token.name = name?.toString() || "";
+        token.description = description?.toString() || "";
+      }
+    }
 
     token.save();
     owner.save();
