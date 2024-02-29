@@ -1,0 +1,52 @@
+specVersion: 0.0.4
+schema:
+  file: ./content-sign.schema.graphql
+dataSources:
+  - kind: ethereum/contract
+    name: erc721
+    network: zksync-era
+    source:
+      address: "0x27d45764490b8C4135d1EC70130163791BDE6db5"
+      abi: IERC721
+      startBlock: 1
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - ERC721Contract
+      abis:
+        - name: IERC721
+          file: ../../node_modules/@openzeppelin/contracts/build/contracts/IERC721Metadata.json
+      eventHandlers:
+        - event: Approval(indexed address,indexed address,indexed uint256)
+          handler: handleApproval
+        - event: ApprovalForAll(indexed address,indexed address,bool)
+          handler: handleApprovalForAll
+        - event: Transfer(indexed address,indexed address,indexed uint256)
+          handler: handleTransfer
+      file: mappings/erc721.ts
+  - kind: ethereum/contract
+    name: accesscontrol
+    network: zksync-era
+    source:
+      address: "0x27d45764490b8C4135d1EC70130163791BDE6db5"
+      abi: AccessControl
+      startBlock: 1
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - AccessControl
+      abis:
+        - name: AccessControl
+          file: ../../node_modules/@openzeppelin/contracts/build/contracts/IAccessControl.json
+      eventHandlers:
+        - event: RoleAdminChanged(indexed bytes32,indexed bytes32,indexed bytes32)
+          handler: handleRoleAdminChanged
+        - event: RoleGranted(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleGranted
+        - event: RoleRevoked(indexed bytes32,indexed address,indexed address)
+          handler: handleRoleRevoked
+      file: ../../node_modules/@openzeppelin/subgraphs/src/datasources/accesscontrol.ts

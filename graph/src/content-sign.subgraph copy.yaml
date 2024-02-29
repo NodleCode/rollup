@@ -1,6 +1,6 @@
 specVersion: 0.0.4
 schema:
-  file: content-sign.schema.graphql
+  file: ./content-sign.schema.graphql
 dataSources:
   - kind: ethereum/contract
     name: erc721
@@ -25,7 +25,7 @@ dataSources:
           handler: handleApprovalForAll
         - event: Transfer(indexed address,indexed address,indexed uint256)
           handler: handleTransfer
-      file: ../../node_modules/@openzeppelin/subgraphs/src/datasources/erc721.ts
+      file: mappings/erc721.ts
   - kind: ethereum/contract
     name: accesscontrol
     network: zksync-era
