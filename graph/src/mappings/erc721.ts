@@ -63,9 +63,21 @@ export function handleApproval(event: ApprovalEvent): void {
         const name = value.get("name");
         const description = value.get("description");
 
-        token.content = content?.toString() || image?.toString() || "";
-        token.name = name?.toString() || "";
-        token.description = description?.toString() || "";
+        if (image) {
+          token.content = image.toString();
+        }
+
+        if (content) {
+          token.content = content.toString();
+        }
+
+        if (name) {
+          token.name = name.toString() || "";
+        }
+
+        if (description) {
+          token.description = description.toString() || "";
+        }
       }
     }
 
