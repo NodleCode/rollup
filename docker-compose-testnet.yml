@@ -92,11 +92,11 @@ services:
 
   zkstack-core:
     container_name: zkstack-core
-    image: douglasacost/zk-nodle-server
+    image: douglasacost/zk-testnet-nodle:latest
     command:
       [
         "--components",
-        "tree,eth,state_keeper,proof_data_handler"
+        "tree,eth,state_keeper,housekeeper,proof_data_handler"
       ]
     depends_on:
       postgres-zksync:
@@ -113,6 +113,7 @@ services:
       - ./envs/nodle-l2-testnet.env
     environment:
       DATABASE_URL: postgres://postgres@postgres-zksync/zksync_local
+      DATABASE_PROVER_URL: postgres://postgres:@postgres-zksync/prover_local
     ports:
       # assumes default ports in .env
       #- "3312:3312" # prometheus metrics # we need a separate metrics port for each component
@@ -121,7 +122,7 @@ services:
       - zksync-data:/zk-sync
 
   zkstack-apis:
-    image: douglasacost/zk-nodle-server
+    image: douglasacost/zk-testnet-nodle:latest
     depends_on:
       zkstack-core:
         condition: service_healthy
