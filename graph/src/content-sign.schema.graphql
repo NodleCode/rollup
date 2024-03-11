@@ -31,6 +31,11 @@ type ERC721Token @entity {
 	owner: Account!
 	approval: Account!
 	uri: String
+	timestamp: BigInt
+	content: String
+	name: String
+	transactionHash: Bytes
+	description: String
 	transfers: [ERC721Transfer!]! @derivedFrom(field: "token")
 }
 type ERC721Operator @entity {

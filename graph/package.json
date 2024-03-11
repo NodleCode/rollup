@@ -4,15 +4,15 @@
   "version": "0.0.1",
   "scripts": {
     "bootstrap": "graph-compiler --config config.json --include ../node_modules/@openzeppelin/subgraphs/src/datasources --export-schema --export-subgraph",
-    "codegen": "graph codegen generated/content-sign.subgraph.yaml",
-    "build": "graph build generated/content-sign.subgraph.yaml",
-    "deploy": "graph deploy --node https://api.thegraph.com/deploy/ generated/content-sign.subgraph.yaml",
+    "codegen": "graph codegen src/content-sign.subgraph.yaml --output-dir src",
+    "build": "graph build src/content-sign.subgraph.yaml",
+    "deploy": "graph deploy --node https://api.thegraph.com/deploy/ src/content-sign.subgraph.yaml",
     "create-local": "graph create --node http://localhost:8020/ content-sign",
-    "remove-local": "graph remove --node http://localhost:8020/ content-sign generated/content-sign.subgraph.yaml",
-    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 content-sign generated/content-sign.subgraph.yaml",
-    "test": "graph test generated/content-sign.subgraph.yaml",
+    "remove-local": "graph remove --node http://localhost:8020/ content-sign src/content-sign.subgraph.yaml",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 content-sign src/content-sign.subgraph.yaml",
+    "test": "graph test src/content-sign.subgraph.yaml",
     "prepare": "./prepare.sh",
-    "fix-paths": "for file in generated/*.yaml; do sed -i '' 's/file: \\.\\.\\/node_modules/file: \\.\\.\\/\\.\\.\\/node_modules/g' \"$file\"; done"
+    "fix-paths": "for file in src/*.yaml; do sed -i '' 's/file: \\.\\.\\/node_modules/file: \\.\\.\\/\\.\\.\\/node_modules/g' \"$file\"; done"
   },
   "dependencies": {
     "@graphprotocol/graph-cli": "0.67.2",
