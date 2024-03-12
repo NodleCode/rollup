@@ -44,7 +44,7 @@ services:
       - DATABASE_NAME=block-explorer
       - BLOCKCHAIN_RPC_URL=http://zkstack-apis:3051
       - DATA_FETCHER_URL=http://explorer-data-fetcher:3040
-      - BATCHES_PROCESSING_POLLING_INTERVAL=10000 # NOTE: original value was 1000
+      - BATCHES_PROCESSING_POLLING_INTERVAL=1000
     depends_on:
       zkstack-apis:
         condition: service_started
