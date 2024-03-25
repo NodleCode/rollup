@@ -20,10 +20,8 @@
   "remoteUser": "vscode",
   "remoteEnv": {
     "PATH": "${containerEnv:PATH}:/usr/local/cargo/bin:/home/vscode/.yarn/bin:/home/vscode/.foundry/bin",
-    "ETH_RPC_URL": "http://localhost:3050"
   },
   "onCreateCommand": "./.devcontainer/install-tools.sh",
-  "updateContentCommand": "cd contracts && yarn && yarn compile",
   "customizations": {
     "vscode": {
       "settings": {
