@@ -14,13 +14,13 @@ concurrency:
 jobs:
   Tests:
     runs-on: ubuntu-latest
+    container: ghcr.io/nodlecode/devcontainer-rollup
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Install dependencies
-        run: ./.devcontainer/install-tools.sh
       - name: Lint
         run: forge fmt --check
       - name: Run tests
