@@ -17,31 +17,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Install dependencies
-        run: |
-          ./.devcontainer/install-tools.sh
-          yarn
-        env:
-          SKIP_FOUNDRY: 1
+        run: ./.devcontainer/install-tools.sh
       - name: Lint
-        run: |
-          yarn fmt
-          yarn lint
+        run: forge fmt --check
       - name: Run tests
-        run: |
-          docker compose up zksync -d
-          echo "Waiting for zksync to be up..."
-          while ! nc -z localhost 3050 || ! nc -z localhost 8545; do
-            echo "zksync is not yet running, waiting..."
-            sleep 10
-          done
-          echo "zksync ports are up! Just wait extra 3 minutes to be sure..."
-          docker compose logs -f &
-          LOGS_PID=$!
-          sleep 180
-          kill $LOGS_PID
-          yarn test
-        env:
-          WALLET_PRIVATE_KEY: "0xd293c684d884d56f8d6abd64fc76757d3664904e309a0645baf8522ab6366d9e"
-          GOVERNANCE_ADDRESS: "0x36615Cf349d7F6344891B1e7CA7C72883F5dc049"
-          WHITELIST_ADMIN_ADDRESS: "0xa61464658AfeAf65CccaaFD3a512b69A83B77618"
+        run: forge test --zksync
