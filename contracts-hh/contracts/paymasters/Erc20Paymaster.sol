@@ -19,49 +19,40 @@ contract Erc20Paymaster is BasePaymaster {
     error TokenNotAllowed();
     error FeeTooHigh(uint256 feePrice, uint256 requiredETH);
 
-    constructor(
-        address admin,
-        address priceOracle,
-        address erc20,
-        uint256 initialFeePrice
-    ) BasePaymaster(admin, admin) {
+    constructor(address admin, address priceOracle, address erc20, uint256 initialFeePrice)
+        BasePaymaster(admin, admin)
+    {
         _grantRole(PRICE_ORACLE_ROLE, priceOracle);
         allowedToken = erc20;
         feePrice = initialFeePrice;
     }
 
-    function grantPriceOracleRole(
-        address oracle
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function grantPriceOracleRole(address oracle) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _grantRole(PRICE_ORACLE_ROLE, oracle);
     }
 
-    function revokePriceOracleRole(
-        address oracle
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function revokePriceOracleRole(address oracle) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _revokeRole(PRICE_ORACLE_ROLE, oracle);
     }
 
-    function updateFeePrice(
-        uint256 newFeePrice
-    ) public onlyRole(PRICE_ORACLE_ROLE) {
+    function updateFeePrice(uint256 newFeePrice) public onlyRole(PRICE_ORACLE_ROLE) {
         feePrice = newFeePrice;
     }
 
-    function _validateAndPayGeneralFlow(
-        address /* from */,
-        address /* to */,
-        uint256 /* requiredETH */
-    ) internal pure override {
+    function _validateAndPayGeneralFlow(address, /* from */ address, /* to */ uint256 /* requiredETH */ )
+        internal
+        pure
+        override
+    {
         revert PaymasterFlowNotSupported();
     }
 
     function _validateAndPayApprovalBasedFlow(
         address userAddress,
-        address /* destAddress */,
+        address, /* destAddress */
         address token,
-        uint256 /* amount */,
-        bytes memory /* data */,
+        uint256, /* amount */
+        bytes memory, /* data */
         uint256 requiredETH
     ) internal override {
         if (token != allowedToken) {
@@ -70,10 +61,7 @@ contract Erc20Paymaster is BasePaymaster {
 
         address thisAddress = address(this);
 
-        uint256 providedAllowance = IERC20(token).allowance(
-            userAddress,
-            thisAddress
-        );
+        uint256 providedAllowance = IERC20(token).allowance(userAddress, thisAddress);
 
         (bool succeeded, uint256 requiredToken) = requiredETH.tryMul(feePrice);
         if (!succeeded) {
@@ -84,9 +72,7 @@ contract Erc20Paymaster is BasePaymaster {
             revert AllowanceNotEnough(providedAllowance, requiredToken);
         }
 
-        try
-            IERC20(token).transferFrom(userAddress, thisAddress, requiredToken)
-        {
+        try IERC20(token).transferFrom(userAddress, thisAddress, requiredToken) {
             return;
         } catch (bytes memory revertReason) {
             revert FeeTransferFailed(revertReason);
