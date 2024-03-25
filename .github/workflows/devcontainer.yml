@@ -28,7 +28,7 @@ jobs:
       - name: Prepare Env 
         id: prepare
         run: |
-           ([[ ${{ github.event_name == 'pull_request' }} == true ]] && echo "push=always" || echo "push=always" ) >> $GITHUB_OUTPUT
+           ([[ ${{ github.event_name == 'pull_request' }} == true ]] && echo "push=never" || echo "push=always" ) >> $GITHUB_OUTPUT
       - name: Pre-build dev container image
         uses: devcontainers/ci@v0.3
         with:
