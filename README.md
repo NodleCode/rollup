@@ -6,15 +6,17 @@ This mono repo will contain all the required smart-contracts and the services th
 Each sub-package should feature a `README.md` file explaining how to test and use it.
 
 # Development setup
-> We recommend you run within the provided [devcontainer](https://code.visualstudio.com/remote/advancedcontainers/overview) to ensure you have all the necessary tooling installed such `graph`, `zksync-dev`, and `foundry`.
+> We recommend you run within the provided [devcontainer](https://code.visualstudio.com/remote/advancedcontainers/overview) to ensure you have all the necessary tooling installed such `graph`, `zksync-cli`, and `forge`.
 
 ## Dependencies
 If developing on this repo, you will need a number of dependencies, you may install them yourself by running `./.devcontainer/install-tools.sh` (only made for Debian based Linux distributions, PRs welcome for other platforms). This is not necessary if you simply want to use docker compose to start a local testnet.
 
 ## Repo organization
-
+- `./contracts` contains contracts for Nodle and Click on ZkSync.
+- `./graph` contains a custom SubGraph for this project.
+- ...more to come
 
 ## TODOs
-- [ ] reorg folders
 - [ ] move contracts to forge
 - [ ] local testing instructions
+- [ ] cleanup graph setup
