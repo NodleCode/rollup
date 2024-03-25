@@ -24,4 +24,4 @@ jobs:
       - name: Lint
         run: forge fmt --check
       - name: Run tests
-        run: forge test --zksync
+        run: forge test
