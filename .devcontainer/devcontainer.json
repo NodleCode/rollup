@@ -19,7 +19,7 @@
   },
   "remoteUser": "vscode",
   "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:/usr/local/cargo/bin:/home/vscode/.yarn/bin:/home/vscode/.foundry/bin",
+    "PATH": "${containerEnv:PATH}:/usr/local/cargo/bin:/home/vscode/.yarn/bin:/home/vscode/.foundry/bin"
   },
   "onCreateCommand": "./.devcontainer/install-tools.sh",
   "customizations": {
