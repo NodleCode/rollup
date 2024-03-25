@@ -9,3 +9,4 @@ yarn global add @graphprotocol/graph-cli
 git clone https://github.com/matter-labs/foundry-zksync.git /tmp/foundry-zksync
 cd /tmp/foundry-zksync
 cargo install --path ./crates/forge --profile local --force --locked
+cargo install --path ./crates/cast --profile local --force --locked
