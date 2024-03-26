@@ -2,8 +2,8 @@
 
 pragma solidity ^0.8.20;
 
-import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import {ERC721} from "openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
+import {ERC721URIStorage} from "openzeppelin-contracts/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 
 import {WhitelistPaymaster} from "../paymasters/WhitelistPaymaster.sol";
 
@@ -22,7 +22,11 @@ contract ContentSignNFT is ERC721, ERC721URIStorage {
         _;
     }
 
-    constructor(string memory name, string memory symbol, address payable whitelistAddress) ERC721(name, symbol) {
+    constructor(
+        string memory name,
+        string memory symbol,
+        address payable whitelistAddress
+    ) ERC721(name, symbol) {
         whitelistPaymaster = WhitelistPaymaster(whitelistAddress);
     }
 
@@ -32,11 +36,15 @@ contract ContentSignNFT is ERC721, ERC721URIStorage {
         _setTokenURI(tokenId, uri);
     }
 
-    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) {
+    function tokenURI(
+        uint256 tokenId
+    ) public view override(ERC721, ERC721URIStorage) returns (string memory) {
         return super.tokenURI(tokenId);
     }
 
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view override(ERC721, ERC721URIStorage) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 }
