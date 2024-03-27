@@ -15,11 +15,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | zsh -s -- -y && 
     . "$HOME/.cargo/env" && \
     rustup toolchain install stable
 
-ENV PATH="${PATH}:/home/vscode/.cargo/bin:/home/vscode/.yarn/bin:/home/vscode/.foundry/bin:/home/vscode/.nvm/versions/node/v${NODE_VERSION}/bin"
+ENV PATH="${PATH}:/home/vscode/.cargo/bin:/home/vscode/.yarn/bin:/home/vscode/.foundry/bin:/home/vscode/.nvm/versions/node/v${NODE_VERSION}/bin:/home/vscode/.solc"
 
 ENV SOLC_VERSION=v0.8.23+commit.f704f362
-RUN curl https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-${SOLC_VERSION} -o /usr/local/bin/solc && \
-    chmod +x /usr/local/bin/solc
+RUN curl https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-${SOLC_VERSION} -o /home/vscode/.solc/solc-linux-amd64-${SOLC_VERSION} && \
+    chmod +x /home/vscode/.solc/solc-linux-amd64-${SOLC_VERSION} && \
+    ln -s /home/vscode/.solc/solc-linux-amd64-${SOLC_VERSION} /home/vscode/.solc/solc
 
 RUN sudo apt update && \
     sudo apt install --yes \
