@@ -14,7 +14,9 @@ concurrency:
 jobs:
   Tests:
     runs-on: ubuntu-latest
-    container: ghcr.io/nodlecode/devcontainer-rollup
+    container:
+      image: ghcr.io/nodlecode/devcontainer-rollup
+      options: --user root
 
     steps:
       - name: Checkout repository
