@@ -17,15 +17,15 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | zsh -s -- -y && 
 
 ENV PATH="${PATH}:/home/vscode/.cargo/bin:/home/vscode/.yarn/bin:/home/vscode/.foundry/bin:/home/vscode/.nvm/versions/node/v${NODE_VERSION}/bin"
 
+ENV SOLC_VERSION=v0.8.23+commit.f704f362
+RUN curl https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-${SOLC_VERSION} -o /usr/local/bin/solc && \
+    chmod +x /usr/local/bin/solc
+
 RUN sudo apt update && \
-    sudo apt install -y software-properties-common && \
-    sudo add-apt-repository ppa:ethereum/ethereum && \
-    sudo apt update && \
     sudo apt install --yes \
     pkg-config build-essential cmake \
     clang libssl-dev libclang-dev \
-    docker-compose software-properties-common \
-    solc && \
+    docker-compose software-properties-common && \
     sudo rm -rf /var/lib/apt/lists/* && \
     sudo apt clean
 
