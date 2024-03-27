@@ -25,7 +25,14 @@ jobs:
           submodules: recursive
       - name: Lint
         run: forge fmt --check
-      - name: "[Hack] make sure zksolc will be available"
-        run: echo "$HOME/.zksync" >> $GITHUB_PATH
       - name: Run tests
         run: forge test
+      - name: Debug 1
+        if: always()
+        run: ls -alh /github/home/.zksync
+      - name: Debug 2
+        if: always()
+        run: ls -alh $HOME/.zksync
+      - name: Debug 3
+        if: always()
+        run: echo $HOME
