@@ -20,37 +20,32 @@ contract Erc20Paymaster is BasePaymaster {
     error TokenNotAllowed();
     error FeeTooHigh(uint256 feePrice, uint256 requiredETH);
 
-    constructor(
-        address admin,
-        address priceOracle,
-        IERC20 erc20,
-        uint256 initialFeePrice
-    ) BasePaymaster(admin, admin) {
+    constructor(address admin, address priceOracle, IERC20 erc20, uint256 initialFeePrice)
+        BasePaymaster(admin, admin)
+    {
         _grantRole(PRICE_ORACLE_ROLE, priceOracle);
         allowedToken = erc20;
         feePrice = initialFeePrice;
     }
 
-    function updateFeePrice(
-        uint256 newFeePrice
-    ) public onlyRole(PRICE_ORACLE_ROLE) {
+    function updateFeePrice(uint256 newFeePrice) public onlyRole(PRICE_ORACLE_ROLE) {
         feePrice = newFeePrice;
     }
 
-    function _validateAndPayGeneralFlow(
-        address /* from */,
-        address /* to */,
-        uint256 /* requiredETH */
-    ) internal pure override {
+    function _validateAndPayGeneralFlow(address, /* from */ address, /* to */ uint256 /* requiredETH */ )
+        internal
+        pure
+        override
+    {
         revert PaymasterFlowNotSupported();
     }
 
     function _validateAndPayApprovalBasedFlow(
         address userAddress,
-        address /* destAddress */,
+        address, /* destAddress */
         address token,
-        uint256 /* amount */,
-        bytes memory /* data */,
+        uint256, /* amount */
+        bytes memory, /* data */
         uint256 requiredETH
     ) internal override {
         if (token != address(allowedToken)) {
@@ -59,10 +54,7 @@ contract Erc20Paymaster is BasePaymaster {
 
         address thisAddress = address(this);
 
-        uint256 providedAllowance = IERC20(token).allowance(
-            userAddress,
-            thisAddress
-        );
+        uint256 providedAllowance = IERC20(token).allowance(userAddress, thisAddress);
 
         (bool succeeded, uint256 requiredToken) = requiredETH.tryMul(feePrice);
         if (!succeeded) {
@@ -76,10 +68,7 @@ contract Erc20Paymaster is BasePaymaster {
         allowedToken.safeTransferFrom(userAddress, thisAddress, requiredToken);
     }
 
-    function withdrawTokens(
-        address to,
-        uint256 amount
-    ) public onlyRole(WITHDRAWER_ROLE) {
+    function withdrawTokens(address to, uint256 amount) public onlyRole(WITHDRAWER_ROLE) {
         allowedToken.safeTransfer(to, amount);
     }
 }

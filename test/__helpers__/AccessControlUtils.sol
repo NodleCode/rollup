@@ -6,17 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {IAccessControl} from "openzeppelin-contracts/contracts/access/IAccessControl.sol";
 
 library AccessControlUtils {
-    function expectRevert_AccessControlUnauthorizedAccount(
-        Vm vm,
-        address user,
-        bytes32 role
-    ) internal {
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                user,
-                role
-            )
-        );
+    function expectRevert_AccessControlUnauthorizedAccount(Vm vm, address user, bytes32 role) internal {
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user, role));
     }
 }

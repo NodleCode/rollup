@@ -9,25 +9,11 @@ import {BasePaymaster} from "../../src/paymasters/BasePaymaster.sol";
 import {WhitelistPaymaster} from "../../src/paymasters/WhitelistPaymaster.sol";
 
 contract MockWhitelistPaymaster is WhitelistPaymaster {
-    constructor(
-        address admin,
-        address withdrawer,
-        address whitelistAdmin,
-        address[] memory whitelistedContracts
-    )
-        WhitelistPaymaster(
-            admin,
-            withdrawer,
-            whitelistAdmin,
-            whitelistedContracts
-        )
+    constructor(address admin, address withdrawer, address whitelistAdmin, address[] memory whitelistedContracts)
+        WhitelistPaymaster(admin, withdrawer, whitelistAdmin, whitelistedContracts)
     {}
 
-    function mock_validateAndPayGeneralFlow(
-        address from,
-        address to,
-        uint256 requiredETH
-    ) public view {
+    function mock_validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) public view {
         _validateAndPayGeneralFlow(from, to, requiredETH);
     }
 
@@ -39,14 +25,7 @@ contract MockWhitelistPaymaster is WhitelistPaymaster {
         bytes memory data,
         uint256 requiredETH
     ) public pure {
-        _validateAndPayApprovalBasedFlow(
-            from,
-            to,
-            token,
-            amount,
-            data,
-            requiredETH
-        );
+        _validateAndPayApprovalBasedFlow(from, to, token, amount, data, requiredETH);
     }
 }
 
@@ -63,12 +42,7 @@ contract WhitelistPaymasterTest is Test {
     address[] internal whitelistTargets;
 
     function setUp() public {
-        paymaster = new MockWhitelistPaymaster(
-            alice,
-            bob,
-            charlie,
-            new address[](0)
-        );
+        paymaster = new MockWhitelistPaymaster(alice, bob, charlie, new address[](0));
 
         whitelistTargets = new address[](1);
         whitelistTargets[0] = dave;
@@ -104,28 +78,16 @@ contract WhitelistPaymasterTest is Test {
     function test_nonWhitelistAdminCannotUpdateWhitelists() public {
         vm.startPrank(alice);
 
-        vm.expectRevert_AccessControlUnauthorizedAccount(
-            alice,
-            paymaster.WHITELIST_ADMIN_ROLE()
-        );
+        vm.expectRevert_AccessControlUnauthorizedAccount(alice, paymaster.WHITELIST_ADMIN_ROLE());
         paymaster.addWhitelistedUsers(whitelistTargets);
 
-        vm.expectRevert_AccessControlUnauthorizedAccount(
-            alice,
-            paymaster.WHITELIST_ADMIN_ROLE()
-        );
+        vm.expectRevert_AccessControlUnauthorizedAccount(alice, paymaster.WHITELIST_ADMIN_ROLE());
         paymaster.addWhitelistedContracts(whitelistTargets);
 
-        vm.expectRevert_AccessControlUnauthorizedAccount(
-            alice,
-            paymaster.WHITELIST_ADMIN_ROLE()
-        );
+        vm.expectRevert_AccessControlUnauthorizedAccount(alice, paymaster.WHITELIST_ADMIN_ROLE());
         paymaster.removeWhitelistedUsers(whitelistTargets);
 
-        vm.expectRevert_AccessControlUnauthorizedAccount(
-            alice,
-            paymaster.WHITELIST_ADMIN_ROLE()
-        );
+        vm.expectRevert_AccessControlUnauthorizedAccount(alice, paymaster.WHITELIST_ADMIN_ROLE());
         paymaster.removeWhitelistedContracts(whitelistTargets);
 
         vm.stopPrank();
@@ -133,14 +95,7 @@ contract WhitelistPaymasterTest is Test {
 
     function test_doesNotSupportApprovalBasedFlow() public {
         vm.expectRevert(BasePaymaster.PaymasterFlowNotSupported.selector);
-        paymaster.mock_validateAndPayApprovalBasedFlow(
-            alice,
-            bob,
-            bob,
-            1,
-            "0x",
-            0
-        );
+        paymaster.mock_validateAndPayApprovalBasedFlow(alice, bob, bob, 1, "0x", 0);
     }
 
     function test_allowsGeneralFlowOnlyIfWhitelistingPasses() public {

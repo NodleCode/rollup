@@ -8,28 +8,17 @@ import {BasePaymaster} from "../../src/paymasters/BasePaymaster.sol";
 contract MockPaymaster is BasePaymaster {
     event MockPaymasterCalled();
 
-    constructor(
-        address admin,
-        address withdrawer
-    ) BasePaymaster(admin, withdrawer) {}
+    constructor(address admin, address withdrawer) BasePaymaster(admin, withdrawer) {}
 
-    function _validateAndPayGeneralFlow(
-        address,
-        address,
-        uint256
-    ) internal override {
+    function _validateAndPayGeneralFlow(address, address, uint256) internal override {
         // this is a mock, do nothing
         emit MockPaymasterCalled();
     }
 
-    function _validateAndPayApprovalBasedFlow(
-        address,
-        address,
-        address,
-        uint256,
-        bytes memory,
-        uint256
-    ) internal override {
+    function _validateAndPayApprovalBasedFlow(address, address, address, uint256, bytes memory, uint256)
+        internal
+        override
+    {
         // this is a mock, do nothing
         emit MockPaymasterCalled();
     }

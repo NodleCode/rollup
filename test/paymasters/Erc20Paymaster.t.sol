@@ -11,18 +11,11 @@ import {BasePaymaster} from "../../src/paymasters/BasePaymaster.sol";
 import {Erc20Paymaster} from "../../src/paymasters/Erc20Paymaster.sol";
 
 contract MockErc20Paymaster is Erc20Paymaster {
-    constructor(
-        address admin,
-        address priceOracle,
-        IERC20 erc20,
-        uint256 initialFeePrice
-    ) Erc20Paymaster(admin, priceOracle, erc20, initialFeePrice) {}
+    constructor(address admin, address priceOracle, IERC20 erc20, uint256 initialFeePrice)
+        Erc20Paymaster(admin, priceOracle, erc20, initialFeePrice)
+    {}
 
-    function mock_validateAndPayGeneralFlow(
-        address from,
-        address to,
-        uint256 requiredETH
-    ) public pure {
+    function mock_validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) public pure {
         _validateAndPayGeneralFlow(from, to, requiredETH);
     }
 
@@ -34,14 +27,7 @@ contract MockErc20Paymaster is Erc20Paymaster {
         bytes memory data,
         uint256 requiredETH
     ) public {
-        _validateAndPayApprovalBasedFlow(
-            from,
-            to,
-            token,
-            amount,
-            data,
-            requiredETH
-        );
+        _validateAndPayApprovalBasedFlow(from, to, token, amount, data, requiredETH);
     }
 }
 
@@ -57,12 +43,7 @@ contract Erc20PaymasterTest is Test {
 
     function setUp() public {
         token = deployMockERC20("Name", "Symbol", 18);
-        paymaster = new MockErc20Paymaster(
-            alice,
-            bob,
-            IERC20(address(token)),
-            1
-        );
+        paymaster = new MockErc20Paymaster(alice, bob, IERC20(address(token)), 1);
     }
 
     function test_defaultACLs() public view {
@@ -80,10 +61,7 @@ contract Erc20PaymasterTest is Test {
     }
 
     function test_cannotUpdateFeePriceIfNotOracle() public {
-        vm.expectRevert_AccessControlUnauthorizedAccount(
-            charlie,
-            paymaster.PRICE_ORACLE_ROLE()
-        );
+        vm.expectRevert_AccessControlUnauthorizedAccount(charlie, paymaster.PRICE_ORACLE_ROLE());
         vm.prank(charlie);
         paymaster.updateFeePrice(2);
     }
@@ -95,53 +73,20 @@ contract Erc20PaymasterTest is Test {
 
     function test_refusesNonAllowedToken() public {
         vm.expectRevert(Erc20Paymaster.TokenNotAllowed.selector);
-        paymaster.mock_validateAndPayApprovalBasedFlow(
-            alice,
-            bob,
-            vm.addr(4),
-            1,
-            "",
-            1
-        );
+        paymaster.mock_validateAndPayApprovalBasedFlow(alice, bob, vm.addr(4), 1, "", 1);
     }
 
     function test_refusesPotentialOverflows() public {
         vm.prank(bob);
         paymaster.updateFeePrice(2);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Erc20Paymaster.FeeTooHigh.selector,
-                2,
-                type(uint256).max
-            )
-        );
-        paymaster.mock_validateAndPayApprovalBasedFlow(
-            alice,
-            bob,
-            address(token),
-            1,
-            "",
-            type(uint256).max
-        );
+        vm.expectRevert(abi.encodeWithSelector(Erc20Paymaster.FeeTooHigh.selector, 2, type(uint256).max));
+        paymaster.mock_validateAndPayApprovalBasedFlow(alice, bob, address(token), 1, "", type(uint256).max);
     }
 
     function test_refusesTooLowAllowances() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Erc20Paymaster.AllowanceNotEnough.selector,
-                0,
-                1
-            )
-        );
-        paymaster.mock_validateAndPayApprovalBasedFlow(
-            alice,
-            bob,
-            address(token),
-            1,
-            "",
-            1
-        );
+        vm.expectRevert(abi.encodeWithSelector(Erc20Paymaster.AllowanceNotEnough.selector, 0, 1));
+        paymaster.mock_validateAndPayApprovalBasedFlow(alice, bob, address(token), 1, "", 1);
     }
 
     function test_refusesFailedTransfer() public {
@@ -152,14 +97,7 @@ contract Erc20PaymasterTest is Test {
         // MockERC20 reverts on subtraction underflow,
         // if the contract doesn't SafeERC20 will revert anyways
         vm.expectRevert();
-        paymaster.mock_validateAndPayApprovalBasedFlow(
-            alice,
-            bob,
-            address(token),
-            1,
-            "",
-            1
-        );
+        paymaster.mock_validateAndPayApprovalBasedFlow(alice, bob, address(token), 1, "", 1);
     }
 
     function test_approvalFlow() public {
@@ -167,14 +105,7 @@ contract Erc20PaymasterTest is Test {
         vm.prank(alice);
         token.approve(address(paymaster), 1);
 
-        paymaster.mock_validateAndPayApprovalBasedFlow(
-            alice,
-            bob,
-            address(token),
-            1,
-            "",
-            1
-        );
+        paymaster.mock_validateAndPayApprovalBasedFlow(alice, bob, address(token), 1, "", 1);
 
         assertEq(token.balanceOf(alice), 0);
         assertEq(token.balanceOf(address(paymaster)), 1);
@@ -191,10 +122,7 @@ contract Erc20PaymasterTest is Test {
     }
 
     function test_withdrawERC20FailsIfNotAdmin() public {
-        vm.expectRevert_AccessControlUnauthorizedAccount(
-            charlie,
-            paymaster.WITHDRAWER_ROLE()
-        );
+        vm.expectRevert_AccessControlUnauthorizedAccount(charlie, paymaster.WITHDRAWER_ROLE());
         vm.prank(charlie);
         paymaster.withdrawTokens(alice, 1);
     }

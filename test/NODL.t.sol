@@ -57,13 +57,7 @@ contract NODLTest is Test {
 
         assertEq(nodl.balanceOf(bob), nodl.cap());
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ERC20Capped.ERC20ExceededCap.selector,
-                nodl.cap() + 1,
-                nodl.cap()
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(ERC20Capped.ERC20ExceededCap.selector, nodl.cap() + 1, nodl.cap()));
         nodl.mint(bob, 1);
 
         vm.stopPrank();
