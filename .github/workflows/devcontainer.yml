@@ -41,5 +41,5 @@ jobs:
         with:
           imageName: ghcr.io/nodlecode/devcontainer-rollup
           cacheFrom: ghcr.io/nodlecode/devcontainer-rollup
-          push: ${{ steps.prepare.outputs.push }}
+          push: always
           platform: linux/amd64,linux/arm64
