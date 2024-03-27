@@ -29,10 +29,7 @@ jobs:
         run: forge test
       - name: Debug 1
         if: always()
-        run: ls -alh /github/home/.zksync
+        run: whereis solc
       - name: Debug 2
         if: always()
-        run: ls -alh $HOME/.zksync
-      - name: Debug 3
-        if: always()
-        run: echo $HOME
+        run: ls -alh $HOME/.svm
