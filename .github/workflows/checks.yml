@@ -27,9 +27,3 @@ jobs:
         run: forge fmt --check
       - name: Run tests
         run: forge test
-      - name: Debug 1
-        if: always()
-        run: whereis solc
-      - name: Debug 2
-        if: always()
-        run: ls -alh $HOME/.svm
