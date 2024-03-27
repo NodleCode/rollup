@@ -17,7 +17,14 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | zsh -s -- -y && 
 
 ENV PATH="${PATH}:/home/vscode/.cargo/bin:/home/vscode/.yarn/bin:/home/vscode/.foundry/bin:/home/vscode/.nvm/versions/node/v${NODE_VERSION}/bin"
 
-ADD ./install-tools.sh /tmp/install-tools.sh
-RUN /tmp/install-tools.sh
+RUN apt install --yes pkg-config build-essential cmake clang libssl-dev libclang-dev docker-compose software-properties-common
+
+RUN yarn global add zksync-cli && yarn global add @graphprotocol/graph-cli
+
+RUN git clone https://github.com/matter-labs/foundry-zksync.git /tmp/foundry-zksync && \
+    cd /tmp/foundry-zksync && \
+    cargo install --path ./crates/forge --profile local --force --locked && \
+    cargo install --path ./crates/cast --profile local --force --locked && \
+    rm -rf /tmp/foundry-zksync
 
 ENTRYPOINT [ "zsh" ]
