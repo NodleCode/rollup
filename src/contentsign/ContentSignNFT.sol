@@ -25,9 +25,9 @@ contract ContentSignNFT is ERC721, ERC721URIStorage {
     constructor(
         string memory name,
         string memory symbol,
-        address payable whitelistAddress
+        WhitelistPaymaster whitelist
     ) ERC721(name, symbol) {
-        whitelistPaymaster = WhitelistPaymaster(whitelistAddress);
+        whitelistPaymaster = whitelist;
     }
 
     function safeMint(address to, string memory uri) public onlyWhitelised {
