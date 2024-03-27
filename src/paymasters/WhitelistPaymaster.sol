@@ -67,7 +67,7 @@ contract WhitelistPaymaster is BasePaymaster {
         address from,
         address to,
         uint256 /* requiredETH */
-    ) internal override {
+    ) internal view override {
         if (!isWhitelistedContract[to]) {
             revert DestIsNotWhitelisted();
         }
