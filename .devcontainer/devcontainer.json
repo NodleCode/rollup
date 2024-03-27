@@ -3,7 +3,9 @@
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".",
-    "cacheFrom": "ghcr.io/nodlecode/devcontainer-rollup"
+    "cacheFrom": [
+      "type=registry,ref=ghcr.io/nodlecode/devcontainer-rollup:latest"
+    ]
   },
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
