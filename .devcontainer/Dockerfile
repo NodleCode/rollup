@@ -17,13 +17,17 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | zsh -s -- -y && 
 
 ENV PATH="${PATH}:/home/vscode/.cargo/bin:/home/vscode/.yarn/bin:/home/vscode/.foundry/bin:/home/vscode/.nvm/versions/node/v${NODE_VERSION}/bin"
 
-RUN sudo add-apt-repository ppa:ethereum/ethereum && \
+RUN sudo apt update && \
+    sudo apt install -y software-properties-common && \
+    sudo add-apt-repository ppa:ethereum/ethereum && \
     sudo apt update && \
     sudo apt install --yes \
     pkg-config build-essential cmake \
     clang libssl-dev libclang-dev \
     docker-compose software-properties-common \
-    solc
+    solc && \
+    rm -rf /var/lib/apt/lists/* && \
+    sudo apt clean
 
 RUN yarn global add zksync-cli && yarn global add @graphprotocol/graph-cli
 
