@@ -26,7 +26,7 @@ RUN sudo apt update && \
     clang libssl-dev libclang-dev \
     docker-compose software-properties-common \
     solc && \
-    rm -rf /var/lib/apt/lists/* && \
+    sudo rm -rf /var/lib/apt/lists/* && \
     sudo apt clean
 
 RUN yarn global add zksync-cli && yarn global add @graphprotocol/graph-cli
