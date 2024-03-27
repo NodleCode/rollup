@@ -17,7 +17,11 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | zsh -s -- -y && 
 
 ENV PATH="${PATH}:/home/vscode/.cargo/bin:/home/vscode/.yarn/bin:/home/vscode/.foundry/bin:/home/vscode/.nvm/versions/node/v${NODE_VERSION}/bin"
 
-RUN apt install --yes pkg-config build-essential cmake clang libssl-dev libclang-dev docker-compose software-properties-common
+RUN sudo apt update
+RUN sudo apt install --yes \
+    pkg-config build-essential cmake \
+    clang libssl-dev libclang-dev \
+    docker-compose software-properties-common
 
 RUN yarn global add zksync-cli && yarn global add @graphprotocol/graph-cli
 
