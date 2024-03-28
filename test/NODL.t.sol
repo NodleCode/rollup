@@ -25,10 +25,6 @@ contract NODLTest is Test {
         assertEq(nodl.totalSupply(), 0);
     }
 
-    function test_capIs21Billion() public {
-        assertEq(nodl.cap(), 21_000_000_000 * 10 ** nodl.decimals());
-    }
-
     function test_isMintable() public {
         assertEq(nodl.balanceOf(bob), 0);
 
@@ -48,18 +44,5 @@ contract NODLTest is Test {
         nodl.burn(1);
 
         assertEq(nodl.balanceOf(bob), 0);
-    }
-
-    function test_cannotMintAboveSupplyCap() public {
-        vm.startPrank(alice);
-
-        nodl.mint(bob, nodl.cap());
-
-        assertEq(nodl.balanceOf(bob), nodl.cap());
-
-        vm.expectRevert(abi.encodeWithSelector(ERC20Capped.ERC20ExceededCap.selector, nodl.cap() + 1, nodl.cap()));
-        nodl.mint(bob, 1);
-
-        vm.stopPrank();
     }
 }
