@@ -40,12 +40,12 @@ $ forge fmt
 ### Deploying ContentSign contracts
 
 Please define the following environment variables:
-- `N_SUPER_ADMIN`: address of the super admin on the paymaster whitelist contract.
 - `N_WHITELIST_ADMIN`: address of the whitelist admin on the paymaster whitelist contract (typically the onboard or sponsorship API address).
 - `N_WITHDRAWER`: address of the account allowed to withdraw ETH from the paymaster contract.
+- deployer address will be set as super admin.
 
 ```shell
-$ forge script script/DeployContentSign.s.sol
+$ forge script script/DeployContentSign.s.sol --zksync
 [⠒] Compiling...
 [⠆] Compiling 1 files with 0.8.20
 [⠰] Solc 0.8.20 finished in 8.47s

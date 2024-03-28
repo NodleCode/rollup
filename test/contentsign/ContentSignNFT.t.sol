@@ -14,8 +14,8 @@ contract ContentSignNFTTest is Test {
     address internal bob = vm.addr(2);
 
     function setUp() public {
-        address[] memory admins = new address[](0);
-        paymaster = new WhitelistPaymaster(alice, alice, alice, admins);
+        vm.prank(alice);
+        paymaster = new WhitelistPaymaster(alice);
         nft = new ContentSignNFT("Name", "Symbol", paymaster);
 
         address[] memory contracts = new address[](1);

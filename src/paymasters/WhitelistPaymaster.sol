@@ -14,11 +14,8 @@ contract WhitelistPaymaster is BasePaymaster {
     error UserIsNotWhitelisted();
     error DestIsNotWhitelisted();
 
-    constructor(address admin, address withdrawer, address whitelistAdmin, address[] memory whitelistedContracts)
-        BasePaymaster(admin, withdrawer)
-    {
-        _grantRole(WHITELIST_ADMIN_ROLE, whitelistAdmin);
-        _setContractWhitelist(whitelistedContracts);
+    constructor(address withdrawer) BasePaymaster(msg.sender, withdrawer) {
+        _grantRole(WHITELIST_ADMIN_ROLE, msg.sender);
     }
 
     function addWhitelistedContracts(address[] calldata whitelistedContracts) external onlyRole(WHITELIST_ADMIN_ROLE) {
