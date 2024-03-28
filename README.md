@@ -18,7 +18,7 @@
 ## Build
 
 ```shell
-$ forge build
+$ forge build --zksync --zk-optimizer
 ```
 
 ## Test
@@ -38,6 +38,8 @@ $ forge fmt
 > Please see scripts in `./scripts` and refer to the [forge documentation](https://book.getfoundry.sh/reference/forge/forge-script) for additional arguments.
 
 ### Deploying ContentSign contracts
+
+> **Note**: this is among the least supported, most work in progress feature of the forge zksync fork. Expect these instructions to be broken or outdated.
 
 Please define the following environment variables:
 - `N_WHITELIST_ADMIN`: address of the whitelist admin on the paymaster whitelist contract (typically the onboard or sponsorship API address).
