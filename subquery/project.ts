@@ -40,7 +40,7 @@ const project: EthereumProject = {
         [
           "erc721",
           {
-            file: "../../node_modules/@openzeppelin/contracts/build/contracts/IERC721Metadata.json",
+            file: "./node_modules/@openzeppelin/contracts/build/contracts/IERC721Metadata.json",
           },
         ],
       ]),
@@ -88,7 +88,7 @@ const project: EthereumProject = {
         [
           "AccessControl",
           {
-            file: "../../node_modules/@openzeppelin/contracts/build/contracts/IAccessControl.json",
+            file: "./node_modules/@openzeppelin/contracts/build/contracts/IAccessControl.json",
           },
         ],
       ]),

@@ -1,4 +1,4 @@
-import { Approval, Transfer } from "../types";
+/* import { Approval, Transfer } from "../types";
 import {
   ApproveTransaction,
   TransferLog,
@@ -36,3 +36,4 @@ export async function handleTransaction(tx: ApproveTransaction): Promise<void> {
 
   await approvalRecord.save();
 }
+ */

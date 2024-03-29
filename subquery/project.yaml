@@ -1,0 +1,75 @@
+# // Auto-generated , DO NOT EDIT
+specVersion: 1.0.0
+version: 0.0.1
+name: Nodle-sksync-subquery
+description: __
+runner:
+  node:
+    name: '@subql/node-ethereum'
+    version: '>=3.0.0'
+  query:
+    name: '@subql/query'
+    version: '*'
+schema:
+  file: ./schema.graphql
+network:
+  chainId: '270'
+  endpoint:
+    - https://rpc-iu435q.nodleprotocol.io
+dataSources:
+  - kind: ethereum/Runtime
+    startBlock: 0
+    options:
+      abi: erc721
+      address: '0xf98633DD7a7AF38A3dA2C7fc34F1a7A3A14A26b9'
+    assets:
+      erc721:
+        file: >-
+          ./node_modules/@openzeppelin/contracts/build/contracts/IERC721Metadata.json
+    mapping:
+      file: ./dist/index.js
+      handlers:
+        - kind: ethereum/LogHandler
+          handler: handleApproval
+          filter:
+            topics:
+              - Approval(indexed address,indexed address,indexed uint256)
+        - kind: ethereum/LogHandler
+          handler: handleApprovalForAll
+          filter:
+            topics:
+              - ApprovalForAll(indexed address,indexed address,bool)
+        - kind: ethereum/LogHandler
+          handler: handleTransfer
+          filter:
+            topics:
+              - Transfer(indexed address,indexed address,indexed uint256)
+  - kind: ethereum/Runtime
+    startBlock: 0
+    options:
+      abi: AccessControl
+      address: '0x6BEB7D5416b1A2bb8619e988785676c0aEdde7b8'
+    assets:
+      AccessControl:
+        file: >-
+          ./node_modules/@openzeppelin/contracts/build/contracts/IAccessControl.json
+    mapping:
+      file: ./dist/index.js
+      handlers:
+        - kind: ethereum/LogHandler
+          handler: handleRoleAdminChanged
+          filter:
+            topics:
+              - >-
+                RoleAdminChanged(indexed bytes32,indexed bytes32,indexed
+                bytes32)
+        - kind: ethereum/LogHandler
+          handler: handleRoleGranted
+          filter:
+            topics:
+              - RoleGranted(indexed bytes32,indexed address,indexed address)
+        - kind: ethereum/LogHandler
+          handler: handleRoleRevoked
+          filter:
+            topics:
+              - RoleRevoked(indexed bytes32,indexed address,indexed address)

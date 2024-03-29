@@ -1,2 +1,3 @@
 //Exports all handler functions
-export * from "./mappings/mappingHandlers";
+export * from "./mappings/erc721";
+export * from "./mappings/accesscontrol";

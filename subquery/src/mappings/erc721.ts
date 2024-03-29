@@ -1,32 +1,21 @@
-import { ApprovalLog, TransferLog } from "../types/abi-interfaces/Erc20Abi";
+import { fetchAccount } from "../erc721/erc721";
+import { ApprovalLog, TransferLog } from "../types/abi-interfaces/IERC721Metadata";
 
 
 export function handleTransfer(event: TransferLog): Promise<void>  {
-  
+  logger.info('Transfer event:', event)
+
+  return Promise.resolve()
 }
 
 export function handleApproval(event: ApprovalLog): Promise<void>  {
+  logger.info("Transfer event:", event);
+  // const account = fetchAccount();
+
+  return Promise.resolve()
 }
 
 export function handleApprovalForAll(event: any): Promise<void>  {
-  let contract = fetchERC721(event.address);
-  if (contract != null) {
-    let owner = fetchAccount(event.params.owner);
-    let operator = fetchAccount(event.params.operator);
-    let delegation = fetchERC721Operator(contract, owner, operator);
-
-    delegation.approved = event.params.approved;
-
-    delegation.save();
-
-    // 	let ev = new ApprovalForAll(events.id(event))
-    // 	ev.emitter     = contract.id
-    // 	ev.transaction = transactions.log(event).id
-    // 	ev.timestamp   = event.block.timestamp
-    // 	ev.delegation  = delegation.id
-    // 	ev.owner       = owner.id
-    // 	ev.operator    = operator.id
-    // 	ev.approved    = event.params.approved
-    // 	ev.save()
-  }
+  logger.info("Transfer event:", event);
+  return Promise.resolve();
 }

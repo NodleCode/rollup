@@ -5,5 +5,13 @@ export * as factories from "./factories";
 
 export { Erc20Abi } from "./Erc20Abi";
 
+export { IAccessControl } from "./IAccessControl";
+
+export { IERC721Metadata } from "./IERC721Metadata";
+
 
 export { Erc20Abi__factory } from "./factories/Erc20Abi__factory";
+
+export { IAccessControl__factory } from "./factories/IAccessControl__factory";
+
+export { IERC721Metadata__factory } from "./factories/IERC721Metadata__factory";

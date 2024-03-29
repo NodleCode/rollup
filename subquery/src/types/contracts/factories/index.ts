@@ -4,3 +4,7 @@
 
 
 export { Erc20Abi__factory } from "./Erc20Abi__factory";
+
+export { IAccessControl__factory } from "./IAccessControl__factory";
+
+export { IERC721Metadata__factory } from "./IERC721Metadata__factory";
