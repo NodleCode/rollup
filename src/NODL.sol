@@ -14,16 +14,6 @@ contract NODL is ERC20Burnable, AccessControl {
         _grantRole(MINTER_ROLE, msg.sender);
     }
 
-    /**
-     * @dev Returns the number of decimals used to get NODL's user representation.
-     * NOTE: This information is only used for _display_ purposes: it in
-     * no way affects any of the arithmetic of the contract, including
-     * {IERC20-balanceOf} and {IERC20-transfer}.
-     */
-    function decimals() public view virtual override returns (uint8) {
-        return 18;
-    }
-
     function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
         _mint(to, amount);
     }
