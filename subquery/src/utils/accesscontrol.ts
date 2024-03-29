@@ -1,6 +1,8 @@
-import { constants } from "@amxx/graphprotocol-utils";
 import { AccessControl, AccessControlRole, Role } from "../types";
 import { fetchAccount } from "./utils";
+
+const BYTES32_ZERO =
+  "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 export async function fetchRole(id: string): Promise<Role> {
   let role = await Role.get(id);
@@ -13,7 +15,9 @@ export async function fetchRole(id: string): Promise<Role> {
   return role;
 }
 
-export async function fetchAccessControl(address: string): Promise<AccessControl> {
+export async function fetchAccessControl(
+  address: string
+): Promise<AccessControl> {
   let contract = await AccessControl.get(address);
 
   if (!contract) {
@@ -37,12 +41,16 @@ export async function fetchAccessControlRole(
 
   if (acr == null) {
     const admin =
-      role.id == constants.BYTES32_ZERO.toString()
+      role.id == BYTES32_ZERO.toString()
         ? id
-        : (await fetchAccessControlRole(contract, await fetchRole(constants.BYTES32_ZERO.toString())))
-            .id;
+        : (
+            await fetchAccessControlRole(
+              contract,
+              await fetchRole(BYTES32_ZERO.toString())
+            )
+          ).id;
     acr = new AccessControlRole(id, id, role.id, admin);
-    
+
     acr.save();
   }
 

@@ -13,6 +13,9 @@ const project: EthereumProject = {
     node: {
       name: "@subql/node-ethereum",
       version: ">=3.0.0",
+      options: {
+        unsafe: true,
+      }
     },
     query: {
       name: "@subql/query",

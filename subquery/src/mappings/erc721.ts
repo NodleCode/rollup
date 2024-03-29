@@ -55,8 +55,6 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
   assert(tx.args, "No tx.args");
   assert(tx.logs, "No tx.logs");
 
-  logger.info("handleSafeMint: " + JSON.stringify(tx));
-
   // Call to the contract
   const contract = await fetchContract(tx.to);
 
@@ -72,7 +70,7 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
   const owner = await fetchAccount(await tx.args[0]);
   const uri = await tx.args[1];
 
-  const tokenId = getApprovalLog(tx.logs, owner.id)![2];
+  const tokenId = getApprovalLog(tx.logs, owner.id)![2].toBigInt();
 
   const token = await fetchToken(
     `${contract.id}/${tokenId}`,

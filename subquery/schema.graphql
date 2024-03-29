@@ -6,7 +6,7 @@ type Event @entity {
 }
 
 type Account @entity {
-  id: Bytes!
+  id: ID!
   asERC721: ERC721Contract
   ERC721tokens: [ERC721Token!]! @derivedFrom(field: "owner")
   ERC721operatorOwner: [ERC721Operator!]! @derivedFrom(field: "owner")
@@ -22,7 +22,7 @@ type Account @entity {
   events: [Event!]! @derivedFrom(field: "emitter")
 }
 type ERC721Contract @entity {
-  id: Bytes!
+  id: ID!
   asAccount: Account!
   supportsMetadata: Boolean
   name: String
@@ -42,7 +42,7 @@ type ERC721Token @entity {
   content: String
   channel: String
   name: String
-  transactionHash: Bytes
+  transactionHash: String
   description: String
   transfers: [ERC721Transfer!]! @derivedFrom(field: "token")
 }
@@ -64,12 +64,12 @@ type ERC721Transfer implements Event @entity {
   to: Account!
 }
 type AccessControl @entity {
-  id: Bytes!
+  id: ID!
   asAccount: Account!
   roles: [AccessControlRole!]! @derivedFrom(field: "contract")
 }
 type Role @entity {
-  id: Bytes!
+  id: ID!
   roleOf: [AccessControlRole!]! @derivedFrom(field: "role")
 }
 type AccessControlRole @entity {
