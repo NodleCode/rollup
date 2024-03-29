@@ -21,7 +21,7 @@ contract NODL is ERC20Burnable, AccessControl {
      * {IERC20-balanceOf} and {IERC20-transfer}.
      */
     function decimals() public view virtual override returns (uint8) {
-        return 11;
+        return 18;
     }
 
     function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {
