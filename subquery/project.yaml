@@ -18,22 +18,29 @@ network:
     - https://rpc-iu435q.nodleprotocol.io
 dataSources:
   - kind: ethereum/Runtime
-    startBlock: 0
+    startBlock: 1
     options:
       abi: erc721
-      address: '0xf98633DD7a7AF38A3dA2C7fc34F1a7A3A14A26b9'
+      address: '0xf98633dd7a7af38a3da2c7fc34f1a7a3a14a26b9'
     assets:
       erc721:
-        file: >-
-          ./node_modules/@openzeppelin/contracts/build/contracts/IERC721Metadata.json
+        file: ./abis/erc721.abi.json
     mapping:
       file: ./dist/index.js
       handlers:
+        - kind: ethereum/TransactionHandler
+          handler: handleApproval
+          filter:
+            function: approve(address to, uint256 tokenId)
+        - kind: ethereum/TransactionHandler
+          handler: handleApproval
+          filter:
+            function: safeMint(address,string)
         - kind: ethereum/LogHandler
           handler: handleApproval
           filter:
             topics:
-              - Approval(indexed address,indexed address,indexed uint256)
+              - Approval(address owner, address approved, uint256 tokenId)
         - kind: ethereum/LogHandler
           handler: handleApprovalForAll
           filter:
@@ -45,10 +52,10 @@ dataSources:
             topics:
               - Transfer(indexed address,indexed address,indexed uint256)
   - kind: ethereum/Runtime
-    startBlock: 0
+    startBlock: 1
     options:
       abi: AccessControl
-      address: '0x6BEB7D5416b1A2bb8619e988785676c0aEdde7b8'
+      address: '0x27d45764490b8C4135d1EC70130163791BDE6db5'
     assets:
       AccessControl:
         file: >-
@@ -67,7 +74,7 @@ dataSources:
           handler: handleRoleGranted
           filter:
             topics:
-              - RoleGranted(indexed bytes32,indexed address,indexed address)
+              - RoleGranted(bytes32,address,address)
         - kind: ethereum/LogHandler
           handler: handleRoleRevoked
           filter:

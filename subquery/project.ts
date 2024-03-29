@@ -29,18 +29,18 @@ const project: EthereumProject = {
   dataSources: [
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 0, // This is the block that the contract was deployed on
+      startBlock: 1, // This is the block that the contract was deployed on
       options: {
         // Must be a key of assets
         abi: "erc721",
         // This is the contract address for wrapped ether https://explorer.zksync.io/address/0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4
-        address: "0xf98633DD7a7AF38A3dA2C7fc34F1a7A3A14A26b9",
+        address: "0xf98633dd7a7af38a3da2c7fc34f1a7a3a14a26b9",
       },
       assets: new Map([
         [
           "erc721",
           {
-            file: "./node_modules/@openzeppelin/contracts/build/contracts/IERC721Metadata.json",
+            file: "./abis/erc721.abi.json",
           },
         ],
       ]),
@@ -48,11 +48,31 @@ const project: EthereumProject = {
         file: "./dist/index.js",
         handlers: [
           {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleApproval",
+            filter: {
+              /**
+               * The function can either be the function fragment or signature
+               * function: '0x095ea7b3'
+               * function: '0x7ff36ab500000000000000000000000000000000000000000000000000000000'
+               */
+              function: "approve(address to, uint256 tokenId)",
+            },
+          },
+          //safeMint(address,string)
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleApproval",
+            filter: {
+              function: "safeMint(address,string)",
+            },
+          },
+          {
             kind: EthereumHandlerKind.Event,
             handler: "handleApproval",
             filter: {
               topics: [
-                "Approval(indexed address,indexed address,indexed uint256)",
+                "Approval(address owner, address approved, uint256 tokenId)",
               ],
             },
           },
@@ -77,12 +97,12 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 0, // This is the block that the contract was deployed on
+      startBlock: 1, // This is the block that the contract was deployed on
       options: {
         // Must be a key of assets
         abi: "AccessControl",
         // This is the contract address for wrapped ether https://explorer.zksync.io/address/0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4
-        address: "0x6BEB7D5416b1A2bb8619e988785676c0aEdde7b8",
+        address: "0x27d45764490b8C4135d1EC70130163791BDE6db5",
       },
       assets: new Map([
         [
@@ -108,9 +128,7 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleRoleGranted",
             filter: {
-              topics: [
-                "RoleGranted(indexed bytes32,indexed address,indexed address)",
-              ],
+              topics: ["RoleGranted(bytes32,address,address)"],
             },
           },
           {
