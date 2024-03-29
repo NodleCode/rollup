@@ -29,28 +29,28 @@ dataSources:
       file: ./dist/index.js
       handlers:
         - kind: ethereum/TransactionHandler
-          handler: handleApproval
-          filter:
-            function: approve(address to, uint256 tokenId)
-        - kind: ethereum/TransactionHandler
-          handler: handleApproval
+          handler: handleSafeMint
           filter:
             function: safeMint(address,string)
+        - kind: ethereum/TransactionHandler
+          handler: handleApprove
+          filter:
+            function: approve(address,uint256)
         - kind: ethereum/LogHandler
           handler: handleApproval
           filter:
             topics:
-              - Approval(address owner, address approved, uint256 tokenId)
+              - Approval(address,address,uint256)
         - kind: ethereum/LogHandler
           handler: handleApprovalForAll
           filter:
             topics:
-              - ApprovalForAll(indexed address,indexed address,bool)
+              - ApprovalForAll(address,address,bool)
         - kind: ethereum/LogHandler
           handler: handleTransfer
           filter:
             topics:
-              - Transfer(indexed address,indexed address,indexed uint256)
+              - Transfer(address from,address to,uint256 tokenId)
   - kind: ethereum/Runtime
     startBlock: 1
     options:
@@ -58,8 +58,7 @@ dataSources:
       address: '0x27d45764490b8C4135d1EC70130163791BDE6db5'
     assets:
       AccessControl:
-        file: >-
-          ./node_modules/@openzeppelin/contracts/build/contracts/IAccessControl.json
+        file: ./abis/accesscontrol.json
     mapping:
       file: ./dist/index.js
       handlers:
@@ -67,9 +66,7 @@ dataSources:
           handler: handleRoleAdminChanged
           filter:
             topics:
-              - >-
-                RoleAdminChanged(indexed bytes32,indexed bytes32,indexed
-                bytes32)
+              - RoleAdminChanged(bytes32,bytes32,bytes32)
         - kind: ethereum/LogHandler
           handler: handleRoleGranted
           filter:
@@ -79,4 +76,4 @@ dataSources:
           handler: handleRoleRevoked
           filter:
             topics:
-              - RoleRevoked(indexed bytes32,indexed address,indexed address)
+              - RoleRevoked(bytes32,address,address)

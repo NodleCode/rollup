@@ -3,7 +3,11 @@
 /* eslint-disable */
 
 
+export { Accesscontrol__factory } from "./Accesscontrol__factory";
+
 export { Erc20Abi__factory } from "./Erc20Abi__factory";
+
+export { Erc721Abi__factory } from "./Erc721Abi__factory";
 
 export { IAccessControl__factory } from "./IAccessControl__factory";
 

@@ -3,14 +3,22 @@
 /* eslint-disable */
 export * as factories from "./factories";
 
+export { Accesscontrol } from "./Accesscontrol";
+
 export { Erc20Abi } from "./Erc20Abi";
+
+export { Erc721Abi } from "./Erc721Abi";
 
 export { IAccessControl } from "./IAccessControl";
 
 export { IERC721Metadata } from "./IERC721Metadata";
 
 
+export { Accesscontrol__factory } from "./factories/Accesscontrol__factory";
+
 export { Erc20Abi__factory } from "./factories/Erc20Abi__factory";
+
+export { Erc721Abi__factory } from "./factories/Erc721Abi__factory";
 
 export { IAccessControl__factory } from "./factories/IAccessControl__factory";
 

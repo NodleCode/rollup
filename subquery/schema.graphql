@@ -40,6 +40,7 @@ type ERC721Token @entity {
   uri: String
   timestamp: BigInt
   content: String
+  channel: String
   name: String
   transactionHash: Bytes
   description: String

@@ -21,6 +21,7 @@
   "author": "SubQuery Team",
   "license": "MIT",
   "dependencies": {
+    "@amxx/graphprotocol-utils": "^1.1.0",
     "@openzeppelin/contracts": "^5.0.2",
     "@subql/common": "latest",
     "@subql/types-ethereum": "latest",

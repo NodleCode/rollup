@@ -32,6 +32,7 @@ export class ERC721Token implements Entity {
     public uri?: string;
     public timestamp?: bigint;
     public content?: string;
+    public channel?: string;
     public name?: string;
     public transactionHash?: string;
     public description?: string;

@@ -49,47 +49,37 @@ const project: EthereumProject = {
         handlers: [
           {
             kind: EthereumHandlerKind.Call,
-            handler: "handleApproval",
-            filter: {
-              /**
-               * The function can either be the function fragment or signature
-               * function: '0x095ea7b3'
-               * function: '0x7ff36ab500000000000000000000000000000000000000000000000000000000'
-               */
-              function: "approve(address to, uint256 tokenId)",
-            },
-          },
-          //safeMint(address,string)
-          {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleApproval",
+            handler: "handleSafeMint",
             filter: {
               function: "safeMint(address,string)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleApprove",
+            filter: {
+              function: "approve(address,uint256)",
             },
           },
           {
             kind: EthereumHandlerKind.Event,
             handler: "handleApproval",
             filter: {
-              topics: [
-                "Approval(address owner, address approved, uint256 tokenId)",
-              ],
+              topics: ["Approval(address,address,uint256)"],
             },
           },
           {
             kind: EthereumHandlerKind.Event,
             handler: "handleApprovalForAll",
             filter: {
-              topics: ["ApprovalForAll(indexed address,indexed address,bool)"],
+              topics: ["ApprovalForAll(address,address,bool)"],
             },
           },
           {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
-              topics: [
-                "Transfer(indexed address,indexed address,indexed uint256)",
-              ],
+              topics: ["Transfer(address from,address to,uint256 tokenId)"],
             },
           },
         ],
@@ -108,7 +98,7 @@ const project: EthereumProject = {
         [
           "AccessControl",
           {
-            file: "./node_modules/@openzeppelin/contracts/build/contracts/IAccessControl.json",
+            file: "./abis/accesscontrol.json",
           },
         ],
       ]),
@@ -119,9 +109,7 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleRoleAdminChanged",
             filter: {
-              topics: [
-                "RoleAdminChanged(indexed bytes32,indexed bytes32,indexed bytes32)",
-              ],
+              topics: ["RoleAdminChanged(bytes32,bytes32,bytes32)"],
             },
           },
           {
@@ -135,9 +123,7 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleRoleRevoked",
             filter: {
-              topics: [
-                "RoleRevoked(indexed bytes32,indexed address,indexed address)",
-              ],
+              topics: ["RoleRevoked(bytes32,address,address)"],
             },
           },
         ],
