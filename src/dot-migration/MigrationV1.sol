@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.20;
 
+import {NODL} from "../NODL.sol";
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
 
@@ -11,30 +12,37 @@ import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
 contract MigrationV1 is Ownable {
     using Math for uint256;
 
-    struct ClaimRecord {
-        uint256 amount;
-        uint256 claimed;
+    NODL public nodl;
+    mapping(address => uint256) public bridged;
+
+    error Underflowed();
+    error ZeroValueTransfer();
+
+    event Bridged(address indexed user, uint256 amount);
+
+    constructor(address oracle, NODL token) Ownable(oracle) {
+        nodl = token;
     }
 
-    mapping(address => ClaimRecord) public claims;
-
-    error Overflowed();
-
-    event ClaimableAmountIncreased(address indexed user, uint256 amount);
-
-    constructor(address oracle) Ownable(oracle) {}
-
-    /// @notice Increases the amount of NODL tokens that the user can claim.
+    /// @notice Bridge some tokens from the Nodle Parachain to the ZkSync contracts. This
+    /// mint any tokens that the user has not already bridged while keeping track of the
+    /// total amount of tokens that the user has burnt on the Parachain side.
     /// @param user The user address.
-    /// @param amount The amount of NODL tokens to increase.
-    function increaseAmount(address user, uint256 amount) external onlyOwner {
-        (bool success, uint256 newAmount) = claims[user].amount.tryAdd(amount);
+    /// @param totalBurnt The **total** amount of NODL tokens that the user has burnt
+    /// on the Parachain.
+    function bridge(address user, uint256 totalBurnt) external onlyOwner {
+        uint256 alreadyBridged = bridged[user];
+        (bool success, uint256 needToMint) = totalBurnt.trySub(alreadyBridged);
         if (!success) {
-            revert Overflowed();
+            revert Underflowed();
+        }
+        if (needToMint == 0) {
+            revert ZeroValueTransfer();
         }
 
-        claims[user].amount = newAmount;
+        bridged[user] = totalBurnt;
+        nodl.mint(user, needToMint);
 
-        emit ClaimableAmountIncreased(user, newAmount);
+        emit Bridged(user, needToMint);
     }
 }
