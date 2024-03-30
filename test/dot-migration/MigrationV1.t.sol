@@ -36,12 +36,12 @@ contract MigrationV1Test is Test {
         migration.bridge(vm.addr(42), 100);
     }
 
-    function test_revertsInCaseOfUnderflowOrIfTriesToReduceTotalBurnt() public {
+    function test_revertsIfBridgedTotalWouldBeReduced() public {
         vm.startPrank(oracles[0]);
 
         migration.bridge(vm.addr(2), 10);
 
-        vm.expectRevert(abi.encodeWithSelector(MigrationV1.Underflowed.selector));
+        vm.expectRevert(abi.encodeWithSelector(MigrationV1.MayOnlyIncrease.selector));
         migration.bridge(vm.addr(2), 1);
 
         vm.stopPrank();
@@ -52,7 +52,7 @@ contract MigrationV1Test is Test {
 
         migration.bridge(vm.addr(2), 100);
 
-        vm.expectRevert(abi.encodeWithSelector(MigrationV1.ZeroValueTransfer.selector));
+        vm.expectRevert(abi.encodeWithSelector(MigrationV1.MayOnlyIncrease.selector));
         migration.bridge(vm.addr(2), 100);
 
         vm.stopPrank();

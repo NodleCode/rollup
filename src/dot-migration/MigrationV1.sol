@@ -15,8 +15,7 @@ contract MigrationV1 {
     mapping(address => uint256) public bridged;
     mapping(address => bool) public oracles;
 
-    error Underflowed();
-    error ZeroValueTransfer();
+    error MayOnlyIncrease();
     error NotAnOracle(address user);
 
     event Bridged(address indexed user, uint256 amount);
@@ -43,13 +42,13 @@ contract MigrationV1 {
     /// on the Parachain.
     function bridge(address user, uint256 totalBurnt) external onlyOracle {
         uint256 alreadyBridged = bridged[user];
+        if (totalBurnt <= alreadyBridged) {
+            revert MayOnlyIncrease();
+        }
+
+        // success should always be true since we are subtracting a smaller number from a larger one
         (bool success, uint256 needToMint) = totalBurnt.trySub(alreadyBridged);
-        if (!success) {
-            revert Underflowed();
-        }
-        if (needToMint == 0) {
-            revert ZeroValueTransfer();
-        }
+        assert(success);
 
         bridged[user] = totalBurnt;
         nodl.mint(user, needToMint);
