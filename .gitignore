@@ -18,4 +18,5 @@ docs/
 
 subquery/dist/
 subquery/.data/
+subquery/**/types/
 contracts/
