@@ -20,10 +20,12 @@ contract MigrationV1Test is Test {
         nodl.grantRole(nodl.MINTER_ROLE(), address(migration));
     }
 
-    function test_oraclesAreRegisteredProperly() public view {
+    function test_oraclesAreRegisteredProperly() public {
         for (uint256 i = 0; i < oracles.length; i++) {
-            assert(migration.oracles(oracles[i]));
+            assertEq(migration.oracles(i), oracles[i]);
+            assertEq(migration.isOracle(oracles[i]), true);
         }
+        assertEq(migration.threshold(), 2);
     }
 
     function test_configuredProperToken() public {
@@ -33,48 +35,102 @@ contract MigrationV1Test is Test {
     function test_nonOracleMayNotBridgeTokens() public {
         vm.expectRevert(abi.encodeWithSelector(MigrationV1.NotAnOracle.selector, user));
         vm.prank(user);
-        migration.bridge(vm.addr(42), 100);
+        migration.bridge(user, 100);
     }
 
     function test_revertsIfBridgedTotalWouldBeReduced() public {
         vm.startPrank(oracles[0]);
 
-        migration.bridge(vm.addr(2), 10);
+        migration.bridge(user, 10);
 
-        vm.expectRevert(abi.encodeWithSelector(MigrationV1.MayOnlyIncrease.selector));
-        migration.bridge(vm.addr(2), 1);
+        vm.expectRevert(MigrationV1.MayOnlyIncrease.selector);
+        migration.bridge(user, 1);
 
         vm.stopPrank();
     }
 
     function test_revertsIfNoNewTokensToMint() public {
+        vm.prank(oracles[0]);
+        migration.bridge(user, 100);
+        vm.prank(oracles[1]);
+        migration.bridge(user, 100);
+
+        assertEq(migration.bridged(user), 100);
+
+        vm.expectRevert(MigrationV1.MayOnlyIncrease.selector);
+        vm.prank(oracles[0]);
+        migration.bridge(user, 100);
+    }
+
+    function test_mayNotSubmitLowerVotes() public {
         vm.startPrank(oracles[0]);
 
-        migration.bridge(vm.addr(2), 100);
+        migration.bridge(user, 100);
 
-        vm.expectRevert(abi.encodeWithSelector(MigrationV1.MayOnlyIncrease.selector));
-        migration.bridge(vm.addr(2), 100);
+        vm.expectRevert(MigrationV1.MayOnlyIncrease.selector);
+        migration.bridge(user, 99);
 
         vm.stopPrank();
     }
 
-    function test_increaseAmountWorksIfCallerIsOracle() public {
+    function test_mayNotVoteTwice() public {
+        vm.startPrank(oracles[0]);
+
+        migration.bridge(user, 100);
+
+        vm.expectRevert(abi.encodeWithSelector(MigrationV1.AlreadyVoted.selector, oracles[0], user));
+        migration.bridge(user, 100);
+
+        vm.stopPrank();
+    }
+
+    function test_increasingCurrentVotesResetVotes() public {
         vm.startPrank(oracles[0]);
 
         vm.expectEmit();
-        emit MigrationV1.Bridged(vm.addr(2), 100);
-        migration.bridge(vm.addr(2), 100);
+        emit MigrationV1.VoteStarted(oracles[0], user, 100);
+        migration.bridge(user, 100);
+        assertEq(migration.didVote(user, oracles[0]), true);
 
-        uint256 totalBridged = migration.bridged(vm.addr(2));
-        assertEq(totalBridged, 100);
+        vm.startPrank(oracles[1]);
 
         vm.expectEmit();
-        emit MigrationV1.Bridged(vm.addr(2), 100);
-        migration.bridge(vm.addr(2), 200);
-
-        totalBridged = migration.bridged(vm.addr(2));
-        assertEq(totalBridged, 200);
+        emit MigrationV1.VoteStarted(oracles[1], user, 200);
+        migration.bridge(user, 200);
+        (uint256 newAmount, uint256 totalVotes) = migration.currentVotes(user);
+        assertEq(newAmount, 200);
+        assertEq(totalVotes, 1); // not 2
+        assertEq(migration.didVote(user, oracles[0]), false); // not true
+        assertEq(migration.didVote(user, oracles[1]), true);
 
         vm.stopPrank();
+    }
+
+    function test_recordsVotesAndBridgeIfConsensusIsReached() public {
+        // 1 - Register vote but do not bridge yet
+
+        vm.prank(oracles[0]);
+
+        vm.expectEmit();
+        emit MigrationV1.VoteStarted(oracles[0], user, 100);
+        migration.bridge(user, 100);
+
+        assertEq(migration.bridged(user), 0);
+        assertEq(migration.didVote(user, oracles[0]), true);
+        (uint256 newAmount, uint256 totalVotes) = migration.currentVotes(user);
+        assertEq(newAmount, 100);
+        assertEq(totalVotes, 1);
+
+        // 2 - Register vote and bridge since threshold was reached
+
+        vm.prank(oracles[1]);
+
+        vm.expectEmit();
+        emit MigrationV1.Voted(oracles[1], user);
+        emit MigrationV1.Bridged(user, 100);
+        migration.bridge(user, 100);
+
+        assertEq(migration.bridged(user), 100);
+        assertEq(nodl.balanceOf(user), 100);
     }
 }
