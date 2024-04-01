@@ -4,10 +4,10 @@ pragma solidity ^0.8.20;
 
 import {NODL} from "../NODL.sol";
 
-/// @title MigrationV1
+/// @title NODLMigration
 /// @notice This contract is used to help migrating the NODL assets from the Nodle Parachain
 /// to the ZkSync contracts.
-contract MigrationV1 {
+contract NODLMigration {
     struct Proposal {
         address target;
         uint256 amount;
