@@ -57,12 +57,12 @@ contract MigrationV1 {
             _mustNotHaveVotedYet(paraTxHash, msg.sender);
             _mustNotBeChangingParameters(paraTxHash, user, amount);
             _recordVote(paraTxHash, msg.sender);
+
+            if (_enoughVotes(paraTxHash)) {
+                _mintTokens(paraTxHash, user, amount);
+            }
         } else {
             _createVote(paraTxHash, msg.sender, user, amount);
-        }
-
-        if (_enoughVotes(paraTxHash)) {
-            _mintTokens(paraTxHash, user, amount);
         }
     }
 
