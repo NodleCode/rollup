@@ -8,108 +8,117 @@ import {NODL} from "../NODL.sol";
 /// @notice This contract is used to help migrating the NODL assets from the Nodle Parachain
 /// to the ZkSync contracts.
 contract MigrationV1 {
-    struct Vote {
-        uint256 newAmount;
-        mapping(address => bool) voted;
-        uint256 totalVotes;
+    struct Proposal {
+        address target;
+        uint256 amount;
+        uint8 totalVotes;
+        bool executed;
     }
 
     NODL public nodl;
-    mapping(address => uint256) public bridged;
-    address[] public oracles;
     mapping(address => bool) public isOracle;
-    mapping(address => Vote) public votes;
-    uint256 public threshold;
+    uint8 public threshold;
 
-    error MayOnlyIncrease();
-    error AlreadyVoted(address oracle, address user);
+    // We track votes in a seperate mapping to avoid having to write helper functions to
+    // expose the votes for each proposal.
+    mapping(bytes32 => Proposal) public proposals;
+    mapping(address => mapping(bytes32 => bool)) public voted;
+
+    error AlreadyVoted(bytes32 proposal, address oracle);
+    error AlreadyExecuted(bytes32 proposal);
+    error ParametersChanged(bytes32 proposal);
     error NotAnOracle(address user);
 
-    event VoteStarted(address indexed oracle, address indexed user, uint256 newAmount);
-    event Voted(address indexed oracle, address indexed user);
-    event Bridged(address indexed user, uint256 amount);
+    event VoteStarted(bytes32 indexed proposal, address oracle, address indexed user, uint256 amount);
+    event Voted(bytes32 indexed proposal, address oracle);
+    event Bridged(bytes32 indexed proposal, address indexed user, uint256 amount);
 
-    modifier onlyOracle() {
-        if (!isOracle[msg.sender]) {
-            revert NotAnOracle(msg.sender);
-        }
-        _;
-    }
-
-    constructor(address[] memory bridgeOracles, NODL token) {
+    /// @param bridgeOracles Array of oracle accounts that will be able to bridge the tokens.
+    /// @param token Contract address of the NODL token.
+    /// @param minVotes Minimum number of votes required to bridge the tokens.
+    constructor(address[] memory bridgeOracles, NODL token, uint8 minVotes) {
         for (uint256 i = 0; i < bridgeOracles.length; i++) {
             isOracle[bridgeOracles[i]] = true;
         }
-        oracles = bridgeOracles;
         nodl = token;
-        threshold = bridgeOracles.length / 2 + 1;
+        threshold = minVotes;
     }
 
     /// @notice Bridge some tokens from the Nodle Parachain to the ZkSync contracts. This
     /// tracks "votes" from each oracle and only bridges the tokens if the threshold is met.
+    /// @param paraTxHash The transaction hash on the Parachain for this transfer.
     /// @param user The user address.
-    /// @param totalBurnt The **total** amount of NODL tokens that the user has burnt
-    /// on the Parachain.
-    function bridge(address user, uint256 totalBurnt) external onlyOracle {
-        uint256 alreadyBridged = bridged[user];
-        if (totalBurnt <= alreadyBridged) {
-            revert MayOnlyIncrease();
+    /// @param amount The amount of NODL tokens that the user has burnt on the Parachain.
+    function bridge(bytes32 paraTxHash, address user, uint256 amount) external {
+        _mustBeAnOracle(msg.sender);
+        _mustNotHaveExecutedYet(paraTxHash);
+
+        if (_proposalExists(paraTxHash)) {
+            _mustNotHaveVotedYet(paraTxHash, msg.sender);
+            _mustNotBeChangingParameters(paraTxHash, user, amount);
+            _recordVote(paraTxHash, msg.sender);
+        } else {
+            _createVote(paraTxHash, msg.sender, user, amount);
         }
 
-        uint256 currentVote = votes[user].newAmount;
-        if (totalBurnt < currentVote) {
-            revert MayOnlyIncrease();
-        } else if (totalBurnt > currentVote) {
-            _startNewVote(user, totalBurnt);
-            return;
-        }
-
-        _castVote(user);
-
-        if (votes[user].totalVotes >= threshold) {
-            // this is safe since we are subtracting a smaller number from a larger one
-            _bridgeAndMint(user, totalBurnt, totalBurnt - alreadyBridged);
+        if (_enoughVotes(paraTxHash)) {
+            _mintTokens(paraTxHash, user, amount);
         }
     }
 
-    function currentVotes(address user) external view returns (uint256, uint256) {
-        return (votes[user].newAmount, votes[user].totalVotes);
-    }
-
-    function didVote(address user, address oracle) external view returns (bool) {
-        return votes[user].voted[oracle];
-    }
-
-    function _startNewVote(address user, uint256 totalBurnt) internal {
-        votes[user].newAmount = totalBurnt;
-        votes[user].totalVotes = 1;
-        for (uint256 i = 0; i < oracles.length; i++) {
-            if (oracles[i] == msg.sender) {
-                votes[user].voted[oracles[i]] = true;
-            } else {
-                votes[user].voted[oracles[i]] = false;
-            }
+    function _mustBeAnOracle(address maybeOracle) internal view {
+        if (!isOracle[maybeOracle]) {
+            revert NotAnOracle(maybeOracle);
         }
-
-        emit VoteStarted(msg.sender, user, totalBurnt);
     }
 
-    function _castVote(address user) internal {
-        if (votes[user].voted[msg.sender]) {
-            revert AlreadyVoted(msg.sender, user);
+    function _mustNotHaveVotedYet(bytes32 proposal, address oracle) internal view {
+        if (voted[oracle][proposal]) {
+            revert AlreadyVoted(proposal, oracle);
         }
-
-        votes[user].voted[msg.sender] = true;
-        // this is safe since we are unlikely to have maxUint256 oracles to manage
-        votes[user].totalVotes += 1;
-
-        emit Voted(msg.sender, user);
     }
 
-    function _bridgeAndMint(address user, uint256 totalBurnt, uint256 needToMint) internal {
-        bridged[user] = totalBurnt;
-        nodl.mint(user, needToMint);
+    function _mustNotHaveExecutedYet(bytes32 proposal) internal view {
+        if (proposals[proposal].executed) {
+            revert AlreadyExecuted(proposal);
+        }
+    }
 
-        emit Bridged(user, needToMint);
+    function _mustNotBeChangingParameters(bytes32 proposal, address user, uint256 amount) internal view {
+        if (proposals[proposal].amount != amount || proposals[proposal].target != user) {
+            revert ParametersChanged(proposal);
+        }
+    }
+
+    function _proposalExists(bytes32 proposal) internal view returns (bool) {
+        return proposals[proposal].totalVotes > 0 && proposals[proposal].amount > 0;
+    }
+
+    function _createVote(bytes32 proposal, address oracle, address user, uint256 amount) internal {
+        voted[oracle][proposal] = true;
+        proposals[proposal].target = user;
+        proposals[proposal].amount = amount;
+        proposals[proposal].totalVotes = 1;
+
+        emit VoteStarted(proposal, oracle, user, amount);
+    }
+
+    function _recordVote(bytes32 proposal, address oracle) internal {
+        voted[oracle][proposal] = true;
+        // this is safe since we are unlikely to have maxUint8 oracles to manage
+        proposals[proposal].totalVotes += 1;
+
+        emit Voted(proposal, oracle);
+    }
+
+    function _enoughVotes(bytes32 proposal) internal view returns (bool) {
+        return proposals[proposal].totalVotes >= threshold;
+    }
+
+    function _mintTokens(bytes32 proposal, address user, uint256 amount) internal {
+        proposals[proposal].executed = true;
+        nodl.mint(user, amount);
+
+        emit Bridged(proposal, user, amount);
     }
 }
