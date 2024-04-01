@@ -15,7 +15,7 @@ const project: EthereumProject = {
       version: ">=3.0.0",
       options: {
         unsafe: true,
-      }
+      },
     },
     query: {
       name: "@subql/query",
@@ -26,18 +26,16 @@ const project: EthereumProject = {
     file: "./schema.graphql",
   },
   network: {
-    chainId: "270", // private network
-    endpoint: ["https://rpc-iu435q.nodleprotocol.io"],
+    chainId: "300", // zKsync sepolia testnet
+    endpoint: ["https://sepolia.era.zksync.dev"],
   },
   dataSources: [
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 1, // This is the block that the contract was deployed on
+      startBlock: 1381030, // This is the block that the contract was deployed on
       options: {
-        // Must be a key of assets
         abi: "erc721",
-        // This is the contract address for wrapped ether https://explorer.zksync.io/address/0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4
-        address: "0xf98633dd7a7af38a3da2c7fc34f1a7a3a14a26b9",
+        address: "0xB6844E6dC9C4E090b73c1a91e8648A3F81eD434a",
       },
       assets: new Map([
         [
@@ -90,12 +88,10 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 1, // This is the block that the contract was deployed on
+      startBlock: 1381033, // This is the block that the contract was deployed on
       options: {
-        // Must be a key of assets
         abi: "AccessControl",
-        // This is the contract address for wrapped ether https://explorer.zksync.io/address/0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4
-        address: "0x27d45764490b8C4135d1EC70130163791BDE6db5",
+        address: "0x94d095cfF9feef70d2b343e7f82ef7eac3a0c7A7",
       },
       assets: new Map([
         [
