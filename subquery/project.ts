@@ -7,7 +7,7 @@ import {
 const project: EthereumProject = {
   specVersion: "1.0.0",
   version: "0.0.1",
-  name: "Nodle-sksync-subquery",
+  name: "Nodle-zksync-subquery",
   description: "__",
   runner: {
     node: {
