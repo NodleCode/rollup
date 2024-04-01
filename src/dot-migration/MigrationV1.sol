@@ -35,8 +35,12 @@ contract MigrationV1 {
 
     /// @param bridgeOracles Array of oracle accounts that will be able to bridge the tokens.
     /// @param token Contract address of the NODL token.
-    /// @param minVotes Minimum number of votes required to bridge the tokens.
+    /// @param minVotes Minimum number of votes required to bridge the tokens. This needs to be
+    /// less than or equal to the number of oracles and is expected to be above 1.
     constructor(address[] memory bridgeOracles, NODL token, uint8 minVotes) {
+        assert(bridgeOracles.length >= minVotes);
+        assert(minVotes > 1);
+
         for (uint256 i = 0; i < bridgeOracles.length; i++) {
             isOracle[bridgeOracles[i]] = true;
         }
