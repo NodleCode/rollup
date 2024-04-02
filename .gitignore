@@ -16,6 +16,8 @@ docs/
 # Dotenv file
 .env
 
+# Subquery files
 subquery/dist/
 subquery/.data/
 subquery/**/types/
+subquery/project.yml
