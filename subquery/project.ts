@@ -86,48 +86,6 @@ const project: EthereumProject = {
         ],
       },
     },
-    {
-      kind: EthereumDatasourceKind.Runtime,
-      startBlock: 1381033, // This is the block that the contract was deployed on
-      options: {
-        abi: "AccessControl",
-        address: "0x94d095cfF9feef70d2b343e7f82ef7eac3a0c7A7",
-      },
-      assets: new Map([
-        [
-          "AccessControl",
-          {
-            file: "./abis/accesscontrol.json",
-          },
-        ],
-      ]),
-      mapping: {
-        file: "./dist/index.js",
-        handlers: [
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleRoleAdminChanged",
-            filter: {
-              topics: ["RoleAdminChanged(bytes32,bytes32,bytes32)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleRoleGranted",
-            filter: {
-              topics: ["RoleGranted(bytes32,address,address)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleRoleRevoked",
-            filter: {
-              topics: ["RoleRevoked(bytes32,address,address)"],
-            },
-          },
-        ],
-      },
-    },
   ],
 };
 
