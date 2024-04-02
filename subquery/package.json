@@ -6,6 +6,7 @@
   "scripts": {
     "build": "subql build",
     "codegen": "subql codegen",
+    "publish": "subql publish",
     "start:docker": "docker-compose pull && docker-compose up --remove-orphans",
     "dev": "subql codegen && subql build && docker-compose pull && docker-compose up --remove-orphans",
     "prepack": "rm -rf dist && npm run build",

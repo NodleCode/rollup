@@ -20,4 +20,4 @@ docs/
 subquery/dist/
 subquery/.data/
 subquery/**/types/
-subquery/project.yml
+subquery/project.yaml
