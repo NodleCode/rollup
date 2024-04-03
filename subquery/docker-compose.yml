@@ -18,7 +18,7 @@ services:
       retries: 5
 
   subquery-node:
-    image: subquerynetwork/subql-node-ethereum:latest
+    image: subquerynetwork/subql-node-ethereum:v3.11.0
     depends_on:
       "postgres":
         condition: service_healthy
@@ -35,9 +35,9 @@ services:
       - ${SUB_COMMAND:-} # set SUB_COMMAND env variable to "test" to run tests
       - -f=/app
       - --db-schema=app
-      - --workers=4
+      - --workers=1
       - --batch-size=30
-      - --unfinalized-blocks=true
+      - --unfinalized-blocks=false
       - --unsafe
 
     healthcheck:

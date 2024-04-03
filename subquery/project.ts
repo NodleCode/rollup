@@ -32,10 +32,10 @@ const project: EthereumProject = {
   dataSources: [
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 1381030, // This is the block that the contract was deployed on
+      startBlock: 1453992, // This is the block that the contract was deployed on
       options: {
         abi: "erc721",
-        address: "0xB6844E6dC9C4E090b73c1a91e8648A3F81eD434a",
+        address: "0x999368030Ba79898E83EaAE0E49E89B7f6410940",
       },
       assets: new Map([
         [
