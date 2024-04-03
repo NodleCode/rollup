@@ -11,6 +11,7 @@ contract NODLMigration {
     struct Proposal {
         address target;
         uint256 amount;
+        uint256 lastVote;
         uint8 totalVotes;
         bool executed;
     }
@@ -18,6 +19,7 @@ contract NODLMigration {
     NODL public nodl;
     mapping(address => bool) public isOracle;
     uint8 public threshold;
+    uint256 public delay;
 
     // We track votes in a seperate mapping to avoid having to write helper functions to
     // expose the votes for each proposal.
@@ -28,16 +30,19 @@ contract NODLMigration {
     error AlreadyExecuted(bytes32 proposal);
     error ParametersChanged(bytes32 proposal);
     error NotAnOracle(address user);
+    error NotYetWithdrawable(bytes32 proposal);
+    error NotEnoughVotes(bytes32 proposal);
 
     event VoteStarted(bytes32 indexed proposal, address oracle, address indexed user, uint256 amount);
     event Voted(bytes32 indexed proposal, address oracle);
-    event Bridged(bytes32 indexed proposal, address indexed user, uint256 amount);
+    event Withdrawn(bytes32 indexed proposal, address indexed user, uint256 amount);
 
     /// @param bridgeOracles Array of oracle accounts that will be able to bridge the tokens.
     /// @param token Contract address of the NODL token.
     /// @param minVotes Minimum number of votes required to bridge the tokens. This needs to be
     /// less than or equal to the number of oracles and is expected to be above 1.
-    constructor(address[] memory bridgeOracles, NODL token, uint8 minVotes) {
+    /// @param minDelay Minimum delay in blocks before bridged tokens can be minted.
+    constructor(address[] memory bridgeOracles, NODL token, uint8 minVotes, uint256 minDelay) {
         assert(bridgeOracles.length >= minVotes);
         assert(minVotes > 1);
 
@@ -46,10 +51,11 @@ contract NODLMigration {
         }
         nodl = token;
         threshold = minVotes;
+        delay = minDelay;
     }
 
     /// @notice Bridge some tokens from the Nodle Parachain to the ZkSync contracts. This
-    /// tracks "votes" from each oracle and only bridges the tokens if the threshold is met.
+    /// tracks "votes" from each oracle and unlocks execution after a withdrawal delay.
     /// @param paraTxHash The transaction hash on the Parachain for this transfer.
     /// @param user The user address.
     /// @param amount The amount of NODL tokens that the user has burnt on the Parachain.
@@ -61,13 +67,20 @@ contract NODLMigration {
             _mustNotHaveVotedYet(paraTxHash, msg.sender);
             _mustNotBeChangingParameters(paraTxHash, user, amount);
             _recordVote(paraTxHash, msg.sender);
-
-            if (_enoughVotes(paraTxHash)) {
-                _mintTokens(paraTxHash, user, amount);
-            }
         } else {
             _createVote(paraTxHash, msg.sender, user, amount);
         }
+    }
+
+    /// @notice Withdraw the NODL tokens from the contract to the user's address if the
+    /// proposal has enough votes and has passed the safety delay.
+    /// @param paraTxHash The transaction hash on the Parachain for this transfer.
+    function withdraw(bytes32 paraTxHash) external {
+        _mustNotHaveExecutedYet(paraTxHash);
+        _mustHaveEnoughVotes(paraTxHash);
+        _mustBePastSafetyDelay(paraTxHash);
+
+        _withdraw(paraTxHash, proposals[paraTxHash].target, proposals[paraTxHash].amount);
     }
 
     function _mustBeAnOracle(address maybeOracle) internal view {
@@ -94,6 +107,18 @@ contract NODLMigration {
         }
     }
 
+    function _mustBePastSafetyDelay(bytes32 proposal) internal view {
+        if (block.number - proposals[proposal].lastVote < delay) {
+            revert NotYetWithdrawable(proposal);
+        }
+    }
+
+    function _mustHaveEnoughVotes(bytes32 proposal) internal view {
+        if (proposals[proposal].totalVotes < threshold) {
+            revert NotEnoughVotes(proposal);
+        }
+    }
+
     function _proposalExists(bytes32 proposal) internal view returns (bool) {
         return proposals[proposal].totalVotes > 0 && proposals[proposal].amount > 0;
     }
@@ -103,6 +128,7 @@ contract NODLMigration {
         proposals[proposal].target = user;
         proposals[proposal].amount = amount;
         proposals[proposal].totalVotes = 1;
+        proposals[proposal].lastVote = block.number;
 
         emit VoteStarted(proposal, oracle, user, amount);
     }
@@ -111,18 +137,15 @@ contract NODLMigration {
         voted[oracle][proposal] = true;
         // this is safe since we are unlikely to have maxUint8 oracles to manage
         proposals[proposal].totalVotes += 1;
+        proposals[proposal].lastVote = block.number;
 
         emit Voted(proposal, oracle);
     }
 
-    function _enoughVotes(bytes32 proposal) internal view returns (bool) {
-        return proposals[proposal].totalVotes >= threshold;
-    }
-
-    function _mintTokens(bytes32 proposal, address user, uint256 amount) internal {
+    function _withdraw(bytes32 proposal, address user, uint256 amount) internal {
         proposals[proposal].executed = true;
         nodl.mint(user, amount);
 
-        emit Bridged(proposal, user, amount);
+        emit Withdrawn(proposal, user, amount);
     }
 }
