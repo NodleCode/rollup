@@ -72,6 +72,9 @@ contract NODLMigration {
         }
     }
 
+    /// @notice Withdraw the NODL tokens from the contract to the user's address if the
+    /// proposal has enough votes and has passed the safety delay.
+    /// @param paraTxHash The transaction hash on the Parachain for this transfer.
     function withdraw(bytes32 paraTxHash) external {
         _mustNotHaveExecutedYet(paraTxHash);
         _mustHaveEnoughVotes(paraTxHash);
