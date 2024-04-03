@@ -2,11 +2,13 @@ import assert from "assert";
 import { fetchContract, fetchERC721Operator, fetchToken, getApprovalLog } from "../utils/erc721";
 import { TransferLog, ApprovalForAllLog, SafeMintTransaction } from "../types/abi-interfaces/Erc721Abi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
+import { ERC721Contract } from "../types";
 
 export async function handleTransfer(event: TransferLog): Promise<void>  {
   assert(event.args, "No event.args");
 
-  const contract = await fetchContract(event.address);
+  const contract = await ERC721Contract.get(event.address);
+
   if (contract != null) {
     const from = await fetchAccount(event.args.from);
     const to = await fetchAccount(event.args.to);
