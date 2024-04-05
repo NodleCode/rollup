@@ -1,0 +1,124 @@
+type Event @entity {
+  id: ID!
+  transaction: Transaction!
+  emitter: Account!
+  timestamp: BigInt!
+}
+
+type Account @entity {
+  id: ID!
+  asERC721: ERC721Contract
+  ERC721tokens: [ERC721Token!]! @derivedFrom(field: "owner")
+  ERC721operatorOwner: [ERC721Operator!]! @derivedFrom(field: "owner")
+  ERC721operatorOperator: [ERC721Operator!]! @derivedFrom(field: "operator")
+  ERC721transferFromEvent: [ERC721Transfer!]! @derivedFrom(field: "from")
+  ERC721transferToEvent: [ERC721Transfer!]! @derivedFrom(field: "to")
+  asAccessControl: AccessControl
+  membership: [AccessControlRoleMember!]! @derivedFrom(field: "account")
+  roleGranted: [RoleGranted!]! @derivedFrom(field: "account")
+  roleGrantedSender: [RoleGranted!]! @derivedFrom(field: "sender")
+  roleRevoked: [RoleRevoked!]! @derivedFrom(field: "account")
+  roleRevokedSender: [RoleRevoked!]! @derivedFrom(field: "sender")
+  events: [Event!]! @derivedFrom(field: "emitter")
+}
+type ERC721Contract @entity {
+  id: ID!
+  asAccount: Account!
+  supportsMetadata: Boolean
+  name: String
+  symbol: String
+  tokens: [ERC721Token!]! @derivedFrom(field: "contract")
+  operators: [ERC721Operator!]! @derivedFrom(field: "contract")
+  transfers: [ERC721Transfer!]! @derivedFrom(field: "contract")
+}
+type ERC721Token @entity {
+  id: ID!
+  contract: ERC721Contract!
+  identifier: BigInt!
+  owner: Account!
+  approval: Account!
+  uri: String
+  timestamp: BigInt
+  content: String
+  channel: String
+  name: String
+  transactionHash: String
+  description: String
+  transfers: [ERC721Transfer!]! @derivedFrom(field: "token")
+}
+type ERC721Operator @entity {
+  id: ID!
+  contract: ERC721Contract!
+  owner: Account!
+  operator: Account!
+  approved: Boolean!
+}
+type ERC721Transfer implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt!
+  contract: ERC721Contract!
+  token: ERC721Token!
+  from: Account!
+  to: Account!
+}
+type AccessControl @entity {
+  id: ID!
+  asAccount: Account!
+  roles: [AccessControlRole!]! @derivedFrom(field: "contract")
+}
+type Role @entity {
+  id: ID!
+  roleOf: [AccessControlRole!]! @derivedFrom(field: "role")
+}
+type AccessControlRole @entity {
+  id: ID!
+  contract: AccessControl!
+  role: Role!
+  admin: AccessControlRole!
+  adminOf: [AccessControlRole!]! @derivedFrom(field: "admin")
+  members: [AccessControlRoleMember!]! @derivedFrom(field: "accesscontrolrole")
+  roleGranted: [RoleGranted!]! @derivedFrom(field: "role")
+  roleRevoked: [RoleRevoked!]! @derivedFrom(field: "role")
+  roleAdminChanged: [RoleAdminChanged!]! @derivedFrom(field: "role")
+}
+type AccessControlRoleMember @entity {
+  id: ID!
+  accesscontrolrole: AccessControlRole!
+  account: Account!
+}
+type RoleAdminChanged implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt!
+  role: AccessControlRole!
+  newAdminRole: AccessControlRole!
+  previousAdminRole: AccessControlRole!
+}
+type RoleGranted implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt!
+  role: AccessControlRole!
+  account: Account!
+  sender: Account!
+}
+type RoleRevoked implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt!
+  role: AccessControlRole!
+  account: Account!
+  sender: Account!
+}
+
+type Transaction @entity {
+  id: ID!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  events: [Event!]! @derivedFrom(field: "transaction")
+}

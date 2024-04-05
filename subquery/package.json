@@ -1,0 +1,36 @@
+{
+  "name": "zksync-nodle",
+  "version": "0.0.1",
+  "description": "SubQuery Project for Nodle Zk contracts",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "subql build",
+    "codegen": "subql codegen",
+    "publish": "subql publish",
+    "start:docker": "docker-compose pull && docker-compose up --remove-orphans",
+    "dev": "subql codegen && subql build && docker-compose pull && docker-compose up --remove-orphans",
+    "prepack": "rm -rf dist && npm run build",
+    "test": "subql build && subql-node-ethereum test"
+  },
+  "files": [
+    "dist",
+    "schema.graphql",
+    "project.yaml"
+  ],
+  "dependencies": {
+    "@subql/common": "3.4.0",
+    "@subql/types-ethereum": "latest",
+    "@subql/validator": "latest",
+    "@types/node-fetch": "2.6.2",
+    "assert": "^2.0.0",
+    "node-fetch": "^2.6.7"
+  },
+  "devDependencies": {
+    "@subql/cli": "4.2.6",
+    "@subql/node-ethereum": "latest",
+    "@subql/testing": "latest",
+    "@subql/types": "^3.3.0",
+    "ethers": "^5.7.2",
+    "typescript": "latest"
+  }
+}

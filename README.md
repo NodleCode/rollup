@@ -2,7 +2,9 @@
 ![Banner](https://github.com/NodleCode/rollup/assets/10683430/b50803ff-41d1-4faa-99eb-72c9eeaf3194)
 
 # Development setup
-> We recommend you run within the provided [devcontainer](https://code.visualstudio.com/remote/advancedcontainers/overview) to ensure you have all the necessary tooling installed such `graph`, `zksync-cli`, and `forge`.
+> We recommend you run within the provided [devcontainer](https://code.visualstudio.com/remote/advancedcontainers/overview) to ensure you have all the necessary tooling installed such `zksync-cli`, and `forge`.
+
+For subquery utilization refer to [Nodle-zksync-subquery](/subquery/README.md)
 
 ## Repo organization
 - `./` contains foundry contracts for Nodle and Click on ZkSync:
@@ -10,7 +12,7 @@
   - `./src` contains contract sources.
   - `./scripts` contains deployment scripts.
   - `./test` contains unit tests.
-- `./graph` contains a custom SubGraph for this project.
+- `./subquery` contains a custom subquery for this project.
 - ...more to come
 
 # Usage
