@@ -22,6 +22,10 @@ contract NODLTest is Test {
         assert(nodl.hasRole(nodl.MINTER_ROLE(), alice));
     }
 
+    function test_has18Decimals() public {
+        assertEq(nodl.decimals(), 18);
+    }
+
     function test_shouldDeployWithNoSupply() public {
         assertEq(nodl.totalSupply(), 0);
     }
