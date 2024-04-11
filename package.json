@@ -16,7 +16,7 @@
     "@matterlabs/hardhat-zksync": "^1.0.0",
     "@matterlabs/zksync-contracts": "^0.6.1",
     "@nomiclabs/hardhat-etherscan": "^3.1.7",
-    "@openzeppelin/contracts": "^4.6.0",
+    "@openzeppelin/contracts": "^5.0.2",
     "@types/chai": "^4.3.4",
     "@types/mocha": "^10.0.1",
     "chai": "^4.3.7",
