@@ -15,3 +15,7 @@ docs/
 
 # Dotenv file
 .env
+
+
+cache-zk
+artifacts-zk
