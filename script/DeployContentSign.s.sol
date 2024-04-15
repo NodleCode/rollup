@@ -7,7 +7,6 @@ import {WhitelistPaymaster} from "../src/paymasters/WhitelistPaymaster.sol";
 import {ContentSignNFT} from "../src/contentsign/ContentSignNFT.sol";
 
 contract DeployContentSign is Script {
-    address internal superAdmin;
     address internal whitelistAdmin;
     address internal withdrawer;
 
@@ -15,7 +14,6 @@ contract DeployContentSign is Script {
         whitelistAdmin = vm.envAddress("N_WHITELIST_ADMIN");
         withdrawer = vm.envAddress("N_WITHDRAWER");
 
-        vm.label(superAdmin, "SUPER_ADMIN");
         vm.label(whitelistAdmin, "WHITELIST_ADMIN");
         vm.label(withdrawer, "WITHDRAWER");
     }
