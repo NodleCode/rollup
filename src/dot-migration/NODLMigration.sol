@@ -44,7 +44,7 @@ contract NODLMigration {
     /// @param minDelay Minimum delay in blocks before bridged tokens can be minted.
     constructor(address[] memory bridgeOracles, NODL token, uint8 minVotes, uint256 minDelay) {
         assert(bridgeOracles.length >= minVotes);
-        assert(minVotes > 1);
+        assert(minVotes > 0);
 
         for (uint256 i = 0; i < bridgeOracles.length; i++) {
             isOracle[bridgeOracles[i]] = true;
