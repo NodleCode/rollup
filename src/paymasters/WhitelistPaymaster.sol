@@ -18,26 +18,31 @@ contract WhitelistPaymaster is BasePaymaster {
         _grantRole(WHITELIST_ADMIN_ROLE, msg.sender);
     }
 
-    function addWhitelistedContracts(address[] calldata whitelistedContracts) external onlyRole(WHITELIST_ADMIN_ROLE) {
+    function addWhitelistedContracts(address[] calldata whitelistedContracts) external {
+        _checkRole(WHITELIST_ADMIN_ROLE);
+
         _setContractWhitelist(whitelistedContracts);
     }
 
-    function removeWhitelistedContracts(address[] calldata whitelistedContracts)
-        external
-        onlyRole(WHITELIST_ADMIN_ROLE)
-    {
+    function removeWhitelistedContracts(address[] calldata whitelistedContracts) external {
+        _checkRole(WHITELIST_ADMIN_ROLE);
+
         for (uint256 i = 0; i < whitelistedContracts.length; i++) {
             isWhitelistedContract[whitelistedContracts[i]] = false;
         }
     }
 
-    function addWhitelistedUsers(address[] calldata users) external onlyRole(WHITELIST_ADMIN_ROLE) {
+    function addWhitelistedUsers(address[] calldata users) external {
+        _checkRole(WHITELIST_ADMIN_ROLE);
+
         for (uint256 i = 0; i < users.length; i++) {
             isWhitelistedUser[users[i]] = true;
         }
     }
 
-    function removeWhitelistedUsers(address[] calldata users) external onlyRole(WHITELIST_ADMIN_ROLE) {
+    function removeWhitelistedUsers(address[] calldata users) external {
+        _checkRole(WHITELIST_ADMIN_ROLE);
+
         for (uint256 i = 0; i < users.length; i++) {
             isWhitelistedUser[users[i]] = false;
         }
