@@ -28,8 +28,14 @@ abstract contract BaseContentSign is ERC721, ERC721URIStorage {
         return super.tokenURI(tokenId);
     }
 
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
-        return super.supportsInterface(interfaceId);
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(ERC721, ERC721URIStorage)
+        returns (bool)
+    {
+        return ERC721.supportsInterface(interfaceId) || ERC721URIStorage.supportsInterface(interfaceId);
     }
 
     function _mustBeWhitelisted() internal view {
