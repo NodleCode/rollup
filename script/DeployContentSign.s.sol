@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {Script, console} from "forge-std/Script.sol";
 
 import {WhitelistPaymaster} from "../src/paymasters/WhitelistPaymaster.sol";
-import {ContentSignNFT} from "../src/contentsign/ContentSignNFT.sol";
+import {ClickContentSign} from "../src/contentsign/ClickContentSign.sol";
 
 contract DeployContentSign is Script {
     address internal whitelistAdmin;
@@ -22,7 +22,7 @@ contract DeployContentSign is Script {
         vm.startBroadcast();
 
         WhitelistPaymaster paymaster = new WhitelistPaymaster(withdrawer);
-        ContentSignNFT nft = new ContentSignNFT("ContentSign", "SIGNED", paymaster);
+        ClickContentSign nft = new ClickContentSign("ContentSign", "SIGNED", paymaster);
 
         address[] memory whitelist = new address[](1);
         whitelist[0] = address(nft);
@@ -35,7 +35,7 @@ contract DeployContentSign is Script {
 
         vm.stopBroadcast();
 
-        console.log("Deployed ContentSignNFT at %s", address(nft));
+        console.log("Deployed ClickContentSign at %s", address(nft));
         console.log("Deployed WhitelistPaymaster at %s", address(paymaster));
         console.log("Please ensure you fund the paymaster contract with enough ETH!");
     }

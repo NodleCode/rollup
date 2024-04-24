@@ -8,16 +8,13 @@ import {ERC721URIStorage} from "openzeppelin-contracts/contracts/token/ERC721/ex
 import {WhitelistPaymaster} from "../paymasters/WhitelistPaymaster.sol";
 
 /// @notice a simple NFT contract for contentsign data where each nft is mapped to a one-time
-/// configurable URL
-contract ContentSignNFT is ERC721, ERC721URIStorage {
+/// configurable URL. This is used for every variant of ContentSign with associated hooks.
+abstract contract BaseContentSign is ERC721, ERC721URIStorage {
     uint256 public nextTokenId;
-    WhitelistPaymaster public whitelistPaymaster;
 
-    error UserIsNotWhitelisted();
+    error UserIsNotWhitelisted(address user);
 
-    constructor(string memory name, string memory symbol, WhitelistPaymaster whitelist) ERC721(name, symbol) {
-        whitelistPaymaster = whitelist;
-    }
+    constructor(string memory name, string memory symbol) ERC721(name, symbol) {}
 
     function safeMint(address to, string memory uri) public {
         _mustBeWhitelisted();
@@ -31,13 +28,21 @@ contract ContentSignNFT is ERC721, ERC721URIStorage {
         return super.tokenURI(tokenId);
     }
 
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
-        return super.supportsInterface(interfaceId);
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(ERC721, ERC721URIStorage)
+        returns (bool)
+    {
+        return ERC721.supportsInterface(interfaceId) || ERC721URIStorage.supportsInterface(interfaceId);
     }
 
     function _mustBeWhitelisted() internal view {
-        if (!whitelistPaymaster.isWhitelistedUser(msg.sender)) {
-            revert UserIsNotWhitelisted();
+        if (!_userIsWhitelisted(msg.sender)) {
+            revert UserIsNotWhitelisted(msg.sender);
         }
     }
+
+    function _userIsWhitelisted(address user) internal view virtual returns (bool);
 }
