@@ -15,18 +15,13 @@ contract ContentSignNFT is ERC721, ERC721URIStorage {
 
     error UserIsNotWhitelisted();
 
-    modifier onlyWhitelised() {
-        if (!whitelistPaymaster.isWhitelistedUser(msg.sender)) {
-            revert UserIsNotWhitelisted();
-        }
-        _;
-    }
-
     constructor(string memory name, string memory symbol, WhitelistPaymaster whitelist) ERC721(name, symbol) {
         whitelistPaymaster = whitelist;
     }
 
-    function safeMint(address to, string memory uri) public onlyWhitelised {
+    function safeMint(address to, string memory uri) public {
+        _mustBeWhitelisted();
+
         uint256 tokenId = nextTokenId++;
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
@@ -38,5 +33,11 @@ contract ContentSignNFT is ERC721, ERC721URIStorage {
 
     function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
         return super.supportsInterface(interfaceId);
+    }
+
+    function _mustBeWhitelisted() internal view {
+        if (!whitelistPaymaster.isWhitelistedUser(msg.sender)) {
+            revert UserIsNotWhitelisted();
+        }
     }
 }

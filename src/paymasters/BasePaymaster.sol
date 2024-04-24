@@ -23,13 +23,6 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
     error InvalidPaymasterInput(string message);
     error FailedToWithdraw();
 
-    modifier onlyBootloader() {
-        if (msg.sender != BOOTLOADER_FORMAL_ADDRESS) {
-            revert AccessRestrictedToBootloader();
-        }
-        _;
-    }
-
     constructor(address admin, address withdrawer) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(WITHDRAWER_ROLE, withdrawer);
@@ -38,9 +31,10 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
     function validateAndPayForPaymasterTransaction(bytes32, bytes32, Transaction calldata transaction)
         external
         payable
-        onlyBootloader
         returns (bytes4 magic, bytes memory /* context */ )
     {
+        _mustBeBootloader();
+
         // By default we consider the transaction as accepted.
         magic = PAYMASTER_VALIDATION_SUCCESS_MAGIC;
 
@@ -76,6 +70,31 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         return (magic, "");
     }
 
+    function postTransaction(bytes calldata, Transaction calldata, bytes32, bytes32, ExecutionResult, uint256)
+        external
+        payable
+        override
+    {
+        _mustBeBootloader();
+
+        // Refunds are not supported yet.
+    }
+
+    function withdraw(address to, uint256 amount) external {
+        _checkRole(WITHDRAWER_ROLE);
+
+        (bool success,) = payable(to).call{value: amount}("");
+        if (!success) revert FailedToWithdraw();
+    }
+
+    receive() external payable {}
+
+    function _mustBeBootloader() internal view {
+        if (msg.sender != BOOTLOADER_FORMAL_ADDRESS) {
+            revert AccessRestrictedToBootloader();
+        }
+    }
+
     function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) internal virtual;
 
     function _validateAndPayApprovalBasedFlow(
@@ -86,22 +105,4 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         bytes memory data,
         uint256 requiredETH
     ) internal virtual;
-
-    function postTransaction(
-        bytes calldata context,
-        Transaction calldata transaction,
-        bytes32,
-        bytes32,
-        ExecutionResult txResult,
-        uint256 maxRefundedGas
-    ) external payable override onlyBootloader {
-        // Refunds are not supported yet.
-    }
-
-    function withdraw(address to, uint256 amount) external onlyRole(WITHDRAWER_ROLE) {
-        (bool success,) = payable(to).call{value: amount}("");
-        if (!success) revert FailedToWithdraw();
-    }
-
-    receive() external payable {}
 }

@@ -28,8 +28,16 @@ contract Erc20Paymaster is BasePaymaster {
         feePrice = initialFeePrice;
     }
 
-    function updateFeePrice(uint256 newFeePrice) public onlyRole(PRICE_ORACLE_ROLE) {
+    function updateFeePrice(uint256 newFeePrice) public {
+        _checkRole(PRICE_ORACLE_ROLE);
+
         feePrice = newFeePrice;
+    }
+
+    function withdrawTokens(address to, uint256 amount) public {
+        _checkRole(WITHDRAWER_ROLE);
+
+        allowedToken.safeTransfer(to, amount);
     }
 
     function _validateAndPayGeneralFlow(address, /* from */ address, /* to */ uint256 /* requiredETH */ )
@@ -66,9 +74,5 @@ contract Erc20Paymaster is BasePaymaster {
         }
 
         allowedToken.safeTransferFrom(userAddress, thisAddress, requiredToken);
-    }
-
-    function withdrawTokens(address to, uint256 amount) public onlyRole(WITHDRAWER_ROLE) {
-        allowedToken.safeTransfer(to, amount);
     }
 }
