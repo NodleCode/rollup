@@ -3,12 +3,13 @@
 pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
-import {ContentSignNFT} from "../../src/contentsign/ContentSignNFT.sol";
+import {BaseContentSign} from "../../src/contentsign/BaseContentSign.sol";
+import {ClickContentSign} from "../../src/contentsign/ClickContentSign.sol";
 import {WhitelistPaymaster} from "../../src/paymasters/WhitelistPaymaster.sol";
 
-contract ContentSignNFTTest is Test {
+contract ClickContentSignTest is Test {
     WhitelistPaymaster private paymaster;
-    ContentSignNFT private nft;
+    ClickContentSign private nft;
 
     address internal alice = vm.addr(1);
     address internal bob = vm.addr(2);
@@ -16,7 +17,7 @@ contract ContentSignNFTTest is Test {
     function setUp() public {
         vm.prank(alice);
         paymaster = new WhitelistPaymaster(alice);
-        nft = new ContentSignNFT("Name", "Symbol", paymaster);
+        nft = new ClickContentSign("Name", "Symbol", paymaster);
 
         address[] memory contracts = new address[](1);
         contracts[0] = address(nft);
@@ -41,7 +42,7 @@ contract ContentSignNFTTest is Test {
     function test_nonWhitelistedCannotMint() public {
         address charlie = vm.addr(3);
 
-        vm.expectRevert(ContentSignNFT.UserIsNotWhitelisted.selector);
+        vm.expectRevert(abi.encodeWithSelector(BaseContentSign.UserIsNotWhitelisted.selector, charlie));
         vm.prank(charlie);
         nft.safeMint(charlie, "uri");
     }
