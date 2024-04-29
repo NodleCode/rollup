@@ -37,11 +37,11 @@ $ forge fmt
 
 ## Deployment
 
-> Please see scripts in `./scripts` and refer to the [forge documentation](https://book.getfoundry.sh/reference/forge/forge-script) for additional arguments.
+**Note**: this is among the least supported, most work in progress feature of the forge zksync fork. Expect these instructions to be broken or outdated.
+
+Please see scripts in `./scripts` and refer to the [forge documentation](https://book.getfoundry.sh/reference/forge/forge-script) for additional arguments. You will need to specify additional arguments when deploying to mainnet or verifying the contracts on Etherscan such as `--rpc-url` and `--broadcast`.
 
 ### Deploying Click contracts
-
-> **Note**: this is among the least supported, most work in progress feature of the forge zksync fork. Expect these instructions to be broken or outdated.
 
 Please define the following environment variables:
 - `N_WHITELIST_ADMIN`: address of the whitelist admin on the paymaster whitelist contract (typically the onboard or sponsorship API address).
@@ -58,11 +58,30 @@ Script ran successfully.
 Gas used: 1821666
 
 == Logs ==
-  Deployed ContentSignNFT at 0x90193C961A926261B756D1E5bb255e67ff9498A1
+  Deployed ClickContentSign at 0x90193C961A926261B756D1E5bb255e67ff9498A1
   Deployed WhitelistPaymaster at 0x34A1D3fff3958843C43aD80F30b94c510645C316
   Please ensure you fund the paymaster contract with enough ETH!
 
 If you wish to simulate on-chain transactions pass a RPC URL.
 ```
 
-> You will need to specify additional arguments when deploying to mainnet or verifying the contracts on Etherscan. Please look at the forge script help for more details.
+### Deploying ContentSign Enterprise contracts
+
+Please define the following environment variables:
+- `N_NAME`: name of the NFT contract deployed.
+- `N_SYMBOL`: symbol of the NFT contract deployed.
+
+Here is a full example for a Sepolia deployment: `N_NAME=ExampleContentSign N_SYMBOL=ECS forge script script/DeployContentSignEnterprise.s.sol --zksync --rpc-url https://sepolia.era.zksync.dev --zk-optimizer -i 1 --broadcast`.
+
+Once deployed, the script will output the contract address, and the account you deployed with will be set as the administrator of this contract with the possibility to grant other users minting access. You may onboard a new user with `cast` via the following command template:
+```shell
+export ETH_RPC_URL=https://sepolia.era.zksync.dev     # use the appropriate RPC here
+export NFT=0x195e4E251c41e8Ae9E9E961366C73e2CFbfB115A # use your own contract address here
+export ROLE=`cast call $NFT "WHITELISTED_ROLE()(bytes32)"`
+
+# Of course, replace 0x68e3981280792A19cC03B5A770B82a6497f0A464 with the address of
+# the user whom you'd like to onboard - this is only here for example
+cast send -i $NFT "grantRole(bytes32,address)" $ROLE 0x68e3981280792A19cC03B5A770B82a6497f0A464
+```
+
+Afterwards the user you onboarded should be able to mint NFTs as usual via the `safeMint(ownerAddress, metadataUri)` function.
