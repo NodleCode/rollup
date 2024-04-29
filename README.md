@@ -39,7 +39,7 @@ $ forge fmt
 
 > Please see scripts in `./scripts` and refer to the [forge documentation](https://book.getfoundry.sh/reference/forge/forge-script) for additional arguments.
 
-### Deploying ContentSign contracts
+### Deploying Click contracts
 
 > **Note**: this is among the least supported, most work in progress feature of the forge zksync fork. Expect these instructions to be broken or outdated.
 
@@ -49,7 +49,7 @@ Please define the following environment variables:
 - deployer address will be set as super admin.
 
 ```shell
-$ forge script script/DeployContentSign.s.sol --zksync
+$ forge script script/DeployClick.s.sol --zksync
 [⠒] Compiling...
 [⠆] Compiling 1 files with 0.8.20
 [⠰] Solc 0.8.20 finished in 8.47s
