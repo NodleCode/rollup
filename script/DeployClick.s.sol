@@ -6,7 +6,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {WhitelistPaymaster} from "../src/paymasters/WhitelistPaymaster.sol";
 import {ClickContentSign} from "../src/contentsign/ClickContentSign.sol";
 
-contract DeployContentSign is Script {
+contract DeployClick is Script {
     address internal whitelistAdmin;
     address internal withdrawer;
 
