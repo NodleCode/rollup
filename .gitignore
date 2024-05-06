@@ -21,3 +21,6 @@ subquery/dist/
 subquery/.data/
 subquery/**/types/
 subquery/project.yaml
+
+
+*-zk/

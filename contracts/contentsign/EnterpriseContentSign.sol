@@ -4,7 +4,7 @@ pragma solidity 0.8.23;
 
 import {BaseContentSign} from "./BaseContentSign.sol";
 
-import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @notice the content sign contract variant for enterprises. Only users whitelisted on this contract can mint
 contract EnterpriseContentSign is BaseContentSign, AccessControl {

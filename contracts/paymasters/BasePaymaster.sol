@@ -6,12 +6,12 @@ import {
     IPaymaster,
     ExecutionResult,
     PAYMASTER_VALIDATION_SUCCESS_MAGIC
-} from "zksync-contracts/l2/system-contracts/interfaces/IPaymaster.sol";
-import {IPaymasterFlow} from "zksync-contracts/l2/system-contracts/interfaces/IPaymasterFlow.sol";
-import {Transaction} from "zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
-import {BOOTLOADER_FORMAL_ADDRESS} from "zksync-contracts/l2/system-contracts/Constants.sol";
+} from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymaster.sol";
+import {IPaymasterFlow} from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymasterFlow.sol";
+import {Transaction} from "@matterlabs/zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
+import {BOOTLOADER_FORMAL_ADDRESS} from "@matterlabs/zksync-contracts/l2/system-contracts/Constants.sol";
 
-import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @notice This smart contract serves as a base for any other paymaster contract.
 abstract contract BasePaymaster is IPaymaster, AccessControl {
