@@ -13,9 +13,9 @@ contract DeployClick is Script {
     function setUp() public {
         voters = new address[](3);
 
-        voters[0] = vm.envAddress("VOTER1_ADDR");
-        voters[1] = vm.envAddress("VOTER2_ADDR");
-        voters[2] = vm.envAddress("VOTER3_ADDR");
+        voters[0] = vm.envAddress("N_VOTER1_ADDR");
+        voters[1] = vm.envAddress("N_VOTER2_ADDR");
+        voters[2] = vm.envAddress("N_VOTER3_ADDR");
     }
 
     function run() public {

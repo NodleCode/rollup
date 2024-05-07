@@ -85,14 +85,14 @@ cast send -i $NFT "grantRole(bytes32,address)" $ROLE 0x68e3981280792A19cC03B5A77
 ```
 
 ### Deploying NODL and NODLMigration contract
-In the following example `VOTER1_ADDR` is the public address of the bridge oracle whose role is going to be a voter for funds coming from
-the parachain side. Similarly `VOTER2_ADDR` and `VOTER3_ADDR` are addresses of the other two voter oracles. 
+In the following example `N_VOTER1_ADDR` is the public address of the bridge oracle whose role is going to be a voter for funds coming from
+the parachain side. Similarly `N_VOTER2_ADDR` and `N_VOTER3_ADDR` are addresses of the other two voter oracles. 
 The closer oracle does not need special permissions and thus need not to be mentioned.
 NOTE: `i` flag in the command will make the tool prompt you for the private key of the deployer. So remember to have that handy but you don't need to define it in yout environment.
 ```shell
-VOTER1_ADDR="0x18AB6B4310d89e9cc5521D33D5f24Fb6bc6a215E" \
-VOTER2_ADDR="0x571C969688991C6A35420C62d44666c47eB3F752" \
-VOTER3_ADDR="0x0cBCE4Ab8ADe1398bA10Fca2A19B5Aa332312Fb1" \
+N_VOTER1_ADDR="0x18AB6B4310d89e9cc5521D33D5f24Fb6bc6a215E" \
+N_VOTER2_ADDR="0x571C969688991C6A35420C62d44666c47eB3F752" \
+N_VOTER3_ADDR="0x0cBCE4Ab8ADe1398bA10Fca2A19B5Aa332312Fb1" \
 forge script script/DeployNodlMigration.sol --zksync --rpc-url https://sepolia.era.zksync.dev --zk-optimizer -i 1 --broadcast
 ```
 
