@@ -36,6 +36,7 @@ contract NODLMigration {
     event VoteStarted(bytes32 indexed proposal, address oracle, address indexed user, uint256 amount);
     event Voted(bytes32 indexed proposal, address oracle);
     event Withdrawn(bytes32 indexed proposal, address indexed user, uint256 amount);
+    event AlreadyWithdrawn(bytes32 indexed proposal);
 
     /// @param bridgeOracles Array of oracle accounts that will be able to bridge the tokens.
     /// @param token Contract address of the NODL token.
@@ -76,11 +77,13 @@ contract NODLMigration {
     /// proposal has enough votes and has passed the safety delay.
     /// @param paraTxHash The transaction hash on the Parachain for this transfer.
     function withdraw(bytes32 paraTxHash) external {
-        _mustNotHaveExecutedYet(paraTxHash);
-        _mustHaveEnoughVotes(paraTxHash);
-        _mustBePastSafetyDelay(paraTxHash);
-
-        _withdraw(paraTxHash, proposals[paraTxHash].target, proposals[paraTxHash].amount);
+        if (!proposals[paraTxHash].executed) {
+            _mustHaveEnoughVotes(paraTxHash);
+            _mustBePastSafetyDelay(paraTxHash);
+            _withdraw(paraTxHash, proposals[paraTxHash].target, proposals[paraTxHash].amount);
+        } else {
+            emit AlreadyWithdrawn(paraTxHash);
+        }
     }
 
     function _mustBeAnOracle(address maybeOracle) internal view {

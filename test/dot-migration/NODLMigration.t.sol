@@ -134,7 +134,8 @@ contract NODLMigrationTest is Test {
 
         migration.withdraw(0x0);
 
-        vm.expectRevert(abi.encodeWithSelector(NODLMigration.AlreadyExecuted.selector, 0x0));
+        vm.expectEmit();
+        emit NODLMigration.AlreadyWithdrawn(0x0);
         migration.withdraw(0x0);
     }
 
