@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "target": "es2020",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "outDir": "./out",
+        "rootDir": "./src",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "allowSyntheticDefaultImports": true
+    },
+    "include": [
+        "src/**/*",
+        "hardhat.config.ts"
+    ],
+    "exclude": [
+        "out",
+        "node_modules",
+        "artifacts-zk",
+        "cache-zk"
+    ]
+}

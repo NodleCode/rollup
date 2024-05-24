@@ -26,3 +26,5 @@ subquery/project.yaml
 artifacts-zk/
 cache-zk/
 deployments-zk/
+zksync-contracts/
+openzeppelin-contracts/
