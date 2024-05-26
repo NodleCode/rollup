@@ -97,3 +97,21 @@ forge script script/DeployNodlMigration.sol --zksync --rpc-url https://sepolia.e
 ```
 
 Afterwards the user you onboarded should be able to mint NFTs as usual via the `safeMint(ownerAddress, metadataUri)` function.
+
+## Scripts
+
+### Checking on bridging proposals
+Given a tracker id (`proposal`) and the bridge address you may run the script available in `./script/CheckBridge.s.sol`. The script will output proposal details and outline expecations as to the proposal's execution timeline. Here is a simple example:
+```sh
+N_PROPOSAL_ID=c43005c880cad7b699122b403607187a78251b9850d387521ffb123c473e3392 N_BRIDGE=0x5de7fe085ee66Fb48447e75AA8fb0598a080AEe0 forge script script/CheckBridge.s.sol --zksync --rpc-url https://mainnet.era.zksync.io 
+[⠊] Compiling...
+No files changed, compilation skipped
+
+Script ran successfully.                                                                                                                                                                                                 
+
+== Logs ==
+  Proposal targets 0xbC69065dE593A00628994864472630dB516186e7 with 100000000000000000000 NODL
+  Proposal has 3 votes
+  Proposal has not been executed
+  Proposal has enough votes but needs to wait 69342 blocks
+```
