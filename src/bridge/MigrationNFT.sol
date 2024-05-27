@@ -7,23 +7,32 @@ import {NODLMigration} from "./NODLMigration.sol";
 
 contract MigrationNFT is ERC721 {
     uint256 public nextTokenId;
-    uint256 public maxHolders;
+    uint256 public maxNFTs;
     uint256 public minAmount;
     NODLMigration public migration;
 
     string internal tokensURI;
 
+    mapping(bytes32 => bool) public claimed;
+
+    error TooManyNFTs();
+    error AlreadyClaimed();
+    error ProposalDoesNotExist();
+    error UnderMinimumAmount();
+    error NotExecuted();
+    error AlreadyAHolder();
+
     /**
      * @notice Construct a new MigrationNFT contract
      * @param _migration the NODLMigration contract to bridge tokens
-     * @param _maxHolders the maximum number of holders for this NFT
+     * @param _maxNFTs the maximum number of NFTs to be minted
      * @param _minAmount the minimum amount of tokens to bridge to get this NFT
      */
-    constructor(NODLMigration _migration, uint256 _maxHolders, uint256 _minAmount, string memory _tokensURI)
+    constructor(NODLMigration _migration, uint256 _maxNFTs, uint256 _minAmount, string memory _tokensURI)
         ERC721("Nodle OGs", "NODL_OGS")
     {
         migration = _migration;
-        maxHolders = _maxHolders;
+        maxNFTs = _maxNFTs;
         minAmount = _minAmount;
         tokensURI = _tokensURI;
     }
@@ -42,22 +51,62 @@ contract MigrationNFT is ERC721 {
      * @param txHash the transaction hash to bridge
      */
     function safeMint(bytes32 txHash) public {
-        (address target, uint256 amount, uint256 lastVote, uint8 totalVotes, bool executed) =
-            migration.proposals(txHash);
+        _mustHaveEnoughNFTsRemaining();
+        _mustNotHaveBeenClaimed(txHash);
 
-        // must be exeucted
-        // must be above min amount
-        // must have enough holders available
-        // must not already be claimed
-        // must not already be a holder
+        (address target, uint256 amount,,, bool executed) = migration.proposals(txHash);
+
+        _mustBeAnExistingProposal(target);
+        _mustBeAboveMinAmount(amount);
+        _mustBeExecuted(executed);
+        _mustNotBeAlreadyAHolder(target);
 
         uint256 tokenId = nextTokenId++;
+        _markAsClaimed(txHash);
         _safeMint(target, tokenId);
-
-        // silence compiler unused variables
-        lastVote;
-        totalVotes;
     }
 
     // add batch mint function
+
+    function _markAsClaimed(bytes32 txHash) internal {
+        claimed[txHash] = true;
+    }
+
+    function _mustHaveEnoughNFTsRemaining() internal view {
+        if (nextTokenId >= maxNFTs) {
+            revert TooManyNFTs();
+        }
+    }
+
+    function _mustNotHaveBeenClaimed(bytes32 txHash) internal view {
+        if (claimed[txHash]) {
+            revert AlreadyClaimed();
+        }
+    }
+
+    function _mustBeAnExistingProposal(address target) internal pure {
+        // solidity initialize memory to 0s so we can check if the address is 0
+        // since it is very unlikely that the address 0 is a valid target
+        if (target == address(0)) {
+            revert ProposalDoesNotExist();
+        }
+    }
+
+    function _mustBeAboveMinAmount(uint256 amount) internal view {
+        if (amount < minAmount) {
+            revert UnderMinimumAmount();
+        }
+    }
+
+    function _mustBeExecuted(bool executed) internal pure {
+        if (!executed) {
+            revert NotExecuted();
+        }
+    }
+
+    function _mustNotBeAlreadyAHolder(address target) internal view {
+        if (balanceOf(target) > 0) {
+            revert AlreadyAHolder();
+        }
+    }
 }
