@@ -39,7 +39,7 @@ describe("Rewards", function () {
 
     });
 
-    it("Should be mintable", async () => {
+    it("batch rewards to a number of random users should work", async () => {
         const balanceBefore = await tokenContract.balanceOf(userWallet.address);
 
         const minTx = await tokenContract
