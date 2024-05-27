@@ -107,4 +107,19 @@ contract MigrationNFTTest is Test {
         vm.expectRevert(MigrationNFT.AlreadyAHolder.selector);
         migrationNFT.safeMint(bytes32(uint256(1)));
     }
+
+    function test_batchMinting() public {
+        bytes32[] memory txHashes = new bytes32[](5);
+        for (uint256 i = 0; i < 5; i++) {
+            vm.bridgeTokens(migration, oracles[0], bytes32(i), vm.addr(42 + i), minAmount);
+            txHashes[i] = bytes32(i);
+        }
+
+        migrationNFT.safeMintBatch(txHashes);
+        assertEq(migrationNFT.nextTokenId(), 5);
+        for (uint256 i = 0; i < 5; i++) {
+            assertEq(migrationNFT.ownerOf(i), vm.addr(42 + i));
+            assertEq(migrationNFT.tokenURI(i), tokenURI);
+        }
+    }
 }

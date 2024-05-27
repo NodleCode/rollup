@@ -66,7 +66,15 @@ contract MigrationNFT is ERC721 {
         _safeMint(target, tokenId);
     }
 
-    // add batch mint function
+    /**
+     * @notice Mint a batch of NFTs for all the provided transaction hashes
+     * @param txHashes the transaction hashes to mint NFTs for
+     */
+    function safeMintBatch(bytes32[] memory txHashes) public {
+        for (uint256 i = 0; i < txHashes.length; i++) {
+            safeMint(txHashes[i]);
+        }
+    }
 
     function _markAsClaimed(bytes32 txHash) internal {
         claimed[txHash] = true;
