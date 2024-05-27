@@ -11,6 +11,7 @@
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/docker-in-docker:2": {}
   },
+  "updateContentCommand": "forge build --zksync",
   "hostRequirements": {
     "cpus": 4,
     "memory": "8gb",
