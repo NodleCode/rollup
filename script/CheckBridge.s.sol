@@ -4,7 +4,7 @@ pragma solidity 0.8.23;
 
 import {Script, console} from "forge-std/Script.sol";
 
-import {NODLMigration} from "../src/dot-migration/NODLMigration.sol";
+import {NODLMigration} from "../src/bridge/NODLMigration.sol";
 
 contract CheckBridge is Script {
     NODLMigration internal bridge;
