@@ -1,13 +1,21 @@
-import { ERC20Contract, Proposal } from "../types";
+import { Proposal, ProposalContract } from "../types";
 
 export const fetchContract = async (
   address: string
-): Promise<ERC20Contract> => {
-  const contract = await ERC20Contract.get(address);
+): Promise<ProposalContract> => {
+  // rewrite to lowercase
+  const lowercaseAddress = address?.toLowerCase();
+
+  const contract = await ProposalContract.get(lowercaseAddress);
 
   if (!contract) {
-    logger.error(`Contract not found for address: ${address}`);
-    const newContract = new ERC20Contract(address, address);
+    logger.error(
+      `Contract not found for lowercaseAddress: ${lowercaseAddress}`
+    );
+    const newContract = new ProposalContract(
+      lowercaseAddress,
+      lowercaseAddress
+    );
     newContract.save();
 
     return newContract;
@@ -15,6 +23,7 @@ export const fetchContract = async (
 
   return contract;
 };
+
 
 export const fetchProposal = async (
   proposal: string
