@@ -13,6 +13,11 @@ type Account @entity {
   ERC721operatorOperator: [ERC721Operator!]! @derivedFrom(field: "operator")
   ERC721transferFromEvent: [ERC721Transfer!]! @derivedFrom(field: "from")
   ERC721transferToEvent: [ERC721Transfer!]! @derivedFrom(field: "to")
+  ERC20transferFromEvent: [ERC20Transfer!]! @derivedFrom(field: "from")
+  ERC20transferToEvent: [ERC20Transfer!]! @derivedFrom(field: "to")
+  ERC20approvalOwnerEvent: [ERC20Approval!]! @derivedFrom(field: "owner")
+  ERC20approvalSpenderEvent: [ERC20Approval!]! @derivedFrom(field: "spender")
+  Proposals: [Proposal!]! @derivedFrom(field: "recipient")
   asAccessControl: AccessControl
   membership: [AccessControlRoleMember!]! @derivedFrom(field: "account")
   roleGranted: [RoleGranted!]! @derivedFrom(field: "account")
@@ -40,8 +45,10 @@ type ERC721Token @entity {
   uri: String
   timestamp: BigInt
   content: String
+  thumbnail: String
   channel: String
   name: String
+  contentType: String
   transactionHash: String
   description: String
   transfers: [ERC721Transfer!]! @derivedFrom(field: "token")
@@ -122,3 +129,70 @@ type Transaction @entity {
   blockNumber: BigInt!
   events: [Event!]! @derivedFrom(field: "transaction")
 }
+
+# ERC20
+
+type ERC20Contract @entity {
+  id: ID!
+  asAccount: Account!
+  name: String
+  symbol: String
+  decimals: BigInt
+  totalSupply: BigInt
+  transfers: [ERC20Transfer!]! @derivedFrom(field: "contract")
+  approvals: [ERC20Approval!]! @derivedFrom(field: "contract")
+}
+
+type ERC20Transfer implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt! @index
+  contract: ERC20Contract
+  hash: String @index
+  from: Account!
+  to: Account!
+  value: BigInt!
+}
+
+type ERC20Approval implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt!
+  contract: ERC20Contract
+  owner: Account!
+  spender: Account!
+  value: BigInt!
+  hash: String @index
+}
+
+# Migration
+
+type ProposalContract @entity {
+  id: ID!
+  asAccount: Account!
+  proposals: [Proposal!]! @derivedFrom(field: "contract")
+}
+
+type Proposal @entity {
+  id: ID!
+  contract: ProposalContract
+  proposal: String @index
+  amount: BigInt
+  recipient: Account
+  initiator: Account
+  withdrawn: Boolean
+  votes: [ProposalVote!]! @derivedFrom(field: "proposal")
+  hash: String @index
+  timestamp: BigInt @index
+}
+
+type ProposalVote @entity {
+  id: ID!
+  proposal: Proposal!
+  voter: Account!
+  timestamp: BigInt! @index
+  hash: String @index
+}
+

@@ -2,14 +2,12 @@ import assert from "assert";
 import { fetchContract, fetchERC721Operator, fetchToken, getApprovalLog } from "../utils/erc721";
 import { TransferLog, ApprovalForAllLog, SafeMintTransaction } from "../types/abi-interfaces/Erc721Abi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
-import { ERC721Contract } from "../types";
 
 export async function handleTransfer(event: TransferLog): Promise<void>  {
   assert(event.args, "No event.args");
 
-  const contract = await ERC721Contract.get(event.address);
-
-  if (contract != null) {
+  const contract = await fetchContract(event.address);
+  /* if (contract) {
     const from = await fetchAccount(event.args.from);
     const to = await fetchAccount(event.args.to);
 
@@ -26,7 +24,7 @@ export async function handleTransfer(event: TransferLog): Promise<void>  {
     token.ownerId = to.id;
 
     return token.save();
-  }
+  } */
 }
 
 // This event is not being emitted by the contract, it is an issue?
@@ -58,21 +56,21 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
   assert(tx.logs, "No tx.logs");
 
   // Call to the contract
-  const contract = await fetchContract(tx.to);
+  const contract = await fetchContract(String(tx.to).toLowerCase());
 
   const safeMintTx = await fetchTransaction(
     tx.hash,
-    tx.blockTimestamp,
+    tx.blockTimestamp * BigInt(1000),
     BigInt(tx.blockNumber)
   );
 
   // Caller 
-  const caller = await fetchAccount(tx.from);
+  const caller = await fetchAccount(String(tx.from).toLowerCase());
 
-  const owner = await fetchAccount(await tx.args[0]);
+  const owner = await fetchAccount(String(await tx.args[0]).toLowerCase());
   const uri = await tx.args[1];
 
-  const tokenId = getApprovalLog(tx.logs, owner.id)![2].toBigInt();
+  const tokenId = getApprovalLog(tx.logs, await tx.args[0])![2].toBigInt();
 
   const token = await fetchToken(
     `${contract.id}/${tokenId}`,
@@ -82,7 +80,7 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
     caller.id
   );
 
-  token.timestamp = BigInt(tx.blockTimestamp);
+  token.timestamp = BigInt(tx.blockTimestamp) * BigInt(1000);
 
   token.transactionHash = tx.hash;
 
@@ -90,14 +88,18 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
   
   if (uri) {
     const metadata = await fetchMetadata(uri, [
+      "nodle-community-nfts.myfilebase.com",
       "pinning.infura-ipfs.io",
       "nodle-web-wallet.infura-ipfs.io",
       "cloudflare-ipfs.com",
     ]);
 
-     if (metadata) {
+    if (metadata) {
        token.content = metadata.content || metadata.image || "";
        token.channel = metadata.channel || "";
+       token.contentType = metadata.contentType || "";
+       token.thumbnail = metadata.thumbnail || "";
+       token.name = metadata.name || "";
      }
   }
 
