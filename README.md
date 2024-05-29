@@ -107,11 +107,73 @@ N_PROPOSAL_ID=c43005c880cad7b699122b403607187a78251b9850d387521ffb123c473e3392 N
 [⠊] Compiling...
 No files changed, compilation skipped
 
-Script ran successfully.                                                                                                                                                                                                 
+Script ran successfully.                                                                               
 
 == Logs ==
   Proposal targets 0xbC69065dE593A00628994864472630dB516186e7 with 100000000000000000000 NODL
   Proposal has 3 votes
   Proposal has not been executed
   Proposal has enough votes but needs to wait 69342 blocks
+```
+
+### Whitelisting new users on ContentSign contracts
+Given a user and contract address, you can whitelist new users on contracts derived from `EnterpriseContentSign` with the `ContentSignWhitelist` script. Note that this assumes your own key has been granted admin permissions on this same contract. Here is a simple example for a testnet contract:
+```sh
+N_CONTENTSIGN=0x195e4E251c41e8Ae9E9E961366C73e2CFbfB115A N_WHITELIST=0x732e40223f57d7a1dbf340f5c0cc5b363b60428b forge script script/ContentSignWhitelist.s.sol -i 1 --zksync --rpc-url https://sepolia.era.zksync.dev --broadcast
+[⠊] Compiling...
+No files changed, compilation skipped
+
+
+Enter private key:
+Script ran successfully.
+
+== Logs ==
+  User 0x732E40223F57D7A1Dbf340F5C0Cc5b363b60428B is not whitelisted, whitelisting them...
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 300
+
+Estimated gas price: 3.05 gwei
+
+Estimated total gas used for script: 438574
+
+Estimated amount required: 0.0013376507 ETH
+
+==========================
+
+###
+Finding wallets for all the necessary addresses...
+##
+Sending transactions [0 - 0].
+⠁ [00:00:00] [###################################################################################################################################################################################################################################################################################] 1/1 txes (0.0s)
+Transactions saved to: /Users/REDACTED/Developer/NodleCode/rollup/broadcast/ContentSignWhitelist.s.sol/300/run-latest.json
+
+Sensitive values saved to: /Users/REDACTED/Developer/NodleCode/rollup/cache/ContentSignWhitelist.s.sol/300/run-latest.json
+
+##
+Waiting for receipts.
+⠉ [00:00:06] [###############################################################################################################################################################################################################################################################################] 1/1 receipts (0.0s)
+##### 300
+✅  [Success]Hash: 0x4ad82fe05cbb06995b51ff6ad9f3a57bbf56fd91765cc2dacb9ef7e86985ebe0
+Block: 2611620
+Paid: 0.000006327975 ETH (253119 gas * 0.025 gwei)
+
+
+Transactions saved to: /Users/REDACTED/Developer/NodleCode/rollup/broadcast/ContentSignWhitelist.s.sol/300/run-latest.json
+
+Sensitive values saved to: /Users/REDACTED/Developer/NodleCode/rollup/cache/ContentSignWhitelist.s.sol/300/run-latest.json
+
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+Total Paid: 0.000006327975 ETH (253119 gas * avg 0.025 gwei)
+
+Transactions saved to: /Users/REDACTED/Developer/NodleCode/rollup/broadcast/ContentSignWhitelist.s.sol/300/run-latest.json
+
+Sensitive values saved to: /Users/REDACTED/Developer/NodleCode/rollup/cache/ContentSignWhitelist.s.sol/300/run-latest.json
 ```
