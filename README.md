@@ -10,10 +10,21 @@ For subquery utilization refer to [Nodle-zksync-subquery](/subquery/README.md)
 - `./` contains foundry contracts for Nodle and Click on ZkSync:
   - `./lib` contains libraries we depend on.
   - `./src` contains contract sources.
-  - `./scripts` contains deployment scripts.
+  - `./script` contains deployment scripts.
   - `./test` contains unit tests.
 - `./subquery` contains a custom subquery for this project.
 - ...more to come
+
+## Conventions
+- all files should be licensed under the BSD 3 Clear Clause license with the required file header `// SPDX-License-Identifier: BSD-3-Clause-Clear`
+- when writing scripts, ensure that:
+  - input environment variables are prefixed with `N_` to differentiate them from `forge` environment variables
+  - an example usage is added to this readme file
+  - naming aligns with existing script files
+- when writing new contracts, ensure that:
+  - proper unit tests are written, no PR should be merged without proper unit testing
+  - OpenZeppelin is used extensively whenever possible as to reduce audit risk
+- while we do have a compatibility layer with `hardhat`, scripts, tests and contracts need to be fully usable via `forge` itself by default
 
 # Usage
 
