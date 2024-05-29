@@ -28,15 +28,15 @@ export const fetchContract = async (
 export const fetchProposal = async (
   proposal: string
 ): Promise<Proposal> => {
-  const contract = await Proposal.get(proposal);
+  const prop = await Proposal.get(proposal);
 
-  if (!contract) {
+  if (!prop) {
     logger.error(`Proposal not found for: ${proposal}`);
-    const newContract = new Proposal(proposal);
-    // newContract.save(); 
+    const newProp = new Proposal(proposal);
+    newProp.save(); 
 
-    return newContract;
+    return newProp;
   }
 
-  return contract;
+  return prop;
 };
