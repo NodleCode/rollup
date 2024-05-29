@@ -30,8 +30,9 @@ export async function handleProposal(event: VoteStartedLog): Promise<void> {
 
 export async function handleVote(event: VotedLog): Promise<void> {
   assert(event.args, "No event.args");
+  const proposalId = event.args.proposal?.toString();
 
-  const proposal = await fetchProposal(event.address);
+  const proposal = await fetchProposal(proposalId);
   if (proposal) {
     const voter = await fetchAccount(event.args.oracle);
     const timestamp = event.block.timestamp * BigInt(1000);
