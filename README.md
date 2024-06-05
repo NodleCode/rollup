@@ -109,6 +109,21 @@ forge script script/DeployNodlMigration.sol --zksync --rpc-url https://sepolia.e
 
 Afterwards the user you onboarded should be able to mint NFTs as usual via the `safeMint(ownerAddress, metadataUri)` function.
 
+### Deploying MigrationNFT contract
+The `MigrationNFT` contract allows the minting of a reward NFT when users bridge enough tokens through `NODLMigration`. You will need to set the following environment variables:
+- `N_MIGRATION`: address of the `NODLMigration` contract
+- `N_MAX_NFTS`: maximum number of NFTs available
+- `N_MIN_AMOUNT`: minimum amount of tokens to bridge to be elligible for a NFT.
+- `N_TOKENS_URI`: URI of NFT metadata.
+You can then run the script `script/DeployMigrationNFT.s.sol` very similarly to the below:
+```sh
+N_MIGRATION=0x1427d38B967435a3F8f476Cda0bc4F51fe66AF4D \
+N_MAX_NFTS=10000 \
+N_MIN_AMOUNT=100000000000000000000 \
+N_TOKENS_URI="ipfs://Qmcy3noasf25Z9rJkg818rrRaP6mShca8cHtfBfdf2VVJJ" \
+forge script script/DeployMigrationNFT.s.sol --zksync --rpc-url https://sepolia.era.zksync.dev --zk-optimizer -i 1 --broadcast
+```
+
 ## Scripts
 
 ### Checking on bridging proposals
