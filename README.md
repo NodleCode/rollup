@@ -2,6 +2,7 @@
 ![Banner](https://github.com/NodleCode/rollup/assets/10683430/b50803ff-41d1-4faa-99eb-72c9eeaf3194)
 
 # Development setup
+> [!NOTE]
 > We recommend you run within the provided [devcontainer](https://code.visualstudio.com/remote/advancedcontainers/overview) to ensure you have all the necessary tooling installed such `zksync-cli`, and `forge`.
 
 For subquery utilization refer to [Nodle-zksync-subquery](/subquery/README.md)
@@ -25,6 +26,7 @@ For subquery utilization refer to [Nodle-zksync-subquery](/subquery/README.md)
   - proper unit tests are written, no PR should be merged without proper unit testing
   - OpenZeppelin is used extensively whenever possible as to reduce audit risk
 - while we do have a compatibility layer with `hardhat`, scripts, tests and contracts need to be fully usable via `forge` itself by default
+- if deploying a contract, ensure it is verified on Etherscan
 
 # Usage
 
@@ -47,8 +49,6 @@ $ forge fmt
 ```
 
 ## Deployment
-
-**Note**: this is among the least supported, most work in progress feature of the forge zksync fork. Expect these instructions to be broken or outdated.
 
 Please see scripts in `./scripts` and refer to the [forge documentation](https://book.getfoundry.sh/reference/forge/forge-script) for additional arguments. You will need to specify additional arguments when deploying to mainnet or verifying the contracts on Etherscan such as `--rpc-url` and `--broadcast`.
 
@@ -116,7 +116,7 @@ The `MigrationNFT` contract allows the minting of a reward NFT when users bridge
 - `N_MIN_AMOUNT`: minimum amount of tokens to bridge to be elligible for a NFT.
 - `N_TOKENS_URI`: URI of NFT metadata.
 You can then run the script `script/DeployMigrationNFT.s.sol` very similarly to the below:
-```sh
+```shell
 N_MIGRATION=0x1427d38B967435a3F8f476Cda0bc4F51fe66AF4D \
 N_MAX_NFTS=10000 \
 N_MIN_AMOUNT=100000000000000000000 \
@@ -128,78 +128,41 @@ forge script script/DeployMigrationNFT.s.sol --zksync --rpc-url https://sepolia.
 
 ### Checking on bridging proposals
 Given a tracker id (`proposal`) and the bridge address you may run the script available in `./script/CheckBridge.s.sol`. The script will output proposal details and outline expecations as to the proposal's execution timeline. Here is a simple example:
-```sh
-N_PROPOSAL_ID=c43005c880cad7b699122b403607187a78251b9850d387521ffb123c473e3392 N_BRIDGE=0x5de7fe085ee66Fb48447e75AA8fb0598a080AEe0 forge script script/CheckBridge.s.sol --zksync --rpc-url https://mainnet.era.zksync.io 
-[⠊] Compiling...
-No files changed, compilation skipped
-
-Script ran successfully.                                                                               
-
-== Logs ==
-  Proposal targets 0xbC69065dE593A00628994864472630dB516186e7 with 100000000000000000000 NODL
-  Proposal has 3 votes
-  Proposal has not been executed
-  Proposal has enough votes but needs to wait 69342 blocks
+```shell
+N_PROPOSAL_ID=c43005c880cad7b699122b403607187a78251b9850d387521ffb123c473e3392 \
+N_BRIDGE=0x5de7fe085ee66Fb48447e75AA8fb0598a080AEe0 \
+forge script script/CheckBridge.s.sol --zksync --rpc-url https://mainnet.era.zksync.io
 ```
 
 ### Whitelisting new users on ContentSign contracts
 Given a user and contract address, you can whitelist new users on contracts derived from `EnterpriseContentSign` with the `ContentSignWhitelist` script. Note that this assumes your own key has been granted admin permissions on this same contract. Here is a simple example for a testnet contract:
-```sh
-N_CONTENTSIGN=0x195e4E251c41e8Ae9E9E961366C73e2CFbfB115A N_WHITELIST=0x732e40223f57d7a1dbf340f5c0cc5b363b60428b forge script script/ContentSignWhitelist.s.sol -i 1 --zksync --rpc-url https://sepolia.era.zksync.dev --broadcast
-[⠊] Compiling...
-No files changed, compilation skipped
-
-
-Enter private key:
-Script ran successfully.
-
-== Logs ==
-  User 0x732E40223F57D7A1Dbf340F5C0Cc5b363b60428B is not whitelisted, whitelisting them...
-
-## Setting up 1 EVM.
-
-==========================
-
-Chain 300
-
-Estimated gas price: 3.05 gwei
-
-Estimated total gas used for script: 438574
-
-Estimated amount required: 0.0013376507 ETH
-
-==========================
-
-###
-Finding wallets for all the necessary addresses...
-##
-Sending transactions [0 - 0].
-⠁ [00:00:00] [###################################################################################################################################################################################################################################################################################] 1/1 txes (0.0s)
-Transactions saved to: /Users/REDACTED/Developer/NodleCode/rollup/broadcast/ContentSignWhitelist.s.sol/300/run-latest.json
-
-Sensitive values saved to: /Users/REDACTED/Developer/NodleCode/rollup/cache/ContentSignWhitelist.s.sol/300/run-latest.json
-
-##
-Waiting for receipts.
-⠉ [00:00:06] [###############################################################################################################################################################################################################################################################################] 1/1 receipts (0.0s)
-##### 300
-✅  [Success]Hash: 0x4ad82fe05cbb06995b51ff6ad9f3a57bbf56fd91765cc2dacb9ef7e86985ebe0
-Block: 2611620
-Paid: 0.000006327975 ETH (253119 gas * 0.025 gwei)
-
-
-Transactions saved to: /Users/REDACTED/Developer/NodleCode/rollup/broadcast/ContentSignWhitelist.s.sol/300/run-latest.json
-
-Sensitive values saved to: /Users/REDACTED/Developer/NodleCode/rollup/cache/ContentSignWhitelist.s.sol/300/run-latest.json
-
-
-
-==========================
-
-ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
-Total Paid: 0.000006327975 ETH (253119 gas * avg 0.025 gwei)
-
-Transactions saved to: /Users/REDACTED/Developer/NodleCode/rollup/broadcast/ContentSignWhitelist.s.sol/300/run-latest.json
-
-Sensitive values saved to: /Users/REDACTED/Developer/NodleCode/rollup/cache/ContentSignWhitelist.s.sol/300/run-latest.json
+```shell
+N_CONTENTSIGN=0x195e4E251c41e8Ae9E9E961366C73e2CFbfB115A \
+N_WHITELIST=0x732e40223f57d7a1dbf340f5c0cc5b363b60428b \
+forge script script/ContentSignWhitelist.s.sol -i 1 --zksync --rpc-url https://sepolia.era.zksync.dev --broadcast
 ```
+
+## Contract verification
+
+> [!CAUTION]
+> The below steps are **not** for the faint of heart. Contract verification is technically not supported yet by the zkSync foundry fork, and the instructions below are likely to break (in which case feel free to update them via a PR).
+
+Verification on Etherscan is best done via the Solidity Json Input method as it is the least error prone and most reliable. To do so, you will need a few elements:
+1. Contract address, which you typically get from script outputs.
+2. `solc` and `zksolc` versions, which you can identify based on the pragma header of the solidity contracts, or by checking what binaries are on your system:
+  ```shell
+  $ ls ~/.zksync/
+  solc-macosx-arm64-0.8.23-1.0.0 zksolc-macosx-arm64-v1.4.1
+  ```
+  In the sample case above, we are using `solc` `0.8.23` and `zksolc` `1.4.1`.
+3. The Solidity Json Input file, which you can get by following the below instructions
+  1. Build the contracts and ask for the `build-info` via `forge build --zksync --zk-optimizer --build-info`
+  2. Access the said `build-info` at path `./out/build-info`, you will find there a JSON file (if you have more than one, take the most recent one)
+  3. Open the JSON file and select the value under the `input` key
+  4. Due to some incompatibilities, normalize the JSON value by removing the keys `settings.metadata` and `settings.viaIR`
+4. The contract inputs, which you can regenerate if you know the input values you deployed the contract with. Or that you can fetch by viewing your deployment transaction on [explorer.zksync.io](https://explorer.zksync.io). To do, you will need to:
+  1. Open your deployment transaction on [explorer.zksync.io](https://explorer.zksync.io) (make sure to select the testnet if you are using the zkSync Era testnet)
+  2. Look for the input data variable named `_input`
+  3. Copy paste its value and **strip the `0x prefix** as Etherscan will throw an error otherwise
+
+Use all these artefacts on the contract verification page on Etherscan for your given contract (open your contract on Etherscan, select `Contract` and the link starting with `Verify`). When prompted, enter the compiler versions, the license (we use BSD-3 Clause Clear). Then on the next page, enter your normalized JSON input file, and the contract constructor inputs.
