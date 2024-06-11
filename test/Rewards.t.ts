@@ -12,13 +12,13 @@ describe("Rewards", function () {
     const mintAmount = 1000n;
 
     before(async function () {
-        ownerWallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
+        ownerWallet = getWallet();
         userWallet = getWallet(LOCAL_RICH_WALLETS[1].privateKey);
 
         tokenContract = await deployContract(
             "NODL",
             [],
-            { wallet: ownerWallet, silent: true, skipChecks: true },
+            { wallet: ownerWallet, silent: false, skipChecks: false },
         );
         await tokenContract.waitForDeployment();
         const tokenAddress = await tokenContract.getAddress();
@@ -26,7 +26,7 @@ describe("Rewards", function () {
         rewardsContract = await deployContract(
             "Rewards",
             [tokenAddress],
-            { wallet: ownerWallet, silent: true, skipChecks: true },
+            { wallet: ownerWallet, silent: false, skipChecks: false },
         );
         await rewardsContract.waitForDeployment();
         const rewardsAddress = await rewardsContract.getAddress();
@@ -50,7 +50,7 @@ describe("Rewards", function () {
         const balanceAfterMint = await tokenContract.balanceOf(userWallet.address);
         expect(balanceAfterMint).to.equal(balanceBefore + mintAmount);
 
-        const rewardBatchSize = 10;
+        const rewardBatchSize = 500;
         const addresses: string[] = [];
         for (let i = 0; i < rewardBatchSize; i++) {
             const wallet = getRandomWallet();

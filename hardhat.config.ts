@@ -48,6 +48,10 @@ const config: HardhatUserConfig = {
     },
     paths: {
         sources: "src",
+        tests: "test",
+    },
+    mocha: {
+        timeout: 120000, // Timeout in milliseconds
     },
 };
 
