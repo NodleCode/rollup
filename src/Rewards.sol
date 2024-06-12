@@ -29,6 +29,12 @@ contract Rewards is AccessControl, EIP712 {
     string private constant SIGNATURE_VERSION = "1";
 
     /**
+     * @dev This constant defines the reward type.
+     * This should be kept consistent with the Reward struct.
+     */
+    bytes private constant REWARD_TYPE = "Reward(address recipient,uint256 amount,uint256 counter)";
+
+    /**
      * @dev Reference to the NODL token contract.
      */
     NODL public nodlToken;
@@ -107,6 +113,7 @@ contract Rewards is AccessControl, EIP712 {
     constructor(address nodlTokenAddress, uint256 initialQuota, uint256 initialPeriod, address oracleAddress)
         EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION)
     {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         nodlToken = NODL(nodlTokenAddress);
         rewardQuota = initialQuota;
         rewardPeriod = initialPeriod;
@@ -132,14 +139,7 @@ contract Rewards is AccessControl, EIP712 {
      */
     function mintReward(Reward memory reward, bytes memory signature) external {
         bytes32 digest = _hashTypedDataV4(
-            keccak256(
-                abi.encode(
-                    keccak256("Reward(address recipient,uint256 amount,uint256 counter)"),
-                    reward.recipient,
-                    reward.amount,
-                    reward.counter
-                )
-            )
+            keccak256(abi.encode(keccak256(REWARD_TYPE), reward.recipient, reward.amount, reward.counter))
         );
         address signer = ECDSA.recover(digest, signature);
 
@@ -166,5 +166,16 @@ contract Rewards is AccessControl, EIP712 {
         rewardCounters[reward.recipient] = reward.counter + 1;
 
         emit RewardMinted(reward.recipient, reward.amount, rewardsClaimed);
+    }
+
+    /**
+     * @dev Helper function to get the digest of the typed data to be signed.
+     * @param reward detailing recipient, amount, and counter.
+     * @return The hash of the typed data.
+     */
+    function digestReward(Reward memory reward) external view returns (bytes32) {
+        return _hashTypedDataV4(
+            keccak256(abi.encode(keccak256(REWARD_TYPE), reward.recipient, reward.amount, reward.counter))
+        );
     }
 }
