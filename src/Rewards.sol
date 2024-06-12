@@ -21,18 +21,18 @@ contract Rewards is AccessControl, EIP712 {
     /**
      * @dev The signing domain used for generating signatures.
      */
-    string private constant SIGNING_DOMAIN = "rewards.depin.nodle";
+    string public constant SIGNING_DOMAIN = "rewards.depin.nodle";
 
     /**
      * @dev The version of the signature scheme used.
      */
-    string private constant SIGNATURE_VERSION = "1";
+    string public constant SIGNATURE_VERSION = "1";
 
     /**
      * @dev This constant defines the reward type.
      * This should be kept consistent with the Reward struct.
      */
-    bytes private constant REWARD_TYPE = "Reward(address recipient,uint256 amount,uint256 counter)";
+    bytes public constant REWARD_TYPE = "Reward(address recipient,uint256 amount,uint256 counter)";
 
     /**
      * @dev Reference to the NODL token contract.

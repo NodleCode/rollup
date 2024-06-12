@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../src/NODL.sol";
 import "../src/Rewards.sol";
-import "openzeppelin-contracts/contracts/access/IAccessControl.sol";
+import "openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
 
 contract RewardsTest is Test {
     NODL nodlToken;
@@ -92,6 +92,42 @@ contract RewardsTest is Test {
 
         // Expect invalid recipient counter error
         vm.expectRevert(Rewards.InvalidRecipientCounter.selector);
+        rewards.mintReward(reward, signature);
+    }
+
+    function testDigestReward() public {
+        bytes32 hashedEIP712DomainType =
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+        bytes32 hashedName = keccak256(bytes("rewards.depin.nodle"));
+        bytes32 hashedVersion = keccak256(bytes("1"));
+        bytes32 domainSeparator =
+            keccak256(abi.encode(hashedEIP712DomainType, hashedName, hashedVersion, block.chainid, address(rewards)));
+
+        Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
+        bytes32 hashedType = keccak256(rewards.REWARD_TYPE());
+        bytes32 structHash = keccak256(abi.encode(hashedType, reward.recipient, reward.amount, reward.counter));
+
+        bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
+        assertEq(rewards.digestReward(reward), digest);
+    }
+
+    function testMintRewardInvalidDigest() public {
+        bytes32 hashedEIP712DomainType =
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+        bytes32 hashedName = keccak256(bytes("rewards.depin.nodle"));
+        bytes32 hashedVersion = keccak256(bytes("2")); // Wrong version
+        bytes32 domainSeparator =
+            keccak256(abi.encode(hashedEIP712DomainType, hashedName, hashedVersion, block.chainid, address(rewards)));
+
+        Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
+        bytes32 hashedType = keccak256(rewards.REWARD_TYPE());
+        bytes32 structHash = keccak256(abi.encode(hashedType, reward.recipient, reward.amount, reward.counter));
+
+        bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.expectRevert();
         rewards.mintReward(reward, signature);
     }
 }
