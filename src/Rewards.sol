@@ -6,6 +6,7 @@ import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessContr
 import {EIP712} from "openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
 
 /**
  * @title Nodle DePIN Rewards
@@ -13,6 +14,8 @@ import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
  * This contract must have the MINTER_ROLE in the NODL token contract.
  */
 contract Rewards is AccessControl, EIP712 {
+    using Math for uint256;
+
     /**
      * @dev Role required to set the reward quota.
      */
@@ -84,6 +87,11 @@ contract Rewards is AccessControl, EIP712 {
     error RewardQuotaExceeded();
 
     /**
+     * @dev Error indicating that scheduling the reward quota renewal has failed most likley due to the period being too long.
+     */
+    error TooLongPeriod();
+
+    /**
      * @dev Error when the reward is not from the authorized oracle.
      */
     error UnauthorizedOracle();
@@ -138,34 +146,54 @@ contract Rewards is AccessControl, EIP712 {
      * @param signature The signature from the authorized oracle.
      */
     function mintReward(Reward memory reward, bytes memory signature) external {
-        bytes32 digest = _hashTypedDataV4(
-            keccak256(abi.encode(keccak256(REWARD_TYPE), reward.recipient, reward.amount, reward.counter))
-        );
-        address signer = ECDSA.recover(digest, signature);
+        address signer = ECDSA.recover(digest(reward), signature);
 
-        if (signer != authorizedOracle) {
-            revert UnauthorizedOracle();
-        }
+        _mustBeAuthorizedOracle(signer);
 
-        if (rewardCounters[reward.recipient] != reward.counter) {
-            revert InvalidRecipientCounter();
-        }
+        _mustBeExpectedCounter(reward.recipient, reward.counter);
 
         if (block.timestamp > quotaRenewalTimestamp) {
+            (bool noTimestampOverflow, uint256 newTimeStamp) = block.timestamp.tryAdd(rewardPeriod);
+            if (!noTimestampOverflow) {
+                revert TooLongPeriod();
+            }
             rewardsClaimed = 0;
-            quotaRenewalTimestamp = block.timestamp + rewardPeriod;
+            quotaRenewalTimestamp = newTimeStamp;
         }
 
-        if (rewardsClaimed + reward.amount > rewardQuota) {
+        (bool noRewardsOverflow, uint256 sum) = rewardsClaimed.tryAdd(reward.amount);
+        if (!noRewardsOverflow || sum > rewardQuota) {
             revert RewardQuotaExceeded();
         }
+        rewardsClaimed = sum;
+
+        // Safe to increment the counter after checking this is the expected counter
+        rewardCounters[reward.recipient] = reward.counter + 1;
 
         nodlToken.mint(reward.recipient, reward.amount);
 
-        rewardsClaimed += reward.amount;
-        rewardCounters[reward.recipient] = reward.counter + 1;
-
         emit RewardMinted(reward.recipient, reward.amount, rewardsClaimed);
+    }
+
+    /**
+     * @dev Internal check to ensure the `counter` value is expected for `receipent`.
+     * @param receipent The address of the receipent to check.
+     * @param counter The counter value.
+     */
+    function _mustBeExpectedCounter(address receipent, uint256 counter) internal view {
+        if (rewardCounters[receipent] != counter) {
+            revert InvalidRecipientCounter();
+        }
+    }
+
+    /**
+     * @dev Internal check to ensure the given address is an authorized oracle.
+     * @param signer The address to be checked.
+     */
+    function _mustBeAuthorizedOracle(address signer) internal view {
+        if (signer != authorizedOracle) {
+            revert UnauthorizedOracle();
+        }
     }
 
     /**
@@ -174,6 +202,15 @@ contract Rewards is AccessControl, EIP712 {
      * @return The hash of the typed data.
      */
     function digestReward(Reward memory reward) external view returns (bytes32) {
+        return digest(reward);
+    }
+
+    /**
+     * @dev Internal helper function to get the digest of the typed data to be signed.
+     * @param reward detailing recipient, amount, and counter.
+     * @return The hash of the typed data.
+     */
+    function digest(Reward memory reward) internal view returns (bytes32) {
         return _hashTypedDataV4(
             keccak256(abi.encode(keccak256(REWARD_TYPE), reward.recipient, reward.amount, reward.counter))
         );
