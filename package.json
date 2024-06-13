@@ -8,9 +8,7 @@
   "scripts": {
     "compile": "hardhat compile",
     "clean": "hardhat clean",
-    "lint": "solhint 'src/**/*.sol'",
-    "test": "hardhat test --network zkSyncSepoliaTestnet",
-    "deploy": "hardhat deploy-zksync --script deploy.ts"
+    "lint": "solhint 'src/**/*.sol'"
   },
   "devDependencies": {
     "@matterlabs/hardhat-zksync": "^1.0.0",
