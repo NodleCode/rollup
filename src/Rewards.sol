@@ -36,7 +36,7 @@ contract Rewards is AccessControl, EIP712 {
      * @dev This constant defines the reward type.
      * This should be kept consistent with the Reward struct.
      */
-    bytes public constant REWARD_TYPE = "Reward(address recipient,uint256 amount,uint256 counter)";
+    bytes public constant REWARD_TYPE = "Reward(address recipient,uint256 amount,uint256 sequence)";
 
     /**
      * @dev The maximum period for reward quota renewal. This is to prevent overflows while avoiding the ongoing overhead of safe math operations.
@@ -74,9 +74,9 @@ contract Rewards is AccessControl, EIP712 {
     address public authorizedOracle;
 
     /**
-     * @dev Mapping to store reward counters for each recipient to prevent replay attacks.
+     * @dev Mapping to store reward sequences for each recipient to prevent replay attacks.
      */
-    mapping(address => uint256) public rewardCounters;
+    mapping(address => uint256) public rewardSequences;
 
     /**
      * @dev Struct on which basis an individual reward must be issued.
@@ -84,7 +84,7 @@ contract Rewards is AccessControl, EIP712 {
     struct Reward {
         address recipient;
         uint256 amount;
-        uint256 counter;
+        uint256 sequence;
     }
 
     /**
@@ -108,9 +108,9 @@ contract Rewards is AccessControl, EIP712 {
     error UnauthorizedOracle();
 
     /**
-     * @dev Error when the recipient's counter does not match.
+     * @dev Error when the recipient's reward sequence does not match.
      */
-    error InvalidRecipientCounter();
+    error InvalidRecipientSequence();
 
     /**
      * @dev Event emitted when the reward quota is set.
@@ -169,7 +169,7 @@ contract Rewards is AccessControl, EIP712 {
     function mintReward(Reward memory reward, bytes memory signature) external {
         _mustBeFromAuthorizedOracle(digest(reward), signature);
 
-        _mustBeExpectedCounter(reward.recipient, reward.counter);
+        _mustBeExpectedSequence(reward.recipient, reward.sequence);
 
         if (block.timestamp >= quotaRenewalTimestamp) {
             rewardsClaimed = 0;
@@ -185,8 +185,8 @@ contract Rewards is AccessControl, EIP712 {
         }
         rewardsClaimed = newRewardsClaimed;
 
-        // Safe to increment the counter after checking this is the expected counter (no overflow for the age of universe even with 1000 reward claims per second)
-        rewardCounters[reward.recipient] = reward.counter + 1;
+        // Safe to increment the sequence after checking this is the expected number (no overflow for the age of universe even with 1000 reward claims per second)
+        rewardSequences[reward.recipient] = reward.sequence + 1;
 
         nodlToken.mint(reward.recipient, reward.amount);
 
@@ -199,14 +199,14 @@ contract Rewards is AccessControl, EIP712 {
         }
     }
     /**
-     * @dev Internal check to ensure the `counter` value is expected for `receipent`.
+     * @dev Internal check to ensure the `sequence` value is expected for `receipent`.
      * @param receipent The address of the receipent to check.
-     * @param counter The counter value.
+     * @param sequence The sequence value.
      */
 
-    function _mustBeExpectedCounter(address receipent, uint256 counter) internal view {
-        if (rewardCounters[receipent] != counter) {
-            revert InvalidRecipientCounter();
+    function _mustBeExpectedSequence(address receipent, uint256 sequence) internal view {
+        if (rewardSequences[receipent] != sequence) {
+            revert InvalidRecipientSequence();
         }
     }
 
@@ -224,7 +224,7 @@ contract Rewards is AccessControl, EIP712 {
 
     /**
      * @dev Helper function to get the digest of the typed data to be signed.
-     * @param reward detailing recipient, amount, and counter.
+     * @param reward detailing recipient, amount, and sequence.
      * @return The hash of the typed data.
      */
     function digestReward(Reward memory reward) external view returns (bytes32) {
@@ -233,12 +233,12 @@ contract Rewards is AccessControl, EIP712 {
 
     /**
      * @dev Internal helper function to get the digest of the typed data to be signed.
-     * @param reward detailing recipient, amount, and counter.
+     * @param reward detailing recipient, amount, and sequence.
      * @return The hash of the typed data.
      */
     function digest(Reward memory reward) internal view returns (bytes32) {
         return _hashTypedDataV4(
-            keccak256(abi.encode(keccak256(REWARD_TYPE), reward.recipient, reward.amount, reward.counter))
+            keccak256(abi.encode(keccak256(REWARD_TYPE), reward.recipient, reward.amount, reward.sequence))
         );
     }
 }

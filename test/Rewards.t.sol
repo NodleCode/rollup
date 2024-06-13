@@ -56,10 +56,10 @@ contract RewardsTest is Test {
         // Mint reward
         rewards.mintReward(reward, signature);
 
-        // Check balances and counters
+        // Check balances and sequences
         assertEq(nodlToken.balanceOf(recipient), 100);
         assertEq(rewards.rewardsClaimed(), 100);
-        assertEq(rewards.rewardCounters(recipient), 1);
+        assertEq(rewards.rewardSequences(recipient), 1);
     }
 
     function testMintRewardQuotaExceeded() public {
@@ -82,13 +82,13 @@ contract RewardsTest is Test {
         rewards.mintReward(reward, signature);
     }
 
-    function testMintRewardInvalidCounter() public {
+    function testMintRewardInvalidsequence() public {
         // Prepare the reward and signature
-        Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 1); // Invalid counter
+        Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 1); // Invalid sequence
         bytes memory signature = createSignature(reward, oraclePrivateKey);
 
-        // Expect invalid recipient counter error
-        vm.expectRevert(Rewards.InvalidRecipientCounter.selector);
+        // Expect invalid recipient sequence error
+        vm.expectRevert(Rewards.InvalidRecipientSequence.selector);
         rewards.mintReward(reward, signature);
     }
 
@@ -102,7 +102,7 @@ contract RewardsTest is Test {
 
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
         bytes32 hashedType = keccak256(rewards.REWARD_TYPE());
-        bytes32 structHash = keccak256(abi.encode(hashedType, reward.recipient, reward.amount, reward.counter));
+        bytes32 structHash = keccak256(abi.encode(hashedType, reward.recipient, reward.amount, reward.sequence));
 
         bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
         assertEq(rewards.digestReward(reward), digest);
@@ -118,7 +118,7 @@ contract RewardsTest is Test {
 
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
         bytes32 hashedType = keccak256(rewards.REWARD_TYPE());
-        bytes32 structHash = keccak256(abi.encode(hashedType, reward.recipient, reward.amount, reward.counter));
+        bytes32 structHash = keccak256(abi.encode(hashedType, reward.recipient, reward.amount, reward.sequence));
 
         bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePrivateKey, digest);
