@@ -6,12 +6,17 @@ import "forge-std/console.sol";
 import "../src/NODL.sol";
 import "../src/Rewards.sol";
 import "openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
+import "./__helpers__/AccessControlUtils.sol";
 
 contract RewardsTest is Test {
+    using AccessControlUtils for Vm;
+
     NODL nodlToken;
     Rewards rewards;
     address recipient;
     uint256 oraclePrivateKey;
+
+    uint256 constant RENEWAL_PERIOD = 1 days;
 
     function setUp() public {
         recipient = address(1);
@@ -19,7 +24,7 @@ contract RewardsTest is Test {
         address oracle = vm.addr(oraclePrivateKey);
 
         nodlToken = new NODL();
-        rewards = new Rewards(address(nodlToken), 1000, 1 days, oracle);
+        rewards = new Rewards(address(nodlToken), 1000, RENEWAL_PERIOD, oracle);
         // Grant MINTER_ROLE to the Rewards contract
         nodlToken.grantRole(nodlToken.MINTER_ROLE(), address(rewards));
     }
@@ -27,10 +32,6 @@ contract RewardsTest is Test {
     function testSetQuota() public {
         // Check initial quota
         assertEq(rewards.rewardQuota(), 1000);
-
-        // Try to set the quota without the role
-        vm.expectRevert();
-        rewards.setRewardQuota(2000);
 
         // Assign QUOTA_SETTER_ROLE to the test contract
         rewards.grantRole(rewards.QUOTA_SETTER_ROLE(), address(this));
@@ -42,12 +43,15 @@ contract RewardsTest is Test {
         assertEq(rewards.rewardQuota(), 2000);
     }
 
+    function testSetQuotaUnauthorized() public {
+        vm.expectRevert_AccessControlUnauthorizedAccount(address(this), rewards.QUOTA_SETTER_ROLE());
+        rewards.setRewardQuota(2000);
+    }
+
     function testMintReward() public {
         // Prepare the reward and signature
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
-        bytes32 digest = rewards.digestReward(reward);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
+        bytes memory signature = createSignature(reward, oraclePrivateKey);
 
         // Mint reward
         rewards.mintReward(reward, signature);
@@ -61,9 +65,7 @@ contract RewardsTest is Test {
     function testMintRewardQuotaExceeded() public {
         // Prepare the reward and signature
         Rewards.Reward memory reward = Rewards.Reward(recipient, 1100, 0);
-        bytes32 digest = rewards.digestReward(reward);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
+        bytes memory signature = createSignature(reward, oraclePrivateKey);
 
         // Expect the quota to be exceeded
         vm.expectRevert(Rewards.RewardQuotaExceeded.selector);
@@ -73,10 +75,7 @@ contract RewardsTest is Test {
     function testMintRewardUnauthorizedOracle() public {
         // Prepare the reward and signature with an unauthorized oracle
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
-        bytes32 digest = rewards.digestReward(reward);
-        uint256 unauthorizedOraclePrivateKey = 0xDEAD;
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(unauthorizedOraclePrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
+        bytes memory signature = createSignature(reward, 0xDEAD);
 
         // Expect unauthorized oracle error
         vm.expectRevert(Rewards.UnauthorizedOracle.selector);
@@ -86,9 +85,7 @@ contract RewardsTest is Test {
     function testMintRewardInvalidCounter() public {
         // Prepare the reward and signature
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 1); // Invalid counter
-        bytes32 digest = rewards.digestReward(reward);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
+        bytes memory signature = createSignature(reward, oraclePrivateKey);
 
         // Expect invalid recipient counter error
         vm.expectRevert(Rewards.InvalidRecipientCounter.selector);
@@ -129,5 +126,31 @@ contract RewardsTest is Test {
 
         vm.expectRevert();
         rewards.mintReward(reward, signature);
+    }
+
+    function testRewardsClaimedResetsOnNewPeriod() public {
+        Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
+        bytes memory signature = createSignature(reward, oraclePrivateKey);
+        rewards.mintReward(reward, signature);
+
+        uint256 nextPeriod = block.timestamp + RENEWAL_PERIOD;
+        assertEq(rewards.rewardsClaimed(), 100);
+        assertEq(rewards.quotaRenewalTimestamp(), nextPeriod);
+
+        vm.warp(RENEWAL_PERIOD + 2 hours);
+
+        reward = Rewards.Reward(recipient, 50, 1);
+        signature = createSignature(reward, oraclePrivateKey);
+        rewards.mintReward(reward, signature);
+
+        assertEq(rewards.rewardsClaimed(), 50);
+        console.log("quotaRenewalTimestamp: ", rewards.quotaRenewalTimestamp());
+        assertEq(rewards.quotaRenewalTimestamp(), nextPeriod);
+    }
+
+    function createSignature(Rewards.Reward memory reward, uint256 privateKey) internal view returns (bytes memory) {
+        bytes32 digest = rewards.digestReward(reward);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+        return abi.encodePacked(r, s, v);
     }
 }

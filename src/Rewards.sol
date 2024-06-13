@@ -38,6 +38,11 @@ contract Rewards is AccessControl, EIP712 {
     bytes public constant REWARD_TYPE = "Reward(address recipient,uint256 amount,uint256 counter)";
 
     /**
+     * @dev The maximum period for reward quota renewal. This is to prevent overflows while avoiding the ongoing overhead of safe math operations.
+     */
+    uint256 public constant MAX_PERIOD = 30 days;
+
+    /**
      * @dev Reference to the NODL token contract.
      */
     NODL public nodlToken;
@@ -87,6 +92,11 @@ contract Rewards is AccessControl, EIP712 {
     error RewardQuotaExceeded();
 
     /**
+     * @dev Error indicating the reward renewal period is set to zero which is not acceptable.
+     */
+    error ZeroPeriod();
+
+    /**
      * @dev Error indicating that scheduling the reward quota renewal has failed most likley due to the period being too long.
      */
     error TooLongPeriod();
@@ -121,7 +131,17 @@ contract Rewards is AccessControl, EIP712 {
     constructor(address nodlTokenAddress, uint256 initialQuota, uint256 initialPeriod, address oracleAddress)
         EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION)
     {
+        // This is to avoid the ongoinb overhead of safe math operations
+        if (initialPeriod == 0) {
+            revert ZeroPeriod();
+        }
+        // This is to prevent overflows while avoiding the ongoing overhead of safe math operations
+        if (initialPeriod > MAX_PERIOD) {
+            revert TooLongPeriod();
+        }
+
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
         nodlToken = NODL(nodlTokenAddress);
         rewardQuota = initialQuota;
         rewardPeriod = initialPeriod;
@@ -152,22 +172,21 @@ contract Rewards is AccessControl, EIP712 {
 
         _mustBeExpectedCounter(reward.recipient, reward.counter);
 
-        if (block.timestamp > quotaRenewalTimestamp) {
-            (bool noTimestampOverflow, uint256 newTimeStamp) = block.timestamp.tryAdd(rewardPeriod);
-            if (!noTimestampOverflow) {
-                revert TooLongPeriod();
-            }
+        if (block.timestamp >= quotaRenewalTimestamp) {
             rewardsClaimed = 0;
-            quotaRenewalTimestamp = newTimeStamp;
+
+            // The following operations are safe based on the constructor's requirements for longer than the age of universe :)
+            uint256 timeAhead = block.timestamp - quotaRenewalTimestamp;
+            quotaRenewalTimestamp = block.timestamp + rewardPeriod - (timeAhead % rewardPeriod);
         }
 
-        (bool noRewardsOverflow, uint256 sum) = rewardsClaimed.tryAdd(reward.amount);
-        if (!noRewardsOverflow || sum > rewardQuota) {
+        (bool sucess, uint256 newRewardsClaimed) = rewardsClaimed.tryAdd(reward.amount);
+        if (!sucess || newRewardsClaimed > rewardQuota) {
             revert RewardQuotaExceeded();
         }
-        rewardsClaimed = sum;
+        rewardsClaimed = newRewardsClaimed;
 
-        // Safe to increment the counter after checking this is the expected counter
+        // Safe to increment the counter after checking this is the expected counter (no overflow for the age of universe even with 1000 reward claims per second)
         rewardCounters[reward.recipient] = reward.counter + 1;
 
         nodlToken.mint(reward.recipient, reward.amount);
@@ -175,11 +194,17 @@ contract Rewards is AccessControl, EIP712 {
         emit RewardMinted(reward.recipient, reward.amount, rewardsClaimed);
     }
 
+    function _mustZero(uint256 value) internal pure {
+        if (value == 0) {
+            revert ZeroPeriod();
+        }
+    }
     /**
      * @dev Internal check to ensure the `counter` value is expected for `receipent`.
      * @param receipent The address of the receipent to check.
      * @param counter The counter value.
      */
+
     function _mustBeExpectedCounter(address receipent, uint256 counter) internal view {
         if (rewardCounters[receipent] != counter) {
             revert InvalidRecipientCounter();
