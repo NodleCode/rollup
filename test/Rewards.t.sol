@@ -150,6 +150,29 @@ contract RewardsTest is Test {
         assertEq(rewards.quotaRenewalTimestamp(), fifthRenewal);
     }
 
+    function testRewardsClaimedAccumulates() public {
+        address user1 = address(11);
+        address user2 = address(22);
+
+        Rewards.Reward memory reward = Rewards.Reward(user1, 3, 0);
+        bytes memory signature = createSignature(reward, oraclePrivateKey);
+        rewards.mintReward(reward, signature);
+
+        reward = Rewards.Reward(user2, 5, 0);
+        signature = createSignature(reward, oraclePrivateKey);
+        rewards.mintReward(reward, signature);
+
+        reward = Rewards.Reward(user1, 7, 1);
+        signature = createSignature(reward, oraclePrivateKey);
+        rewards.mintReward(reward, signature);
+
+        reward = Rewards.Reward(user2, 11, 1);
+        signature = createSignature(reward, oraclePrivateKey);
+        rewards.mintReward(reward, signature);
+
+        assertEq(rewards.rewardsClaimed(), 26);
+    }
+
     function createSignature(Rewards.Reward memory reward, uint256 privateKey) internal view returns (bytes memory) {
         bytes32 digest = rewards.digestReward(reward);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
