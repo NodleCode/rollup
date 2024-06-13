@@ -18,11 +18,6 @@ contract Rewards is AccessControl, EIP712 {
     using Math for uint256;
 
     /**
-     * @dev Role required to set the reward quota.
-     */
-    bytes32 public constant QUOTA_SETTER_ROLE = keccak256("QUOTA_SETTER_ROLE");
-
-    /**
      * @dev The signing domain used for generating signatures.
      */
     string public constant SIGNING_DOMAIN = "rewards.depin.nodle";
@@ -124,12 +119,12 @@ contract Rewards is AccessControl, EIP712 {
 
     /**
      * @dev Initializes the contract with the specified parameters.
-     * @param nodlTokenAddress Address of the NODL token contract.
+     * @param token Address of the NODL token contract.
      * @param initialQuota Initial reward quota.
      * @param initialPeriod Initial reward period.
      * @param oracleAddress Address of the authorized oracle.
      */
-    constructor(address nodlTokenAddress, uint256 initialQuota, uint256 initialPeriod, address oracleAddress)
+    constructor(NODL token, uint256 initialQuota, uint256 initialPeriod, address oracleAddress)
         EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION)
     {
         // This is to avoid the ongoinb overhead of safe math operations
@@ -143,7 +138,7 @@ contract Rewards is AccessControl, EIP712 {
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
-        nodlToken = NODL(nodlTokenAddress);
+        nodlToken = token;
         rewardQuota = initialQuota;
         rewardPeriod = initialPeriod;
         rewardsClaimed = 0;
@@ -156,7 +151,7 @@ contract Rewards is AccessControl, EIP712 {
      * @param newQuota The new reward quota.
      */
     function setRewardQuota(uint256 newQuota) external {
-        _checkRole(QUOTA_SETTER_ROLE);
+        _checkRole(DEFAULT_ADMIN_ROLE);
         rewardQuota = newQuota;
         emit RewardQuotaSet(newQuota);
     }

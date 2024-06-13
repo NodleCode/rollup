@@ -24,7 +24,7 @@ contract RewardsTest is Test {
         address oracle = vm.addr(oraclePrivateKey);
 
         nodlToken = new NODL();
-        rewards = new Rewards(address(nodlToken), 1000, RENEWAL_PERIOD, oracle);
+        rewards = new Rewards(nodlToken, 1000, RENEWAL_PERIOD, oracle);
         // Grant MINTER_ROLE to the Rewards contract
         nodlToken.grantRole(nodlToken.MINTER_ROLE(), address(rewards));
     }
@@ -33,10 +33,13 @@ contract RewardsTest is Test {
         // Check initial quota
         assertEq(rewards.rewardQuota(), 1000);
 
+        address alice = address(2);
+
         // Assign QUOTA_SETTER_ROLE to the test contract
-        rewards.grantRole(rewards.QUOTA_SETTER_ROLE(), address(this));
+        rewards.grantRole(rewards.DEFAULT_ADMIN_ROLE(), alice);
 
         // Set the new quota
+        vm.prank(alice);
         rewards.setRewardQuota(2000);
 
         // Check new quota
@@ -44,7 +47,9 @@ contract RewardsTest is Test {
     }
 
     function testSetQuotaUnauthorized() public {
-        vm.expectRevert_AccessControlUnauthorizedAccount(address(this), rewards.QUOTA_SETTER_ROLE());
+        address bob = address(3);
+        vm.expectRevert_AccessControlUnauthorizedAccount(bob, rewards.DEFAULT_ADMIN_ROLE());
+        vm.prank(bob);
         rewards.setRewardQuota(2000);
     }
 
