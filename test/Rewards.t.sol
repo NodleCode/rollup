@@ -133,19 +133,21 @@ contract RewardsTest is Test {
         bytes memory signature = createSignature(reward, oraclePrivateKey);
         rewards.mintReward(reward, signature);
 
-        uint256 nextPeriod = block.timestamp + RENEWAL_PERIOD;
-        assertEq(rewards.rewardsClaimed(), 100);
-        assertEq(rewards.quotaRenewalTimestamp(), nextPeriod);
+        uint256 firstRenewal = block.timestamp + RENEWAL_PERIOD;
+        uint256 fourthRenewal = firstRenewal + 3 * RENEWAL_PERIOD;
+        uint256 fifthRenewal = firstRenewal + 4 * RENEWAL_PERIOD;
 
-        vm.warp(RENEWAL_PERIOD + 2 hours);
+        assertEq(rewards.rewardsClaimed(), 100);
+        assertEq(rewards.quotaRenewalTimestamp(), firstRenewal);
+
+        vm.warp(fourthRenewal + 1 seconds);
 
         reward = Rewards.Reward(recipient, 50, 1);
         signature = createSignature(reward, oraclePrivateKey);
         rewards.mintReward(reward, signature);
 
         assertEq(rewards.rewardsClaimed(), 50);
-        console.log("quotaRenewalTimestamp: ", rewards.quotaRenewalTimestamp());
-        assertEq(rewards.quotaRenewalTimestamp(), nextPeriod);
+        assertEq(rewards.quotaRenewalTimestamp(), fifthRenewal);
     }
 
     function createSignature(Rewards.Reward memory reward, uint256 privateKey) internal view returns (bytes memory) {
