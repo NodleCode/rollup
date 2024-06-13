@@ -4,6 +4,7 @@ pragma solidity 0.8.23;
 import {NODL} from "./NODL.sol";
 import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 import {EIP712} from "openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol";
+import {SignatureChecker} from "openzeppelin-contracts/contracts/utils/cryptography/SignatureChecker.sol";
 import {ECDSA} from "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
@@ -166,9 +167,7 @@ contract Rewards is AccessControl, EIP712 {
      * @param signature The signature from the authorized oracle.
      */
     function mintReward(Reward memory reward, bytes memory signature) external {
-        address signer = ECDSA.recover(digest(reward), signature);
-
-        _mustBeAuthorizedOracle(signer);
+        _mustBeFromAuthorizedOracle(digest(reward), signature);
 
         _mustBeExpectedCounter(reward.recipient, reward.counter);
 
@@ -194,7 +193,7 @@ contract Rewards is AccessControl, EIP712 {
         emit RewardMinted(reward.recipient, reward.amount, rewardsClaimed);
     }
 
-    function _mustZero(uint256 value) internal pure {
+    function _mustBeGreaterThanZero(uint256 value) internal pure {
         if (value == 0) {
             revert ZeroPeriod();
         }
@@ -212,11 +211,13 @@ contract Rewards is AccessControl, EIP712 {
     }
 
     /**
-     * @dev Internal check to ensure the given address is an authorized oracle.
-     * @param signer The address to be checked.
+     * @dev Checks if the provided signature is valid for the given hash and authorized oracle address.
+     * @param hash The hash to be verified.
+     * @param signature The signature to be checked.
+     * @dev Throws an `UnauthorizedOracle` exception if the signature is not valid.
      */
-    function _mustBeAuthorizedOracle(address signer) internal view {
-        if (signer != authorizedOracle) {
+    function _mustBeFromAuthorizedOracle(bytes32 hash, bytes memory signature) internal view {
+        if (!SignatureChecker.isValidSignatureNow(authorizedOracle, hash, signature)) {
             revert UnauthorizedOracle();
         }
     }
