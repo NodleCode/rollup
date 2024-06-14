@@ -141,7 +141,6 @@ contract Rewards is AccessControl, EIP712 {
         nodlToken = token;
         rewardQuota = initialQuota;
         rewardPeriod = initialPeriod;
-        rewardsClaimed = 0;
         quotaRenewalTimestamp = block.timestamp + rewardPeriod;
         authorizedOracle = oracleAddress;
     }
@@ -162,7 +161,7 @@ contract Rewards is AccessControl, EIP712 {
      * @param signature The signature from the authorized oracle.
      */
     function mintReward(Reward memory reward, bytes memory signature) external {
-        _mustBeFromAuthorizedOracle(digest(reward), signature);
+        _mustBeFromAuthorizedOracle(digestReward(reward), signature);
 
         _mustBeExpectedSequence(reward.recipient, reward.sequence);
 
@@ -188,17 +187,11 @@ contract Rewards is AccessControl, EIP712 {
         emit RewardMinted(reward.recipient, reward.amount, rewardsClaimed);
     }
 
-    function _mustBeGreaterThanZero(uint256 value) internal pure {
-        if (value == 0) {
-            revert ZeroPeriod();
-        }
-    }
     /**
      * @dev Internal check to ensure the `sequence` value is expected for `receipent`.
      * @param receipent The address of the receipent to check.
      * @param sequence The sequence value.
      */
-
     function _mustBeExpectedSequence(address receipent, uint256 sequence) internal view {
         if (rewardSequences[receipent] != sequence) {
             revert InvalidRecipientSequence();
@@ -222,16 +215,7 @@ contract Rewards is AccessControl, EIP712 {
      * @param reward detailing recipient, amount, and sequence.
      * @return The hash of the typed data.
      */
-    function digestReward(Reward memory reward) external view returns (bytes32) {
-        return digest(reward);
-    }
-
-    /**
-     * @dev Internal helper function to get the digest of the typed data to be signed.
-     * @param reward detailing recipient, amount, and sequence.
-     * @return The hash of the typed data.
-     */
-    function digest(Reward memory reward) internal view returns (bytes32) {
+    function digestReward(Reward memory reward) public view returns (bytes32) {
         return _hashTypedDataV4(
             keccak256(abi.encode(keccak256(REWARD_TYPE), reward.recipient, reward.amount, reward.sequence))
         );
