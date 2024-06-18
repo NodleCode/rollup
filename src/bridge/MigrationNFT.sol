@@ -24,6 +24,7 @@ contract MigrationNFT is ERC721 {
 
     error TooManyHolders();
     error AlreadyClaimed();
+    error NoLevelUp();
     error ProposalDoesNotExist();
     error NotExecuted();
     error Soulbound();
@@ -43,6 +44,10 @@ contract MigrationNFT is ERC721 {
         maxHolders = _maxHolders;
         tokensURIRoot = _tokensURIRoot;
         levels = _levels;
+
+        for (uint256 i = 1; i < levels.length; i++) {
+            assert(levels[i] > levels[i - 1]);
+        }
     }
 
     /**
@@ -69,10 +74,16 @@ contract MigrationNFT is ERC721 {
         _mustBeExecuted(executed);
         bool alreadyHolder = _mustAlreadyBeHolderOrEnougHoldersRemaining(target);
 
-        uint256 tokenId = nextTokenId++;
         _markAsClaimed(txHash);
         _incrementHolderCountIfNecessary(alreadyHolder);
-        _safeMint(target, tokenId);
+
+        (uint256[] memory levelsToMint, uint256 nbLevelsToMint) = _computeLevelUps(target, amount);
+        for (uint256 i = 0; i < nbLevelsToMint; i++) {
+            uint256 tokenId = nextTokenId++;
+            tokenIdToLevel[tokenId] = levelsToMint[i] + 1;
+            holderToLevel[target] = levelsToMint[i] + 1;
+            _safeMint(target, tokenId);
+        }
     }
 
     function _markAsClaimed(bytes32 txHash) internal {
@@ -82,6 +93,30 @@ contract MigrationNFT is ERC721 {
     function _incrementHolderCountIfNecessary(bool alreadyHolder) internal {
         if (!alreadyHolder) {
             individualHolders++;
+        }
+    }
+
+    function _computeLevelUps(address target, uint256 amount)
+        internal
+        view
+        returns (uint256[] memory levelsToMint, uint256 nbLevelsToMint)
+    {
+        levelsToMint = new uint256[](levels.length);
+        nbLevelsToMint = 0;
+
+        // We effectively iterate over all the levels the `target` has YET
+        // to qualify for. This expressively skips levels the `target` has
+        // already qualified for.
+        uint256 currentLevel = holderToLevel[target];
+        for (uint256 i = currentLevel; i < levels.length; i++) {
+            if (amount >= levels[i]) {
+                levelsToMint[i - currentLevel] = i;
+                nbLevelsToMint++;
+            }
+        }
+
+        if (nbLevelsToMint == 0) {
+            revert NoLevelUp();
         }
     }
 
