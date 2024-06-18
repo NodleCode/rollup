@@ -17,6 +17,7 @@ contract MigrationNFT is ERC721 {
 
     uint256[] public levels;
     mapping(uint256 => uint256) public tokenIdToLevel;
+    mapping(address => uint256) public holderToLevel;
 
     mapping(bytes32 => bool) public claimed;
 
@@ -24,7 +25,6 @@ contract MigrationNFT is ERC721 {
     error AlreadyClaimed();
     error ProposalDoesNotExist();
     error NotExecuted();
-    error AlreadyAHolder();
     error Soulbound();
 
     /**
@@ -67,21 +67,10 @@ contract MigrationNFT is ERC721 {
 
         _mustBeAnExistingProposal(target);
         _mustBeExecuted(executed);
-        _mustNotBeAlreadyAHolder(target);
 
         uint256 tokenId = nextTokenId++;
         _markAsClaimed(txHash);
         _safeMint(target, tokenId);
-    }
-
-    /**
-     * @notice Mint a batch of NFTs for all the provided transaction hashes
-     * @param txHashes the transaction hashes to mint NFTs for
-     */
-    function safeMintBatch(bytes32[] memory txHashes) public {
-        for (uint256 i = 0; i < txHashes.length; i++) {
-            safeMint(txHashes[i]);
-        }
     }
 
     function _markAsClaimed(bytes32 txHash) internal {
@@ -110,12 +99,6 @@ contract MigrationNFT is ERC721 {
     function _mustBeExecuted(bool executed) internal pure {
         if (!executed) {
             revert NotExecuted();
-        }
-    }
-
-    function _mustNotBeAlreadyAHolder(address target) internal view {
-        if (balanceOf(target) > 0) {
-            revert AlreadyAHolder();
         }
     }
 
