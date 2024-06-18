@@ -106,8 +106,8 @@ contract RewardsTest is Test {
             keccak256(abi.encode(hashedEIP712DomainType, hashedName, hashedVersion, block.chainid, address(rewards)));
 
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
-        bytes32 hashedType = keccak256(rewards.REWARD_TYPE());
-        bytes32 structHash = keccak256(abi.encode(hashedType, reward.recipient, reward.amount, reward.sequence));
+        bytes32 structHash =
+            keccak256(abi.encode(rewards.REWARD_TYPE_HASH(), reward.recipient, reward.amount, reward.sequence));
 
         bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
         assertEq(rewards.digestReward(reward), digest);
@@ -122,8 +122,8 @@ contract RewardsTest is Test {
             keccak256(abi.encode(hashedEIP712DomainType, hashedName, hashedVersion, block.chainid, address(rewards)));
 
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
-        bytes32 hashedType = keccak256(rewards.REWARD_TYPE());
-        bytes32 structHash = keccak256(abi.encode(hashedType, reward.recipient, reward.amount, reward.sequence));
+        bytes32 structHash =
+            keccak256(abi.encode(rewards.REWARD_TYPE_HASH(), reward.recipient, reward.amount, reward.sequence));
 
         bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePrivateKey, digest);
