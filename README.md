@@ -110,17 +110,24 @@ forge script script/DeployNodlMigration.sol --zksync --rpc-url https://sepolia.e
 Afterwards the user you onboarded should be able to mint NFTs as usual via the `safeMint(ownerAddress, metadataUri)` function.
 
 ### Deploying MigrationNFT contract
-The `MigrationNFT` contract allows the minting of a reward NFT when users bridge enough tokens through `NODLMigration`. You will need to set the following environment variables:
+The `MigrationNFT` contract allows the minting of a reward soulbound NFT when users bridge enough tokens through `NODLMigration`. Users can "level up" depending on the amount of tokens they bring in, with each levels being a sorted list of bridged amounts.
+
+You will need to set the following environment variables:
 - `N_MIGRATION`: address of the `NODLMigration` contract
-- `N_MAX_NFTS`: maximum number of NFTs available
-- `N_MIN_AMOUNT`: minimum amount of tokens to bridge to be elligible for a NFT.
-- `N_TOKENS_URI`: URI of NFT metadata.
+- `N_MAX_HOLDERS`: maximum number of participants
+- `N_TOKENS_URI_ROOT`: URI of NFT metadata folder where each level metadata is later presented
+- `N_LEVELS`: number of levels to set
+- `N_LEVELS_x` where `x` is an integer from `0` to `N_LEVELS - 1`: actual number of tokens for each level
+
 You can then run the script `script/DeployMigrationNFT.s.sol` very similarly to the below:
 ```shell
 N_MIGRATION=0x1427d38B967435a3F8f476Cda0bc4F51fe66AF4D \
-N_MAX_NFTS=10000 \
-N_MIN_AMOUNT=100000000000000000000 \
-N_TOKENS_URI="ipfs://Qmcy3noasf25Z9rJkg818rrRaP6mShca8cHtfBfdf2VVJJ" \
+N_MAX_HOLDERS=10000 \
+N_TOKENS_URI_ROOT="ipfs://Qmcy3noasf25Z9rJkg818rrRaP6mShca8cHtfBfdf2VVJJ" \
+N_LEVELS=3 \
+N_LEVELS_0=100 \
+N_LEVELS_1=200 \
+N_LEVELS_2=300 \
 forge script script/DeployMigrationNFT.s.sol --zksync --rpc-url https://sepolia.era.zksync.dev --zk-optimizer -i 1 --broadcast
 ```
 
