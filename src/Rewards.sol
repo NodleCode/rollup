@@ -31,7 +31,7 @@ contract Rewards is AccessControl, EIP712 {
      * @dev This constant defines the reward type.
      * This should be kept consistent with the Reward struct.
      */
-    bytes public constant REWARD_TYPE = "Reward(address recipient,uint256 amount,uint256 sequence)";
+    bytes32 public constant REWARD_TYPE_HASH = keccak256("Reward(address recipient,uint256 amount,uint256 sequence)");
 
     /**
      * @dev The maximum period for reward quota renewal. This is to prevent overflows while avoiding the ongoing overhead of safe math operations.
@@ -216,8 +216,7 @@ contract Rewards is AccessControl, EIP712 {
      * @return The hash of the typed data.
      */
     function digestReward(Reward memory reward) public view returns (bytes32) {
-        return _hashTypedDataV4(
-            keccak256(abi.encode(keccak256(REWARD_TYPE), reward.recipient, reward.amount, reward.sequence))
-        );
+        return
+            _hashTypedDataV4(keccak256(abi.encode(REWARD_TYPE_HASH, reward.recipient, reward.amount, reward.sequence)));
     }
 }
