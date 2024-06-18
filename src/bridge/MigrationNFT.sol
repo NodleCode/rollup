@@ -29,7 +29,7 @@ contract MigrationNFT is ERC721 {
      * @param _minAmount the minimum amount of tokens to bridge to get this NFT
      */
     constructor(NODLMigration _migration, uint256 _maxNFTs, uint256 _minAmount, string memory _tokensURI)
-        ERC721("Nodle OGs", "NODL_OGS")
+        ERC721("OG ZK NODL", "OG_ZK_NODL")
     {
         migration = _migration;
         maxNFTs = _maxNFTs;
