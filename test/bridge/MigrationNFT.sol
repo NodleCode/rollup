@@ -32,7 +32,7 @@ contract MigrationNFTTest is Test {
 
     address[] oracles = [vm.addr(1), vm.addr(2)];
 
-    uint256 maxNFTs = 10;
+    uint256 maxHolders = 10;
 
     string tokenURIRoot = "https://example.com";
     string[] levelToTokenURI = [
@@ -47,14 +47,14 @@ contract MigrationNFTTest is Test {
     function setUp() public {
         nodl = new NODL();
         migration = new NODLMigration(oracles, nodl, 1, 0);
-        migrationNFT = new MigrationNFT(migration, maxNFTs, tokenURIRoot, levels);
+        migrationNFT = new MigrationNFT(migration, maxHolders, tokenURIRoot, levels);
 
         nodl.grantRole(nodl.MINTER_ROLE(), address(migration));
     }
 
     function test_initialState() public {
         assertEq(migrationNFT.nextTokenId(), 0);
-        assertEq(migrationNFT.maxNFTs(), maxNFTs);
+        assertEq(migrationNFT.maxHolders(), maxHolders);
         assertEq(address(migrationNFT.migration()), address(migration));
 
         for (uint256 i = 0; i < levels.length; i++) {
@@ -69,16 +69,29 @@ contract MigrationNFTTest is Test {
         assertEq(migrationNFT.nextTokenId(), 1);
         assertEq(migrationNFT.ownerOf(0), vm.addr(42));
         assertEq(migrationNFT.tokenURI(0), levelToTokenURI[0]);
+        assertEq(migrationNFT.holderToLevel(vm.addr(42)), 0);
+        assertEq(migrationNFT.tokenIdToLevel(0), 0);
+        assertEq(migrationNFT.individualHolders(), 1);
     }
 
-    function test_mintFailsIfTooManyNFTs() public {
-        for (uint256 i = 0; i < maxNFTs; i++) {
+    function test_mintFailsIfTooManyHolders() public {
+        for (uint256 i = 0; i < maxHolders; i++) {
             vm.bridgeTokens(migration, oracles[0], bytes32(i), vm.addr(42 + i), levels[0]);
             migrationNFT.safeMint(bytes32(i));
         }
 
-        vm.expectRevert(MigrationNFT.TooManyNFTs.selector);
-        migrationNFT.safeMint(0x0);
+        assertEq(migrationNFT.individualHolders(), maxHolders);
+
+        vm.bridgeTokens(migration, oracles[0], bytes32(maxHolders), vm.addr(42 + maxHolders), levels[0]);
+        vm.expectRevert(MigrationNFT.TooManyHolders.selector);
+        migrationNFT.safeMint(bytes32(maxHolders));
+
+        // Can level up even if holders maxed out
+        // vm.addr(42) already has one NFT because of the FOR loop above so should still be able to mint
+        // level ups
+        assertEq(migrationNFT.balanceOf(vm.addr(42)), 1);
+        vm.bridgeTokens(migration, oracles[0], bytes32(maxHolders + 1), vm.addr(42), levels[1]);
+        migrationNFT.safeMint(bytes32(maxHolders + 1));
     }
 
     function test_mintFailsIfAlreadyClaimed() public {

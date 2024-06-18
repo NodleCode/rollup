@@ -10,7 +10,7 @@ contract MigrationNFT is ERC721 {
     using Strings for uint256;
 
     uint256 public nextTokenId;
-    uint256 public maxNFTs;
+    uint256 public maxHolders;
     NODLMigration public migration;
 
     string internal tokensURIRoot;
@@ -19,9 +19,10 @@ contract MigrationNFT is ERC721 {
     mapping(uint256 => uint256) public tokenIdToLevel;
     mapping(address => uint256) public holderToLevel;
 
+    uint256 public individualHolders;
     mapping(bytes32 => bool) public claimed;
 
-    error TooManyNFTs();
+    error TooManyHolders();
     error AlreadyClaimed();
     error ProposalDoesNotExist();
     error NotExecuted();
@@ -30,16 +31,16 @@ contract MigrationNFT is ERC721 {
     /**
      * @notice Construct a new MigrationNFT contract
      * @param _migration the NODLMigration contract to bridge tokens
-     * @param _maxNFTs the maximum number of NFTs to be minted
+     * @param _maxHolders the maximum number of holders for the NFTs
      * @param _tokensURIRoot the URI of the metadata folder for the NFTs
      * @param _levels an array representing the different reward levels expressed in
      *                the amount of tokens needed to get the NFT
      */
-    constructor(NODLMigration _migration, uint256 _maxNFTs, string memory _tokensURIRoot, uint256[] memory _levels)
+    constructor(NODLMigration _migration, uint256 _maxHolders, string memory _tokensURIRoot, uint256[] memory _levels)
         ERC721("OG ZK NODL", "OG_ZK_NODL")
     {
         migration = _migration;
-        maxNFTs = _maxNFTs;
+        maxHolders = _maxHolders;
         tokensURIRoot = _tokensURIRoot;
         levels = _levels;
     }
@@ -60,16 +61,17 @@ contract MigrationNFT is ERC721 {
      * @param txHash the transaction hash to bridge
      */
     function safeMint(bytes32 txHash) public {
-        _mustHaveEnoughNFTsRemaining();
         _mustNotHaveBeenClaimed(txHash);
 
         (address target, uint256 amount,,, bool executed) = migration.proposals(txHash);
 
         _mustBeAnExistingProposal(target);
         _mustBeExecuted(executed);
+        bool alreadyHolder = _mustAlreadyBeHolderOrEnougHoldersRemaining(target);
 
         uint256 tokenId = nextTokenId++;
         _markAsClaimed(txHash);
+        _incrementHolderCountIfNecessary(alreadyHolder);
         _safeMint(target, tokenId);
     }
 
@@ -77,9 +79,9 @@ contract MigrationNFT is ERC721 {
         claimed[txHash] = true;
     }
 
-    function _mustHaveEnoughNFTsRemaining() internal view {
-        if (nextTokenId >= maxNFTs) {
-            revert TooManyNFTs();
+    function _incrementHolderCountIfNecessary(bool alreadyHolder) internal {
+        if (!alreadyHolder) {
+            individualHolders++;
         }
     }
 
@@ -99,6 +101,13 @@ contract MigrationNFT is ERC721 {
     function _mustBeExecuted(bool executed) internal pure {
         if (!executed) {
             revert NotExecuted();
+        }
+    }
+
+    function _mustAlreadyBeHolderOrEnougHoldersRemaining(address target) internal view returns (bool alreadyHolder) {
+        alreadyHolder = balanceOf(target) > 0;
+        if (!alreadyHolder && individualHolders == maxHolders) {
+            revert TooManyHolders();
         }
     }
 
