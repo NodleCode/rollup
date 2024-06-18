@@ -74,25 +74,18 @@ contract MigrationNFT is ERC721 {
         _mustBeExecuted(executed);
         bool alreadyHolder = _mustAlreadyBeHolderOrEnougHoldersRemaining(target);
 
-        _markAsClaimed(txHash);
-        _incrementHolderCountIfNecessary(alreadyHolder);
-
         (uint256[] memory levelsToMint, uint256 nbLevelsToMint) = _computeLevelUps(target, amount);
+
+        claimed[txHash] = true;
+        if (!alreadyHolder) {
+            individualHolders++;
+        }
+
         for (uint256 i = 0; i < nbLevelsToMint; i++) {
             uint256 tokenId = nextTokenId++;
             tokenIdToLevel[tokenId] = levelsToMint[i] + 1;
             holderToLevel[target] = levelsToMint[i] + 1;
             _safeMint(target, tokenId);
-        }
-    }
-
-    function _markAsClaimed(bytes32 txHash) internal {
-        claimed[txHash] = true;
-    }
-
-    function _incrementHolderCountIfNecessary(bool alreadyHolder) internal {
-        if (!alreadyHolder) {
-            individualHolders++;
         }
     }
 
