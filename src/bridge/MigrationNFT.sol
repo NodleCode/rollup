@@ -25,6 +25,7 @@ contract MigrationNFT is ERC721 {
     error ProposalDoesNotExist();
     error NotExecuted();
     error AlreadyAHolder();
+    error Soulbound();
 
     /**
      * @notice Construct a new MigrationNFT contract
@@ -116,5 +117,15 @@ contract MigrationNFT is ERC721 {
         if (balanceOf(target) > 0) {
             revert AlreadyAHolder();
         }
+    }
+
+    function _update(address to, uint256 tokenId, address auth) internal override(ERC721) returns (address) {
+        address from = _ownerOf(tokenId);
+        if (from != address(0) && to != address(0)) {
+            // not a burn or mint, since this is a soulbound token we need to revert
+            revert Soulbound();
+        }
+
+        return super._update(to, tokenId, auth);
     }
 }

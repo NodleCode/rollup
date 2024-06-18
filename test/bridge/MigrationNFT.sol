@@ -122,7 +122,13 @@ contract MigrationNFTTest is Test {
     // test can level up
     // test max nft on a per holder, not user basis
 
-    // is soulbound
+    function test_isSoulbound() public {
+        vm.bridgeTokens(migration, oracles[0], 0x0, vm.addr(42), levels[0]);
+        migrationNFT.safeMint(0x0);
+
+        vm.expectRevert(MigrationNFT.Soulbound.selector);
+        migrationNFT.transferFrom(vm.addr(42), vm.addr(43), 0);
+    }
 
     function test_batchMinting() public {
         bytes32[] memory txHashes = new bytes32[](5);
