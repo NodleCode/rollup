@@ -31,7 +31,7 @@ contract RewardsTest is Test {
 
     function testSetQuota() public {
         // Check initial quota
-        assertEq(rewards.rewardQuota(), 1000);
+        assertEq(rewards.quota(), 1000);
 
         address alice = address(2);
 
@@ -40,17 +40,17 @@ contract RewardsTest is Test {
 
         // Set the new quota
         vm.prank(alice);
-        rewards.setRewardQuota(2000);
+        rewards.setQuota(2000);
 
         // Check new quota
-        assertEq(rewards.rewardQuota(), 2000);
+        assertEq(rewards.quota(), 2000);
     }
 
     function testSetQuotaUnauthorized() public {
         address bob = address(3);
         vm.expectRevert_AccessControlUnauthorizedAccount(bob, rewards.DEFAULT_ADMIN_ROLE());
         vm.prank(bob);
-        rewards.setRewardQuota(2000);
+        rewards.setQuota(2000);
     }
 
     function testMintReward() public {
@@ -63,8 +63,8 @@ contract RewardsTest is Test {
 
         // Check balances and sequences
         assertEq(nodlToken.balanceOf(recipient), 100);
-        assertEq(rewards.rewardsClaimed(), 100);
-        assertEq(rewards.rewardSequences(recipient), 1);
+        assertEq(rewards.claimed(), 100);
+        assertEq(rewards.sequences(recipient), 1);
     }
 
     function testMintRewardQuotaExceeded() public {
@@ -73,7 +73,7 @@ contract RewardsTest is Test {
         bytes memory signature = createSignature(reward, oraclePrivateKey);
 
         // Expect the quota to be exceeded
-        vm.expectRevert(Rewards.RewardQuotaExceeded.selector);
+        vm.expectRevert(Rewards.QuotaExceeded.selector);
         rewards.mintReward(reward, signature);
     }
 
@@ -142,7 +142,7 @@ contract RewardsTest is Test {
         uint256 fourthRenewal = firstRenewal + 3 * RENEWAL_PERIOD;
         uint256 fifthRenewal = firstRenewal + 4 * RENEWAL_PERIOD;
 
-        assertEq(rewards.rewardsClaimed(), 100);
+        assertEq(rewards.claimed(), 100);
         assertEq(rewards.quotaRenewalTimestamp(), firstRenewal);
 
         vm.warp(fourthRenewal + 1 seconds);
@@ -151,7 +151,7 @@ contract RewardsTest is Test {
         signature = createSignature(reward, oraclePrivateKey);
         rewards.mintReward(reward, signature);
 
-        assertEq(rewards.rewardsClaimed(), 50);
+        assertEq(rewards.claimed(), 50);
         assertEq(rewards.quotaRenewalTimestamp(), fifthRenewal);
     }
 
@@ -175,7 +175,7 @@ contract RewardsTest is Test {
         signature = createSignature(reward, oraclePrivateKey);
         rewards.mintReward(reward, signature);
 
-        assertEq(rewards.rewardsClaimed(), 26);
+        assertEq(rewards.claimed(), 26);
     }
 
     function createSignature(Rewards.Reward memory reward, uint256 privateKey) internal view returns (bytes memory) {
