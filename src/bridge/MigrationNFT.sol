@@ -10,8 +10,8 @@ contract MigrationNFT is ERC721 {
     using Strings for uint256;
 
     uint256 public nextTokenId;
-    uint256 public maxHolders;
-    NODLMigration public migration;
+    uint256 public immutable maxHolders;
+    NODLMigration public immutable migration;
 
     string internal tokensURIRoot;
 
