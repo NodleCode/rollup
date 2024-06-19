@@ -68,7 +68,7 @@ contract MigrationNFTTest is Test {
         unsortedLevels[1] = 500;
         unsortedLevels[2] = 10000;
 
-        vm.expectRevert();
+        vm.expectRevert(MigrationNFT.UnsortedLevelsList.selector);
         new MigrationNFT(migration, maxHolders, tokenURIRoot, unsortedLevels);
     }
 

@@ -28,6 +28,7 @@ contract MigrationNFT is ERC721 {
     uint256 public individualHolders;
     mapping(bytes32 => bool) public claimed;
 
+    error UnsortedLevelsList();
     error TooManyHolders();
     error AlreadyClaimed();
     error NoLevelUp();
@@ -52,7 +53,9 @@ contract MigrationNFT is ERC721 {
         levels = _levels;
 
         for (uint256 i = 1; i < levels.length; i++) {
-            assert(levels[i] > levels[i - 1]);
+            if (levels[i] <= levels[i - 1]) {
+                revert UnsortedLevelsList();
+            }
         }
     }
 
