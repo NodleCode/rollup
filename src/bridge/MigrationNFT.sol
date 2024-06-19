@@ -142,7 +142,7 @@ contract MigrationNFT is ERC721 {
     function _update(address to, uint256 tokenId, address auth) internal override(ERC721) returns (address) {
         address from = _ownerOf(tokenId);
         if (from != address(0) && to != address(0)) {
-            // not a burn or mint, since this is a soulbound token we need to revert
+            // only burn or mint is allowed for a soulbound token
             revert Soulbound();
         }
 
