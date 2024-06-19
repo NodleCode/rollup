@@ -185,7 +185,7 @@ contract MigrationNFTTest is Test {
         vm.bridgeTokens(migration, oracles[0], 0x0, vm.addr(42), levels[0]);
         migrationNFT.safeMint(0x0);
 
-        vm.expectRevert(MigrationNFT.Soulbound.selector);
+        vm.expectRevert(MigrationNFT.SoulboundIsNotTransferrable.selector);
         migrationNFT.transferFrom(vm.addr(42), vm.addr(43), 0);
     }
 }

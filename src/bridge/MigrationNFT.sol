@@ -16,7 +16,13 @@ contract MigrationNFT is ERC721 {
     string internal tokensURIRoot;
 
     uint256[] public levels;
+    /**
+     * @notice Mapping of token IDs to the levels they represent denominated from 1 (0 means token does not exists)
+     */
     mapping(uint256 => uint256) public tokenIdToLevel;
+    /**
+     * @notice Mapping of holders to the highest level they reached (denominated from 1)
+     */
     mapping(address => uint256) public holderToLevel;
 
     uint256 public individualHolders;
@@ -27,7 +33,7 @@ contract MigrationNFT is ERC721 {
     error NoLevelUp();
     error ProposalDoesNotExist();
     error NotExecuted();
-    error Soulbound();
+    error SoulboundIsNotTransferrable();
 
     /**
      * @notice Construct a new MigrationNFT contract
@@ -100,10 +106,10 @@ contract MigrationNFT is ERC721 {
         // We effectively iterate over all the levels the `target` has YET
         // to qualify for. This expressively skips levels the `target` has
         // already qualified for.
-        uint256 currentLevel = holderToLevel[target];
-        for (uint256 i = currentLevel; i < levels.length; i++) {
+        uint256 nextLevel = holderToLevel[target];
+        for (uint256 i = nextLevel; i < levels.length; i++) {
             if (amount >= levels[i]) {
-                levelsToMint[i - currentLevel] = i;
+                levelsToMint[i - nextLevel] = i;
                 nbLevelsToMint++;
             }
         }
@@ -143,7 +149,7 @@ contract MigrationNFT is ERC721 {
         address from = _ownerOf(tokenId);
         if (from != address(0) && to != address(0)) {
             // only burn or mint is allowed for a soulbound token
-            revert Soulbound();
+            revert SoulboundIsNotTransferrable();
         }
 
         return super._update(to, tokenId, auth);
