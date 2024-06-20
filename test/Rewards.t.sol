@@ -254,7 +254,7 @@ contract RewardsTest is Test {
         bytes memory signature = createSignature(reward, oraclePrivateKey);
         rewards.mintReward(reward, signature);
 
-        uint256 firstRenewal = block.timestamp + RENEWAL_PERIOD;
+        uint256 firstRenewal = RENEWAL_PERIOD + 1; // `+ 1` comes from the expected initial value of block.timestamp
         uint256 fourthRenewal = firstRenewal + 3 * RENEWAL_PERIOD;
         uint256 fifthRenewal = firstRenewal + 4 * RENEWAL_PERIOD;
         uint256 sixthRenewal = firstRenewal + 5 * RENEWAL_PERIOD;
@@ -283,6 +283,7 @@ contract RewardsTest is Test {
         bytes memory batchSignature = createBatchSignature(rewardsBatch, oraclePrivateKey);
         rewards.mintBatchReward(rewardsBatch, batchSignature);
         assertEq(rewards.claimed(), 300);
+
         assertEq(rewards.quotaRenewalTimestamp(), sixthRenewal);
     }
 
