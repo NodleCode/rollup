@@ -133,7 +133,6 @@ contract Rewards is AccessControl, EIP712 {
      * @dev Event emitted when a reward is minted.
      */
     event Minted(address indexed recipient, uint256 amount, uint256 totalRewardsClaimed);
-
     /**
      * @dev Emitted when a batch reward is minted.
      * @param batchSum The sum of rewards in the batch.
@@ -308,7 +307,11 @@ contract Rewards is AccessControl, EIP712 {
      * @return The sum of all amounts in the batch.
      */
     function _batchSum(BatchReward memory batch) internal pure returns (uint256) {
-        // Function implementation...
+        uint256 sum = 0;
+        for (uint256 i = 0; i < batch.amounts.length; i++) {
+            sum += batch.amounts[i];
+        }
+        return sum;
     }
 
     /**

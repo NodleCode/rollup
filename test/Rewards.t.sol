@@ -97,6 +97,96 @@ contract RewardsTest is Test {
         rewards.mintReward(reward, signature);
     }
 
+    function testMintBatchReward() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+
+        rewards.mintBatchReward(rewardsBatch, signature);
+
+        assertEq(nodlToken.balanceOf(recipients[0]), 100);
+        assertEq(nodlToken.balanceOf(recipients[1]), 200);
+        assertEq(rewards.claimed(), 300);
+        assertEq(rewards.sequences(recipients[0]), 0);
+        assertEq(rewards.sequences(recipients[1]), 0);
+        assertEq(rewards.batchSequence(), 1);
+    }
+
+    function testMintBatchRewardQuotaExceeded() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 500;
+        amounts[1] = 600;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+
+        vm.expectRevert(Rewards.QuotaExceeded.selector);
+        rewards.mintBatchReward(rewardsBatch, signature);
+    }
+
+    function testMintBatchRewardUnauthorizedOracle() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, 0xDEAD);
+
+        vm.expectRevert(Rewards.UnauthorizedOracle.selector);
+        rewards.mintBatchReward(rewardsBatch, signature);
+    }
+
+    function testMintBatchRewardInvalidSequence() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 1);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+
+        vm.expectRevert(Rewards.InvalidBatchSequence.selector);
+        rewards.mintBatchReward(rewardsBatch, signature);
+    }
+
+    function testMintBatchRewardInvalidStruct() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](1);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+
+        vm.expectRevert(Rewards.InvalidBatchStructure.selector);
+        rewards.mintBatchReward(rewardsBatch, signature);
+    }
+
     function testDigestReward() public {
         bytes32 hashedEIP712DomainType =
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -133,6 +223,32 @@ contract RewardsTest is Test {
         rewards.mintReward(reward, signature);
     }
 
+    function testMintBatchRewardInvalidDigest() public {
+        bytes32 hashedEIP712DomainType =
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+        bytes32 hashedName = keccak256(bytes("rewards.depin.nodle"));
+        bytes32 hashedVersion = keccak256(bytes("2")); // Wrong version
+        bytes32 domainSeparator =
+            keccak256(abi.encode(hashedEIP712DomainType, hashedName, hashedVersion, block.chainid, address(rewards)));
+
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+
+        bytes32 receipentsHash = keccak256(abi.encodePacked(recipients));
+        bytes32 amountsHash = keccak256(abi.encodePacked(amounts));
+        bytes32 structHash = keccak256(abi.encode(rewards.BATCH_REWARD_TYPE_HASH(), receipentsHash, amountsHash, 0));
+        bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.expectRevert();
+        rewards.mintBatchReward(Rewards.BatchReward(recipients, amounts, 0), signature);
+    }
+
     function testRewardsClaimedResetsOnNewPeriod() public {
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
         bytes memory signature = createSignature(reward, oraclePrivateKey);
@@ -141,6 +257,7 @@ contract RewardsTest is Test {
         uint256 firstRenewal = block.timestamp + RENEWAL_PERIOD;
         uint256 fourthRenewal = firstRenewal + 3 * RENEWAL_PERIOD;
         uint256 fifthRenewal = firstRenewal + 4 * RENEWAL_PERIOD;
+        uint256 sixthRenewal = firstRenewal + 5 * RENEWAL_PERIOD;
 
         assertEq(rewards.claimed(), 100);
         assertEq(rewards.quotaRenewalTimestamp(), firstRenewal);
@@ -153,11 +270,26 @@ contract RewardsTest is Test {
 
         assertEq(rewards.claimed(), 50);
         assertEq(rewards.quotaRenewalTimestamp(), fifthRenewal);
+
+        vm.warp(fifthRenewal + 1 seconds);
+
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+        bytes memory batchSignature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+        rewards.mintBatchReward(rewardsBatch, batchSignature);
+        assertEq(rewards.claimed(), 300);
+        assertEq(rewards.quotaRenewalTimestamp(), sixthRenewal);
     }
 
     function testRewardsClaimedAccumulates() public {
         address user1 = address(11);
         address user2 = address(22);
+        address user3 = address(33);
 
         Rewards.Reward memory reward = Rewards.Reward(user1, 3, 0);
         bytes memory signature = createSignature(reward, oraclePrivateKey);
@@ -175,11 +307,31 @@ contract RewardsTest is Test {
         signature = createSignature(reward, oraclePrivateKey);
         rewards.mintReward(reward, signature);
 
-        assertEq(rewards.claimed(), 26);
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+        recipients[0] = user3;
+        recipients[1] = user1;
+        amounts[0] = 3;
+        amounts[1] = 1;
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+        bytes memory batchSignature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+        rewards.mintBatchReward(rewardsBatch, batchSignature);
+
+        assertEq(rewards.claimed(), 30);
     }
 
     function createSignature(Rewards.Reward memory reward, uint256 privateKey) internal view returns (bytes memory) {
         bytes32 digest = rewards.digestReward(reward);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function createBatchSignature(Rewards.BatchReward memory rewardsBatch, uint256 privateKey)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 digest = rewards.digestBatchReward(rewardsBatch);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
         return abi.encodePacked(r, s, v);
     }
