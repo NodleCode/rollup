@@ -29,9 +29,9 @@ contract RewardsTest is Test {
         nodlToken.grantRole(nodlToken.MINTER_ROLE(), address(rewards));
     }
 
-    function testSetQuota() public {
+    function test_setQuota() public {
         // Check initial quota
-        assertEq(rewards.rewardQuota(), 1000);
+        assertEq(rewards.quota(), 1000);
 
         address alice = address(2);
 
@@ -40,20 +40,20 @@ contract RewardsTest is Test {
 
         // Set the new quota
         vm.prank(alice);
-        rewards.setRewardQuota(2000);
+        rewards.setQuota(2000);
 
         // Check new quota
-        assertEq(rewards.rewardQuota(), 2000);
+        assertEq(rewards.quota(), 2000);
     }
 
-    function testSetQuotaUnauthorized() public {
+    function test_setQuotaUnauthorized() public {
         address bob = address(3);
         vm.expectRevert_AccessControlUnauthorizedAccount(bob, rewards.DEFAULT_ADMIN_ROLE());
         vm.prank(bob);
-        rewards.setRewardQuota(2000);
+        rewards.setQuota(2000);
     }
 
-    function testMintReward() public {
+    function test_mintReward() public {
         // Prepare the reward and signature
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
         bytes memory signature = createSignature(reward, oraclePrivateKey);
@@ -63,21 +63,21 @@ contract RewardsTest is Test {
 
         // Check balances and sequences
         assertEq(nodlToken.balanceOf(recipient), 100);
-        assertEq(rewards.rewardsClaimed(), 100);
-        assertEq(rewards.rewardSequences(recipient), 1);
+        assertEq(rewards.claimed(), 100);
+        assertEq(rewards.sequences(recipient), 1);
     }
 
-    function testMintRewardQuotaExceeded() public {
+    function test_mintRewardQuotaExceeded() public {
         // Prepare the reward and signature
         Rewards.Reward memory reward = Rewards.Reward(recipient, 1100, 0);
         bytes memory signature = createSignature(reward, oraclePrivateKey);
 
         // Expect the quota to be exceeded
-        vm.expectRevert(Rewards.RewardQuotaExceeded.selector);
+        vm.expectRevert(Rewards.QuotaExceeded.selector);
         rewards.mintReward(reward, signature);
     }
 
-    function testMintRewardUnauthorizedOracle() public {
+    function test_mintRewardUnauthorizedOracle() public {
         // Prepare the reward and signature with an unauthorized oracle
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
         bytes memory signature = createSignature(reward, 0xDEAD);
@@ -87,7 +87,7 @@ contract RewardsTest is Test {
         rewards.mintReward(reward, signature);
     }
 
-    function testMintRewardInvalidsequence() public {
+    function test_mintRewardInvalidsequence() public {
         // Prepare the reward and signature
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 1); // Invalid sequence
         bytes memory signature = createSignature(reward, oraclePrivateKey);
@@ -97,7 +97,130 @@ contract RewardsTest is Test {
         rewards.mintReward(reward, signature);
     }
 
-    function testDigestReward() public {
+    function test_mintBatchReward() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+
+        rewards.mintBatchReward(rewardsBatch, signature);
+
+        assertEq(nodlToken.balanceOf(recipients[0]), 100);
+        assertEq(nodlToken.balanceOf(recipients[1]), 200);
+        assertEq(rewards.claimed(), 300);
+        assertEq(rewards.sequences(recipients[0]), 0);
+        assertEq(rewards.sequences(recipients[1]), 0);
+        assertEq(rewards.batchSequence(), 1);
+    }
+
+    function test_gasUsed() public {
+        address[] memory recipients = new address[](500);
+        uint256[] memory amounts = new uint256[](500);
+
+        for (uint256 i = 0; i < 500; i++) {
+            recipients[i] = address(uint160(i + 1));
+            amounts[i] = 1;
+        }
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+
+        uint256 gasBefore = gasleft();
+        rewards.mintBatchReward(rewardsBatch, signature);
+        uint256 gasAfter = gasleft();
+
+        uint256 gasUsedPerRecipient = (gasBefore - gasAfter) / 500;
+        console.log("Gas used per recipient in a batch: %d", gasUsedPerRecipient);
+
+        Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
+        bytes memory signature2 = createSignature(reward, oraclePrivateKey);
+
+        gasBefore = gasleft();
+        rewards.mintReward(reward, signature2);
+        gasAfter = gasleft();
+        console.log("Gas used per recipient in a solo:  %d", gasBefore - gasAfter);
+        uint256 ratio = (gasBefore - gasAfter) / gasUsedPerRecipient;
+        console.log("Batch efficieny >= %dX", ratio);
+
+        assertTrue(ratio >= 1, "Batch efficiency must be at least 1X to be worth it.");
+    }
+
+    function test_mintBatchRewardQuotaExceeded() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 500;
+        amounts[1] = 600;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+
+        vm.expectRevert(Rewards.QuotaExceeded.selector);
+        rewards.mintBatchReward(rewardsBatch, signature);
+    }
+
+    function test_mintBatchRewardUnauthorizedOracle() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, 0xDEAD);
+
+        vm.expectRevert(Rewards.UnauthorizedOracle.selector);
+        rewards.mintBatchReward(rewardsBatch, signature);
+    }
+
+    function test_mintBatchRewardInvalidSequence() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 1);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+
+        vm.expectRevert(Rewards.InvalidBatchSequence.selector);
+        rewards.mintBatchReward(rewardsBatch, signature);
+    }
+
+    function test_mintBatchRewardInvalidStruct() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](1);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+
+        vm.expectRevert(Rewards.InvalidBatchStructure.selector);
+        rewards.mintBatchReward(rewardsBatch, signature);
+    }
+
+    function test_digestReward() public {
         bytes32 hashedEIP712DomainType =
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
         bytes32 hashedName = keccak256(bytes("rewards.depin.nodle"));
@@ -113,7 +236,7 @@ contract RewardsTest is Test {
         assertEq(rewards.digestReward(reward), digest);
     }
 
-    function testMintRewardInvalidDigest() public {
+    function test_mintRewardInvalidDigest() public {
         bytes32 hashedEIP712DomainType =
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
         bytes32 hashedName = keccak256(bytes("rewards.depin.nodle"));
@@ -133,16 +256,43 @@ contract RewardsTest is Test {
         rewards.mintReward(reward, signature);
     }
 
-    function testRewardsClaimedResetsOnNewPeriod() public {
+    function test_mintBatchRewardInvalidDigest() public {
+        bytes32 hashedEIP712DomainType =
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+        bytes32 hashedName = keccak256(bytes("rewards.depin.nodle"));
+        bytes32 hashedVersion = keccak256(bytes("2")); // Wrong version
+        bytes32 domainSeparator =
+            keccak256(abi.encode(hashedEIP712DomainType, hashedName, hashedVersion, block.chainid, address(rewards)));
+
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+
+        bytes32 receipentsHash = keccak256(abi.encodePacked(recipients));
+        bytes32 amountsHash = keccak256(abi.encodePacked(amounts));
+        bytes32 structHash = keccak256(abi.encode(rewards.BATCH_REWARD_TYPE_HASH(), receipentsHash, amountsHash, 0));
+        bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.expectRevert();
+        rewards.mintBatchReward(Rewards.BatchReward(recipients, amounts, 0), signature);
+    }
+
+    function test_rewardsClaimedResetsOnNewPeriod() public {
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
         bytes memory signature = createSignature(reward, oraclePrivateKey);
         rewards.mintReward(reward, signature);
 
-        uint256 firstRenewal = block.timestamp + RENEWAL_PERIOD;
+        uint256 firstRenewal = RENEWAL_PERIOD + 1; // `+ 1` comes from the expected initial value of block.timestamp
         uint256 fourthRenewal = firstRenewal + 3 * RENEWAL_PERIOD;
         uint256 fifthRenewal = firstRenewal + 4 * RENEWAL_PERIOD;
+        uint256 sixthRenewal = firstRenewal + 5 * RENEWAL_PERIOD;
 
-        assertEq(rewards.rewardsClaimed(), 100);
+        assertEq(rewards.claimed(), 100);
         assertEq(rewards.quotaRenewalTimestamp(), firstRenewal);
 
         vm.warp(fourthRenewal + 1 seconds);
@@ -151,13 +301,29 @@ contract RewardsTest is Test {
         signature = createSignature(reward, oraclePrivateKey);
         rewards.mintReward(reward, signature);
 
-        assertEq(rewards.rewardsClaimed(), 50);
+        assertEq(rewards.claimed(), 50);
         assertEq(rewards.quotaRenewalTimestamp(), fifthRenewal);
+
+        vm.warp(fifthRenewal + 1 seconds);
+
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+        bytes memory batchSignature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+        rewards.mintBatchReward(rewardsBatch, batchSignature);
+        assertEq(rewards.claimed(), 300);
+
+        assertEq(rewards.quotaRenewalTimestamp(), sixthRenewal);
     }
 
-    function testRewardsClaimedAccumulates() public {
+    function test_rewardsClaimedAccumulates() public {
         address user1 = address(11);
         address user2 = address(22);
+        address user3 = address(33);
 
         Rewards.Reward memory reward = Rewards.Reward(user1, 3, 0);
         bytes memory signature = createSignature(reward, oraclePrivateKey);
@@ -175,11 +341,31 @@ contract RewardsTest is Test {
         signature = createSignature(reward, oraclePrivateKey);
         rewards.mintReward(reward, signature);
 
-        assertEq(rewards.rewardsClaimed(), 26);
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+        recipients[0] = user3;
+        recipients[1] = user1;
+        amounts[0] = 3;
+        amounts[1] = 1;
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+        bytes memory batchSignature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+        rewards.mintBatchReward(rewardsBatch, batchSignature);
+
+        assertEq(rewards.claimed(), 30);
     }
 
     function createSignature(Rewards.Reward memory reward, uint256 privateKey) internal view returns (bytes memory) {
         bytes32 digest = rewards.digestReward(reward);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function createBatchSignature(Rewards.BatchReward memory rewardsBatch, uint256 privateKey)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 digest = rewards.digestBatchReward(rewardsBatch);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
         return abi.encodePacked(r, s, v);
     }

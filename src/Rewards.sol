@@ -19,57 +19,27 @@ contract Rewards is AccessControl, EIP712 {
      * @dev The signing domain used for generating signatures.
      */
     string public constant SIGNING_DOMAIN = "rewards.depin.nodle";
-
     /**
      * @dev The version of the signature scheme used.
      */
     string public constant SIGNATURE_VERSION = "1";
-
     /**
-     * @dev This constant defines the reward type.
-     * This should be kept consistent with the Reward struct.
+     * @dev The hash of the reward type structure.
+     * It is calculated using the keccak256 hash function.
+     * The structure consists of the recipient's address, the amount of the reward, and the sequence number for that receipent.
      */
     bytes32 public constant REWARD_TYPE_HASH = keccak256("Reward(address recipient,uint256 amount,uint256 sequence)");
-
+    /**
+     * @dev The hash of the batch reward type.
+     * It is calculated by taking the keccak256 hash of the string representation of the batch reward type.
+     * The batch reward type consists of the recipients, amounts, and sequence of that batch.
+     */
+    bytes32 public constant BATCH_REWARD_TYPE_HASH =
+        keccak256("BatchReward(address[] recipients,uint256[] amounts,uint256 sequence)");
     /**
      * @dev The maximum period for reward quota renewal. This is to prevent overflows while avoiding the ongoing overhead of safe math operations.
      */
     uint256 public constant MAX_PERIOD = 30 days;
-
-    /**
-     * @dev Reference to the NODL token contract.
-     */
-    NODL public nodlToken;
-
-    /**
-     * @dev Maximum amount of rewards that can be distributed in a period.
-     */
-    uint256 public rewardQuota;
-
-    /**
-     * @dev Duration of each reward period.
-     */
-    uint256 public rewardPeriod;
-
-    /**
-     * @dev Timestamp indicating when the reward quota is due to be renewed.
-     */
-    uint256 public quotaRenewalTimestamp;
-
-    /**
-     * @dev Amount of rewards claimed in the current period.
-     */
-    uint256 public rewardsClaimed;
-
-    /**
-     * @dev Address of the authorized oracle.
-     */
-    address public authorizedOracle;
-
-    /**
-     * @dev Mapping to store reward sequences for each recipient to prevent replay attacks.
-     */
-    mapping(address => uint256) public rewardSequences;
 
     /**
      * @dev Struct on which basis an individual reward must be issued.
@@ -81,39 +51,94 @@ contract Rewards is AccessControl, EIP712 {
     }
 
     /**
+     * @dev Represents a batch reward distribution.
+     * Each batch reward consists of an array of recipients, an array of corresponding amounts,
+     * and a sequence number to avoid replay attacks.
+     */
+    struct BatchReward {
+        address[] recipients;
+        uint256[] amounts;
+        uint256 sequence;
+    }
+
+    /**
+     * @dev Reference to the NODL token contract.
+     */
+    NODL public immutable nodl;
+    /**
+     * @dev Address of the authorized oracle.
+     */
+    address public immutable authorizedOracle;
+    /**
+     * @dev Reward quota renewal period.
+     */
+    uint256 public immutable period;
+
+    /**
+     * @dev Maximum amount of rewards that can be distributed in a period.
+     */
+    uint256 public quota;
+    /**
+     * @dev Timestamp indicating when the reward quota is due to be renewed.
+     */
+    uint256 public quotaRenewalTimestamp;
+    /**
+     * @dev Amount of rewards claimed in the current period.
+     */
+    uint256 public claimed;
+    /**
+     * @dev Mapping to store reward sequences for each recipient to prevent replay attacks.
+     */
+    mapping(address => uint256) public sequences;
+    /**
+     * @dev The sequence number of the batch reward.
+     */
+    uint256 public batchSequence;
+
+    /**
      * @dev Error when the reward quota is exceeded.
      */
-    error RewardQuotaExceeded();
-
+    error QuotaExceeded();
     /**
      * @dev Error indicating the reward renewal period is set to zero which is not acceptable.
      */
     error ZeroPeriod();
-
     /**
      * @dev Error indicating that scheduling the reward quota renewal has failed most likley due to the period being too long.
      */
     error TooLongPeriod();
-
     /**
      * @dev Error when the reward is not from the authorized oracle.
      */
     error UnauthorizedOracle();
-
     /**
      * @dev Error when the recipient's reward sequence does not match.
      */
     error InvalidRecipientSequence();
+    /**
+     * @dev Error thrown when an invalid batch sequence is encountered.
+     */
+    error InvalidBatchSequence();
+    /**
+     * @dev Throws an error if the batch structure is invalid.
+     * The recipient and amounts arrays must have the same length.
+     */
+    error InvalidBatchStructure();
 
     /**
      * @dev Event emitted when the reward quota is set.
      */
-    event RewardQuotaSet(uint256 quota);
-
+    event QuotaSet(uint256 quota);
     /**
      * @dev Event emitted when a reward is minted.
      */
-    event RewardMinted(address indexed recipient, uint256 amount, uint256 totalRewardsClaimed);
+    event Minted(address indexed recipient, uint256 amount, uint256 totalRewardsClaimed);
+    /**
+     * @dev Emitted when a batch reward is minted.
+     * @param batchSum The sum of rewards in the batch.
+     * @param totalRewardsClaimed The total number of rewards claimed so far.
+     */
+    event BatchMinted(uint256 batchSum, uint256 totalRewardsClaimed);
 
     /**
      * @dev Initializes the contract with the specified parameters.
@@ -136,21 +161,21 @@ contract Rewards is AccessControl, EIP712 {
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
-        nodlToken = token;
-        rewardQuota = initialQuota;
-        rewardPeriod = initialPeriod;
-        quotaRenewalTimestamp = block.timestamp + rewardPeriod;
+        nodl = token;
+        quota = initialQuota;
+        period = initialPeriod;
+        quotaRenewalTimestamp = block.timestamp + period;
         authorizedOracle = oracleAddress;
     }
 
     /**
-     * @dev Sets the reward quota. Only accounts with the QUOTA_SETTER_ROLE can call this function.
+     * @dev Sets the reward quota. Only accounts with the DEFAULT_ADMIN_ROLE can call this function.
      * @param newQuota The new reward quota.
      */
-    function setRewardQuota(uint256 newQuota) external {
+    function setQuota(uint256 newQuota) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        rewardQuota = newQuota;
-        emit RewardQuotaSet(newQuota);
+        quota = newQuota;
+        emit QuotaSet(newQuota);
     }
 
     /**
@@ -159,30 +184,71 @@ contract Rewards is AccessControl, EIP712 {
      * @param signature The signature from the authorized oracle.
      */
     function mintReward(Reward memory reward, bytes memory signature) external {
+        _mustBeExpectedSequence(reward.recipient, reward.sequence);
         _mustBeFromAuthorizedOracle(digestReward(reward), signature);
 
-        _mustBeExpectedSequence(reward.recipient, reward.sequence);
+        _checkedUpdateQuota();
+        _checkedUpdateClaimed(reward.amount);
 
+        // Safe to increment the sequence after checking this is the expected number (no overflow for the age of universe even with 1000 reward claims per second)
+        sequences[reward.recipient] = reward.sequence + 1;
+        nodl.mint(reward.recipient, reward.amount);
+
+        emit Minted(reward.recipient, reward.amount, claimed);
+    }
+
+    /**
+     * @dev Mints batch rewards to multiple recipients.
+     * @param batch The BatchReward struct containing the recipients and amounts of rewards to be minted.
+     * @param signature The signature to verify the authenticity of the batch reward.
+     */
+    function mintBatchReward(BatchReward memory batch, bytes memory signature) external {
+        _mustBeValidBatchStructure(batch);
+        _mustBeExpectedBatchSequence(batch.sequence);
+        _mustBeFromAuthorizedOracle(digestBatchReward(batch), signature);
+
+        _checkedUpdateQuota();
+        uint256 batchSum = _batchSum(batch);
+        _checkedUpdateClaimed(batchSum);
+
+        // Safe to increment the sequence after checking this is the expected number (no overflow for the age of universe even with 1000 reward claims per second)
+        batchSequence = batch.sequence + 1;
+
+        for (uint256 i = 0; i < batch.recipients.length; i++) {
+            nodl.mint(batch.recipients[i], batch.amounts[i]);
+        }
+
+        emit BatchMinted(batchSum, claimed);
+    }
+
+    /**
+     * @dev Internal function to update the rewards quota if the current block timestamp is greater than or equal to the quota renewal timestamp.
+     * @notice This function resets the rewards claimed to 0 and updates the quota renewal timestamp based on the reward period.
+     * @notice The following operations are safe based on the constructor's requirements for longer than the age of the universe.
+     */
+    function _checkedUpdateQuota() internal {
         if (block.timestamp >= quotaRenewalTimestamp) {
-            rewardsClaimed = 0;
+            claimed = 0;
 
             // The following operations are safe based on the constructor's requirements for longer than the age of universe :)
             uint256 timeAhead = block.timestamp - quotaRenewalTimestamp;
-            quotaRenewalTimestamp = block.timestamp + rewardPeriod - (timeAhead % rewardPeriod);
+            quotaRenewalTimestamp = block.timestamp + period - (timeAhead % period);
         }
+    }
 
-        (bool sucess, uint256 newRewardsClaimed) = rewardsClaimed.tryAdd(reward.amount);
-        if (!sucess || newRewardsClaimed > rewardQuota) {
-            revert RewardQuotaExceeded();
+    /**
+     * @dev Internal function to update the rewards claimed by a given amount.
+     * @param amount The amount of rewards to be added.
+     * @notice This function is used to update the rewards claimed by a user. It checks if the new rewards claimed
+     * exceeds the reward quota and reverts the transaction if it does. Otherwise, it updates the rewards claimed
+     * by adding the specified amount.
+     */
+    function _checkedUpdateClaimed(uint256 amount) internal {
+        (bool success, uint256 newClaimed) = claimed.tryAdd(amount);
+        if (!success || newClaimed > quota) {
+            revert QuotaExceeded();
         }
-        rewardsClaimed = newRewardsClaimed;
-
-        // Safe to increment the sequence after checking this is the expected number (no overflow for the age of universe even with 1000 reward claims per second)
-        rewardSequences[reward.recipient] = reward.sequence + 1;
-
-        nodlToken.mint(reward.recipient, reward.amount);
-
-        emit RewardMinted(reward.recipient, reward.amount, rewardsClaimed);
+        claimed = newClaimed;
     }
 
     /**
@@ -191,8 +257,28 @@ contract Rewards is AccessControl, EIP712 {
      * @param sequence The sequence value.
      */
     function _mustBeExpectedSequence(address receipent, uint256 sequence) internal view {
-        if (rewardSequences[receipent] != sequence) {
+        if (sequences[receipent] != sequence) {
             revert InvalidRecipientSequence();
+        }
+    }
+
+    /**
+     * @dev Internal checks to ensure the given sequence is expected for the batch.
+     * @param sequence The sequence to be checked.
+     */
+    function _mustBeExpectedBatchSequence(uint256 sequence) internal view {
+        if (batchSequence != sequence) {
+            revert InvalidBatchSequence();
+        }
+    }
+
+    /**
+     * @dev Internal check to ensure the given batch reward structure is valid, meaning same number of recipients and amounts.
+     * @param batch The batch reward structure to be validated.
+     */
+    function _mustBeValidBatchStructure(BatchReward memory batch) internal pure {
+        if (batch.recipients.length != batch.amounts.length) {
+            revert InvalidBatchStructure();
         }
     }
 
@@ -209,6 +295,19 @@ contract Rewards is AccessControl, EIP712 {
     }
 
     /**
+     * @dev Calculates the sum of amounts in a BatchReward struct.
+     * @param batch The BatchReward struct containing the amounts to be summed.
+     * @return The sum of all amounts in the batch.
+     */
+    function _batchSum(BatchReward memory batch) internal pure returns (uint256) {
+        uint256 sum = 0;
+        for (uint256 i = 0; i < batch.amounts.length; i++) {
+            sum += batch.amounts[i];
+        }
+        return sum;
+    }
+
+    /**
      * @dev Helper function to get the digest of the typed data to be signed.
      * @param reward detailing recipient, amount, and sequence.
      * @return The hash of the typed data.
@@ -216,5 +315,17 @@ contract Rewards is AccessControl, EIP712 {
     function digestReward(Reward memory reward) public view returns (bytes32) {
         return
             _hashTypedDataV4(keccak256(abi.encode(REWARD_TYPE_HASH, reward.recipient, reward.amount, reward.sequence)));
+    }
+
+    /**
+     * @dev Calculates the digest of a BatchReward struct.
+     * @param batch The BatchReward struct containing the recipients, amounts, and sequence.
+     * @return The digest of the BatchReward struct.
+     */
+    function digestBatchReward(BatchReward memory batch) public view returns (bytes32) {
+        bytes32 receipentsHash = keccak256(abi.encodePacked(batch.recipients));
+        bytes32 amountsHash = keccak256(abi.encodePacked(batch.amounts));
+        return
+            _hashTypedDataV4(keccak256(abi.encode(BATCH_REWARD_TYPE_HASH, receipentsHash, amountsHash, batch.sequence)));
     }
 }
