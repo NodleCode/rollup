@@ -115,19 +115,21 @@ The `MigrationNFT` contract allows the minting of a reward soulbound NFT when us
 You will need to set the following environment variables:
 - `N_MIGRATION`: address of the `NODLMigration` contract
 - `N_MAX_HOLDERS`: maximum number of participants
-- `N_TOKENS_URI_ROOT`: URI of NFT metadata folder where each level metadata is later presented
 - `N_LEVELS`: number of levels to set
 - `N_LEVELS_x` where `x` is an integer from `0` to `N_LEVELS - 1`: actual number of tokens for each level
+- `N_LEVELS_URI_x` where `x` is an integer from `0` to `N_LEVELS - 1`: actual metadata URL for the NFTs
 
 You can then run the script `script/DeployMigrationNFT.s.sol` very similarly to the below:
 ```shell
 N_MIGRATION=0x1427d38B967435a3F8f476Cda0bc4F51fe66AF4D \
 N_MAX_HOLDERS=10000 \
-N_TOKENS_URI_ROOT="ipfs://Qmcy3noasf25Z9rJkg818rrRaP6mShca8cHtfBfdf2VVJJ" \
 N_LEVELS=3 \
 N_LEVELS_0=100 \
 N_LEVELS_1=200 \
 N_LEVELS_2=300 \
+N_LEVELS_URI_0=example.com \
+N_LEVELS_URI_1=example.com \
+N_LEVELS_URI_2=example.com \
 forge script script/DeployMigrationNFT.s.sol --zksync --rpc-url https://sepolia.era.zksync.dev --zk-optimizer -i 1 --broadcast
 ```
 
