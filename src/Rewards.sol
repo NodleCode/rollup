@@ -185,16 +185,13 @@ contract Rewards is AccessControl, EIP712 {
      */
     function mintReward(Reward memory reward, bytes memory signature) external {
         _mustBeExpectedSequence(reward.recipient, reward.sequence);
-
         _mustBeFromAuthorizedOracle(digestReward(reward), signature);
 
         _checkedUpdateQuota();
-
         _checkedUpdateClaimed(reward.amount);
 
         // Safe to increment the sequence after checking this is the expected number (no overflow for the age of universe even with 1000 reward claims per second)
         sequences[reward.recipient] = reward.sequence + 1;
-
         nodl.mint(reward.recipient, reward.amount);
 
         emit Minted(reward.recipient, reward.amount, claimed);
@@ -207,15 +204,11 @@ contract Rewards is AccessControl, EIP712 {
      */
     function mintBatchReward(BatchReward memory batch, bytes memory signature) external {
         _mustBeValidBatchStructure(batch);
-
         _mustBeExpectedBatchSequence(batch.sequence);
-
         _mustBeFromAuthorizedOracle(digestBatchReward(batch), signature);
 
         _checkedUpdateQuota();
-
         uint256 batchSum = _batchSum(batch);
-
         _checkedUpdateClaimed(batchSum);
 
         // Safe to increment the sequence after checking this is the expected number (no overflow for the age of universe even with 1000 reward claims per second)
