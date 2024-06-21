@@ -7,28 +7,27 @@ import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
 import {NODLMigration} from "./NODLMigration.sol";
 
 contract MigrationNFT is ERC721 {
-    using Strings for uint256;
-
     uint256 public nextTokenId;
     uint256 public immutable maxHolders;
     NODLMigration public immutable migration;
 
-    string internal tokensURIRoot;
-
     uint256[] public levels;
+    string[] public levelToTokenURI;
+
     /**
      * @notice Mapping of token IDs to the levels they represent denominated from 1 (0 means token does not exists)
      */
-    mapping(uint256 => uint256) public tokenIdToLevel;
+    mapping(uint256 => uint256) public tokenIdToNextLevel;
     /**
      * @notice Mapping of holders to the highest level they reached (denominated from 1)
      */
-    mapping(address => uint256) public holderToLevel;
+    mapping(address => uint256) public holderToNextLevel;
 
     uint256 public individualHolders;
     mapping(bytes32 => bool) public claimed;
 
     error UnsortedLevelsList();
+    error UnequalLengths();
     error TooManyHolders();
     error AlreadyClaimed();
     error NoLevelUp();
@@ -40,17 +39,24 @@ contract MigrationNFT is ERC721 {
      * @notice Construct a new MigrationNFT contract
      * @param _migration the NODLMigration contract to bridge tokens
      * @param _maxHolders the maximum number of holders for the NFTs
-     * @param _tokensURIRoot the URI of the metadata folder for the NFTs
      * @param _levels an array representing the different reward levels expressed in
      *                the amount of tokens needed to get the NFT
+     * @param _levelToTokenURI an array of URIs to the metadata of the NFTs
      */
-    constructor(NODLMigration _migration, uint256 _maxHolders, string memory _tokensURIRoot, uint256[] memory _levels)
-        ERC721("OG ZK NODL", "OG_ZK_NODL")
-    {
+    constructor(
+        NODLMigration _migration,
+        uint256 _maxHolders,
+        uint256[] memory _levels,
+        string[] memory _levelToTokenURI
+    ) ERC721("OG ZK NODL", "OG_ZK_NODL") {
         migration = _migration;
         maxHolders = _maxHolders;
-        tokensURIRoot = _tokensURIRoot;
         levels = _levels;
+        levelToTokenURI = _levelToTokenURI;
+
+        if (_levels.length != _levelToTokenURI.length) {
+            revert UnequalLengths();
+        }
 
         for (uint256 i = 1; i < levels.length; i++) {
             if (levels[i] <= levels[i - 1]) {
@@ -64,10 +70,10 @@ contract MigrationNFT is ERC721 {
      * @param tokenId the token ID to mint
      */
     function tokenURI(uint256 tokenId) public view virtual override(ERC721) returns (string memory) {
-        _requireOwned(tokenId);
+        _requireOwned(tokenId); // this will also mean that tokenIdToNextLevel is at least 1
 
-        uint256 level = tokenIdToLevel[tokenId];
-        return string.concat(tokensURIRoot, "/", level.toString());
+        uint256 level = tokenIdToNextLevel[tokenId];
+        return levelToTokenURI[level - 1];
     }
 
     /**
@@ -92,8 +98,8 @@ contract MigrationNFT is ERC721 {
 
         for (uint256 i = 0; i < nbLevelsToMint; i++) {
             uint256 tokenId = nextTokenId++;
-            tokenIdToLevel[tokenId] = levelsToMint[i] + 1;
-            holderToLevel[target] = levelsToMint[i] + 1;
+            tokenIdToNextLevel[tokenId] = levelsToMint[i] + 1;
+            holderToNextLevel[target] = levelsToMint[i] + 1;
             _safeMint(target, tokenId);
         }
     }
@@ -109,7 +115,7 @@ contract MigrationNFT is ERC721 {
         // We effectively iterate over all the levels the `target` has YET
         // to qualify for. This expressively skips levels the `target` has
         // already qualified for.
-        uint256 nextLevel = holderToLevel[target];
+        uint256 nextLevel = holderToNextLevel[target];
         for (uint256 i = nextLevel; i < levels.length; i++) {
             if (amount >= levels[i]) {
                 levelsToMint[i - nextLevel] = i;

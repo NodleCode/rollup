@@ -30,10 +30,10 @@ contract DeployMigrationNFT is Script {
     function run() public {
         vm.startBroadcast();
 
-        MigrationNFT nft = new MigrationNFT(migration, maxHolders, tokensURIRoot, levels);
+        // MigrationNFT nft = new MigrationNFT(migration, maxHolders, tokensURIRoot, levels);
 
         vm.stopBroadcast();
 
-        console.log("Deployed MigrationNFT at %s", address(nft));
+        // console.log("Deployed MigrationNFT at %s", address(nft));
     }
 }
