@@ -120,6 +120,39 @@ contract RewardsTest is Test {
         assertEq(rewards.batchSequence(), 1);
     }
 
+    function test_gasUsed() public {
+        address[] memory recipients = new address[](500);
+        uint256[] memory amounts = new uint256[](500);
+
+        for (uint256 i = 0; i < 500; i++) {
+            recipients[i] = address(uint160(i + 1));
+            amounts[i] = 1;
+        }
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+
+        uint256 gasBefore = gasleft();
+        rewards.mintBatchReward(rewardsBatch, signature);
+        uint256 gasAfter = gasleft();
+
+        uint256 gasUsedPerRecipient = (gasBefore - gasAfter) / 500;
+        console.log("Gas used per recipient in a batch: %d", gasUsedPerRecipient);
+
+        Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 0);
+        bytes memory signature2 = createSignature(reward, oraclePrivateKey);
+
+        gasBefore = gasleft();
+        rewards.mintReward(reward, signature2);
+        gasAfter = gasleft();
+        console.log("Gas used per recipient in a solo:  %d", gasBefore - gasAfter);
+        uint256 ratio = (gasBefore - gasAfter) / gasUsedPerRecipient;
+        console.log("Batch efficieny >= %dX", ratio);
+
+        assertTrue(ratio >= 1, "Batch efficiency must be at least 1X to be worth it.");
+    }
+
     function test_mintBatchRewardQuotaExceeded() public {
         address[] memory recipients = new address[](2);
         uint256[] memory amounts = new uint256[](2);
