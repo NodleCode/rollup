@@ -358,6 +358,108 @@ contract RewardsTest is Test {
         assertEq(rewards.claimed(), 30);
     }
 
+    function test_setBatchSubmitterRewardPercentage() public {
+        address alice = address(2);
+        rewards.grantRole(rewards.DEFAULT_ADMIN_ROLE(), alice);
+
+        assertEq(rewards.batchSubmitterRewardPercentage(), 2);
+
+        vm.prank(alice);
+        rewards.setBatchSubmitterRewardPercentage(10);
+
+        assertEq(rewards.batchSubmitterRewardPercentage(), 10);
+    }
+
+    function test_setBatchSubmitterRewardPercentageUnauthorized() public {
+        address bob = address(3);
+        vm.expectRevert_AccessControlUnauthorizedAccount(bob, rewards.DEFAULT_ADMIN_ROLE());
+        vm.prank(bob);
+        rewards.setBatchSubmitterRewardPercentage(10);
+    }
+
+    function test_setBatchSubmitterRewardPercentageOutOfRange() public {
+        address alice = address(2);
+        rewards.grantRole(rewards.DEFAULT_ADMIN_ROLE(), alice);
+
+        vm.expectRevert(Rewards.OutOfRangeValue.selector);
+        vm.prank(alice);
+        rewards.setBatchSubmitterRewardPercentage(101);
+    }
+
+    function test_changingSubmitterRewardPercentageIsEffective() public {
+        address alice = address(2);
+        rewards.grantRole(rewards.DEFAULT_ADMIN_ROLE(), alice);
+
+        assertEq(rewards.batchSubmitterRewardPercentage(), 2);
+
+        vm.prank(alice);
+        rewards.setBatchSubmitterRewardPercentage(100);
+
+        assertEq(rewards.batchSubmitterRewardPercentage(), 100);
+
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+        bytes memory batchSignature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+        vm.prank(alice);
+        rewards.mintBatchReward(rewardsBatch, batchSignature);
+
+        assertEq(rewards.claimed(), 2 * 300); // expected value for 100% submitter reward
+        assertEq(nodlToken.balanceOf(alice), 300);
+    }
+
+    function test_mintBatchRewardOverflowsOnBatchSum() public {
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = type(uint256).max;
+        amounts[1] = 1;
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+        vm.expectRevert(stdError.arithmeticError);
+        rewards.mintBatchReward(rewardsBatch, signature);
+    }
+
+    function test_mintBatchRewardOverflowsOnSubmitterReward() public {
+        address alice = address(2);
+        rewards.grantRole(rewards.DEFAULT_ADMIN_ROLE(), alice);
+
+        // Ensure the quota is high enough
+        vm.prank(alice);
+        rewards.setQuota(type(uint256).max);
+
+        // Check initial submitter reward percentage
+        assertEq(rewards.batchSubmitterRewardPercentage(), 2);
+
+        address[] memory recipients = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+
+        recipients[0] = address(11);
+        // This amount, even though high, should not cause an overflow
+        amounts[0] = type(uint256).max / (2 * rewards.batchSubmitterRewardPercentage());
+
+        Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
+        bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
+        rewards.mintBatchReward(rewardsBatch, signature);
+
+        vm.prank(alice);
+        // Same batch sum should now cause an overflow in the submitter reward calculation
+        rewards.setBatchSubmitterRewardPercentage(100);
+
+        Rewards.BatchReward memory rewardsBatch2 = Rewards.BatchReward(recipients, amounts, 1);
+        bytes memory signature2 = createBatchSignature(rewardsBatch2, oraclePrivateKey);
+        vm.expectRevert(stdError.arithmeticError);
+        rewards.mintBatchReward(rewardsBatch2, signature2);
+    }
+
     function createSignature(Rewards.Reward memory reward, uint256 privateKey) internal view returns (bytes memory) {
         bytes32 digest = rewards.digestReward(reward);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);

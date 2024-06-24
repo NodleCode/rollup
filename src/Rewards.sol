@@ -220,8 +220,7 @@ contract Rewards is AccessControl, EIP712 {
         _checkedUpdateQuota();
 
         uint256 batchSum = _batchSum(batch);
-        (bool success, uint256 submitterReward) = batchSum.tryMul(batchSubmitterRewardPercentage);
-        uint256 submitterRewardAmount = success ? submitterReward / 100 : batchSum;
+        uint256 submitterRewardAmount = (batchSum * batchSubmitterRewardPercentage) / 100;
 
         _checkedUpdateClaimed(batchSum + submitterRewardAmount);
 
