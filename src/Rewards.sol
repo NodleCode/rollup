@@ -231,6 +231,7 @@ contract Rewards is AccessControl, EIP712 {
         for (uint256 i = 0; i < batch.recipients.length; i++) {
             nodl.mint(batch.recipients[i], batch.amounts[i]);
         }
+        nodl.mint(msg.sender, submitterRewardAmount);
 
         emit BatchMinted(batchSum, claimed);
     }

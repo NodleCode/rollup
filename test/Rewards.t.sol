@@ -98,6 +98,7 @@ contract RewardsTest is Test {
     }
 
     function test_mintBatchReward() public {
+        address submitter = address(44);
         address[] memory recipients = new address[](2);
         uint256[] memory amounts = new uint256[](2);
 
@@ -105,16 +106,19 @@ contract RewardsTest is Test {
         recipients[1] = address(22);
         amounts[0] = 100;
         amounts[1] = 200;
+        uint256 submitterReward = (amounts[0] + amounts[1]) * rewards.batchSubmitterRewardPercentage() / 100;
 
         Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
 
         bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
 
+        vm.prank(submitter);
         rewards.mintBatchReward(rewardsBatch, signature);
 
-        assertEq(nodlToken.balanceOf(recipients[0]), 100);
-        assertEq(nodlToken.balanceOf(recipients[1]), 200);
-        assertEq(rewards.claimed(), 300);
+        assertEq(nodlToken.balanceOf(recipients[0]), amounts[0]);
+        assertEq(nodlToken.balanceOf(recipients[1]), amounts[1]);
+        assertEq(nodlToken.balanceOf(submitter), submitterReward);
+        assertEq(rewards.claimed(), amounts[0] + amounts[1] + submitterReward);
         assertEq(rewards.sequences(recipients[0]), 0);
         assertEq(rewards.sequences(recipients[1]), 0);
         assertEq(rewards.batchSequence(), 1);
@@ -315,7 +319,7 @@ contract RewardsTest is Test {
         Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
         bytes memory batchSignature = createBatchSignature(rewardsBatch, oraclePrivateKey);
         rewards.mintBatchReward(rewardsBatch, batchSignature);
-        assertEq(rewards.claimed(), 300);
+        assertEq(rewards.claimed(), 300 + 300 * rewards.batchSubmitterRewardPercentage() / 100);
 
         assertEq(rewards.quotaRenewalTimestamp(), sixthRenewal);
     }
