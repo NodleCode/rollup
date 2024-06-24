@@ -12,25 +12,27 @@ contract DeployMigrationNFT is Script {
 
     NODLMigration internal migration;
     uint256 internal maxHolders;
-    string internal tokensURIRoot;
     uint256[] internal levels;
+    string[] internal levelToTokenURI;
 
     function setUp() public {
         migration = NODLMigration(vm.envAddress("N_MIGRATION"));
         maxHolders = vm.envUint("N_MAX_HOLDERS");
-        tokensURIRoot = vm.envString("N_TOKENS_URI_ROOT");
 
         uint256 nbLevels = vm.envUint("N_LEVELS");
         levels = new uint256[](nbLevels);
         for (uint256 i = 0; i < nbLevels; i++) {
             levels[i] = vm.envUint(string.concat("N_LEVELS_", i.toString()));
         }
+        for (uint256 i = 0; i < nbLevels; i++) {
+            levelToTokenURI.push(vm.envString(string.concat("N_LEVELS_URI_", i.toString())));
+        }
     }
 
     function run() public {
         vm.startBroadcast();
 
-        MigrationNFT nft = new MigrationNFT(migration, maxHolders, tokensURIRoot, levels);
+        MigrationNFT nft = new MigrationNFT(migration, maxHolders, levels, levelToTokenURI);
 
         vm.stopBroadcast();
 

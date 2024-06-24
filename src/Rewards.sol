@@ -27,8 +27,18 @@ contract Rewards is AccessControl, EIP712 {
      * @dev The hash of the reward type structure.
      * It is calculated using the keccak256 hash function.
      * The structure consists of the recipient's address, the amount of the reward, and the sequence number for that receipent.
+     * @dev The hash of the reward type structure.
+     * It is calculated using the keccak256 hash function.
+     * The structure consists of the recipient's address, the amount of the reward, and the sequence number for that receipent.
      */
     bytes32 public constant REWARD_TYPE_HASH = keccak256("Reward(address recipient,uint256 amount,uint256 sequence)");
+    /**
+     * @dev The hash of the batch reward type.
+     * It is calculated by taking the keccak256 hash of the string representation of the batch reward type.
+     * The batch reward type consists of the recipients, amounts, and sequence of that batch.
+     */
+    bytes32 public constant BATCH_REWARD_TYPE_HASH =
+        keccak256("BatchReward(address[] recipients,uint256[] amounts,uint256 sequence)");
     /**
      * @dev The hash of the batch reward type.
      * It is calculated by taking the keccak256 hash of the string representation of the batch reward type.
@@ -62,8 +72,37 @@ contract Rewards is AccessControl, EIP712 {
     }
 
     /**
+     * @dev Struct on which basis an individual reward must be issued.
+     */
+    struct Reward {
+        address recipient;
+        uint256 amount;
+        uint256 sequence;
+    }
+
+    /**
+     * @dev Represents a batch reward distribution.
+     * Each batch reward consists of an array of recipients, an array of corresponding amounts,
+     * and a sequence number to avoid replay attacks.
+     */
+    struct BatchReward {
+        address[] recipients;
+        uint256[] amounts;
+        uint256 sequence;
+    }
+
+    /**
      * @dev Reference to the NODL token contract.
      */
+    NODL public immutable nodl;
+    /**
+     * @dev Address of the authorized oracle.
+     */
+    address public immutable authorizedOracle;
+    /**
+     * @dev Reward quota renewal period.
+     */
+    uint256 public immutable period;
     NODL public immutable nodl;
     /**
      * @dev Address of the authorized oracle.
@@ -78,6 +117,7 @@ contract Rewards is AccessControl, EIP712 {
      * @dev Maximum amount of rewards that can be distributed in a period.
      */
     uint256 public quota;
+    uint256 public quota;
     /**
      * @dev Timestamp indicating when the reward quota is due to be renewed.
      */
@@ -85,6 +125,7 @@ contract Rewards is AccessControl, EIP712 {
     /**
      * @dev Amount of rewards claimed in the current period.
      */
+    uint256 public claimed;
     uint256 public claimed;
     /**
      * @dev Mapping to store reward sequences for each recipient to prevent replay attacks.
@@ -105,6 +146,7 @@ contract Rewards is AccessControl, EIP712 {
     /**
      * @dev Error when the reward quota is exceeded.
      */
+    error QuotaExceeded();
     error QuotaExceeded();
     /**
      * @dev Error indicating the reward renewal period is set to zero which is not acceptable.
@@ -140,9 +182,17 @@ contract Rewards is AccessControl, EIP712 {
      * @dev Event emitted when the reward quota is set.
      */
     event QuotaSet(uint256 quota);
+    event QuotaSet(uint256 quota);
     /**
      * @dev Event emitted when a reward is minted.
      */
+    event Minted(address indexed recipient, uint256 amount, uint256 totalRewardsClaimed);
+    /**
+     * @dev Emitted when a batch reward is minted.
+     * @param batchSum The sum of rewards in the batch.
+     * @param totalRewardsClaimed The total number of rewards claimed so far.
+     */
+    event BatchMinted(uint256 batchSum, uint256 totalRewardsClaimed);
     event Minted(address indexed recipient, uint256 amount, uint256 totalRewardsClaimed);
     /**
      * @dev Emitted when a batch reward is minted.
@@ -176,15 +226,23 @@ contract Rewards is AccessControl, EIP712 {
         quota = initialQuota;
         period = initialPeriod;
         quotaRenewalTimestamp = block.timestamp + period;
+        nodl = token;
+        quota = initialQuota;
+        period = initialPeriod;
+        quotaRenewalTimestamp = block.timestamp + period;
         authorizedOracle = oracleAddress;
     }
 
     /**
      * @dev Sets the reward quota. Only accounts with the DEFAULT_ADMIN_ROLE can call this function.
+     * @dev Sets the reward quota. Only accounts with the DEFAULT_ADMIN_ROLE can call this function.
      * @param newQuota The new reward quota.
      */
     function setQuota(uint256 newQuota) external {
+    function setQuota(uint256 newQuota) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
+        quota = newQuota;
+        emit QuotaSet(newQuota);
         quota = newQuota;
         emit QuotaSet(newQuota);
     }
@@ -195,6 +253,7 @@ contract Rewards is AccessControl, EIP712 {
      * @param signature The signature from the authorized oracle.
      */
     function mintReward(Reward memory reward, bytes memory signature) external {
+        _mustBeExpectedSequence(reward.recipient, reward.sequence);
         _mustBeExpectedSequence(reward.recipient, reward.sequence);
         _mustBeFromAuthorizedOracle(digestReward(reward), signature);
 
@@ -258,6 +317,7 @@ contract Rewards is AccessControl, EIP712 {
     function _checkedUpdateQuota() internal {
         if (block.timestamp >= quotaRenewalTimestamp) {
             claimed = 0;
+            claimed = 0;
 
             // The following operations are safe based on the constructor's requirements for longer than the age of universe :)
             uint256 timeAhead = block.timestamp - quotaRenewalTimestamp;
@@ -298,7 +358,28 @@ contract Rewards is AccessControl, EIP712 {
      */
     function _mustBeExpectedSequence(address receipent, uint256 sequence) internal view {
         if (sequences[receipent] != sequence) {
+        if (sequences[receipent] != sequence) {
             revert InvalidRecipientSequence();
+        }
+    }
+
+    /**
+     * @dev Internal checks to ensure the given sequence is expected for the batch.
+     * @param sequence The sequence to be checked.
+     */
+    function _mustBeExpectedBatchSequence(uint256 sequence) internal view {
+        if (batchSequence != sequence) {
+            revert InvalidBatchSequence();
+        }
+    }
+
+    /**
+     * @dev Internal check to ensure the given batch reward structure is valid, meaning same number of recipients and amounts.
+     * @param batch The batch reward structure to be validated.
+     */
+    function _mustBeValidBatchStructure(BatchReward memory batch) internal pure {
+        if (batch.recipients.length != batch.amounts.length) {
+            revert InvalidBatchStructure();
         }
     }
 
@@ -348,6 +429,19 @@ contract Rewards is AccessControl, EIP712 {
     }
 
     /**
+     * @dev Calculates the sum of amounts in a BatchReward struct.
+     * @param batch The BatchReward struct containing the amounts to be summed.
+     * @return The sum of all amounts in the batch.
+     */
+    function _batchSum(BatchReward memory batch) internal pure returns (uint256) {
+        uint256 sum = 0;
+        for (uint256 i = 0; i < batch.amounts.length; i++) {
+            sum += batch.amounts[i];
+        }
+        return sum;
+    }
+
+    /**
      * @dev Helper function to get the digest of the typed data to be signed.
      * @param reward detailing recipient, amount, and sequence.
      * @return The hash of the typed data.
@@ -355,6 +449,18 @@ contract Rewards is AccessControl, EIP712 {
     function digestReward(Reward memory reward) public view returns (bytes32) {
         return
             _hashTypedDataV4(keccak256(abi.encode(REWARD_TYPE_HASH, reward.recipient, reward.amount, reward.sequence)));
+    }
+
+    /**
+     * @dev Calculates the digest of a BatchReward struct.
+     * @param batch The BatchReward struct containing the recipients, amounts, and sequence.
+     * @return The digest of the BatchReward struct.
+     */
+    function digestBatchReward(BatchReward memory batch) public view returns (bytes32) {
+        bytes32 receipentsHash = keccak256(abi.encodePacked(batch.recipients));
+        bytes32 amountsHash = keccak256(abi.encodePacked(batch.amounts));
+        return
+            _hashTypedDataV4(keccak256(abi.encode(BATCH_REWARD_TYPE_HASH, receipentsHash, amountsHash, batch.sequence)));
     }
 
     /**

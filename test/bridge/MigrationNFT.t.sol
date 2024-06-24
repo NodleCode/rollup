@@ -34,7 +34,6 @@ contract MigrationNFTTest is Test {
 
     uint256 maxHolders = 10;
 
-    string tokenURIRoot = "https://example.com";
     string[] levelToTokenURI = [
         "https://example.com/1",
         "https://example.com/2",
@@ -47,7 +46,7 @@ contract MigrationNFTTest is Test {
     function setUp() public {
         nodl = new NODL();
         migration = new NODLMigration(oracles, nodl, 1, 0);
-        migrationNFT = new MigrationNFT(migration, maxHolders, tokenURIRoot, levels);
+        migrationNFT = new MigrationNFT(migration, maxHolders, levels, levelToTokenURI);
 
         nodl.grantRole(nodl.MINTER_ROLE(), address(migration));
     }
@@ -63,13 +62,26 @@ contract MigrationNFTTest is Test {
     }
 
     function test_enforceSorting() public {
-        uint256[] memory unsortedLevels = new uint256[](3);
+        uint256[] memory unsortedLevels = new uint256[](5);
         unsortedLevels[0] = 1000;
         unsortedLevels[1] = 500;
         unsortedLevels[2] = 10000;
+        unsortedLevels[3] = 5000;
+        unsortedLevels[4] = 100000;
 
         vm.expectRevert(MigrationNFT.UnsortedLevelsList.selector);
-        new MigrationNFT(migration, maxHolders, tokenURIRoot, unsortedLevels);
+        new MigrationNFT(migration, maxHolders, unsortedLevels, levelToTokenURI);
+    }
+
+    function test_enforceEqualLength() public {
+        string[] memory unsortedTokenURIs = new string[](4);
+        unsortedTokenURIs[0] = "https://example.com/1";
+        unsortedTokenURIs[1] = "https://example.com/2";
+        unsortedTokenURIs[2] = "https://example.com/3";
+        unsortedTokenURIs[3] = "https://example.com/4";
+
+        vm.expectRevert(MigrationNFT.UnequalLengths.selector);
+        new MigrationNFT(migration, maxHolders, levels, unsortedTokenURIs);
     }
 
     function test_mint() public {
@@ -79,8 +91,8 @@ contract MigrationNFTTest is Test {
         assertEq(migrationNFT.nextTokenId(), 1);
         assertEq(migrationNFT.ownerOf(0), vm.addr(42));
         assertEq(migrationNFT.tokenURI(0), levelToTokenURI[0]);
-        assertEq(migrationNFT.holderToLevel(vm.addr(42)), 1);
-        assertEq(migrationNFT.tokenIdToLevel(0), 1);
+        assertEq(migrationNFT.holderToNextLevel(vm.addr(42)), 1);
+        assertEq(migrationNFT.tokenIdToNextLevel(0), 1);
         assertEq(migrationNFT.individualHolders(), 1);
     }
 
@@ -140,12 +152,12 @@ contract MigrationNFTTest is Test {
         migrationNFT.safeMint(0x0);
 
         assertEq(migrationNFT.individualHolders(), 1);
-        assertEq(migrationNFT.holderToLevel(vm.addr(42)), levels.length);
+        assertEq(migrationNFT.holderToNextLevel(vm.addr(42)), levels.length);
         assertEq(migrationNFT.nextTokenId(), levels.length);
         for (uint256 i = 0; i < levels.length; i++) {
             assertEq(migrationNFT.ownerOf(i), vm.addr(42));
             assertEq(migrationNFT.tokenURI(i), levelToTokenURI[i]);
-            assertEq(migrationNFT.tokenIdToLevel(i), i + 1);
+            assertEq(migrationNFT.tokenIdToNextLevel(i), i + 1);
         }
     }
 
@@ -155,8 +167,8 @@ contract MigrationNFTTest is Test {
             migrationNFT.safeMint(bytes32(i));
 
             assertEq(migrationNFT.nextTokenId(), i + 1);
-            assertEq(migrationNFT.holderToLevel(vm.addr(42)), i + 1);
-            assertEq(migrationNFT.tokenIdToLevel(i), i + 1);
+            assertEq(migrationNFT.holderToNextLevel(vm.addr(42)), i + 1);
+            assertEq(migrationNFT.tokenIdToNextLevel(i), i + 1);
             assertEq(migrationNFT.ownerOf(i), vm.addr(42));
             assertEq(migrationNFT.tokenURI(i), levelToTokenURI[i]);
         }
@@ -177,7 +189,7 @@ contract MigrationNFTTest is Test {
         vm.bridgeTokens(migration, oracles[0], bytes32(maxHolders + 1), vm.addr(42), levels[1]);
         migrationNFT.safeMint(bytes32(maxHolders + 1));
 
-        assertEq(migrationNFT.holderToLevel(vm.addr(42)), 2);
+        assertEq(migrationNFT.holderToNextLevel(vm.addr(42)), 2);
         assertEq(migrationNFT.nextTokenId(), maxHolders + 1); // we minted `maxHolders` NFTs in the FOR loop + 1 after
     }
 
