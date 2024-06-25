@@ -24,7 +24,7 @@ contract RewardsTest is Test {
         address oracle = vm.addr(oraclePrivateKey);
 
         nodlToken = new NODL();
-        rewards = new Rewards(nodlToken, 1000, RENEWAL_PERIOD, oracle);
+        rewards = new Rewards(nodlToken, 1000, RENEWAL_PERIOD, oracle, 2);
         // Grant MINTER_ROLE to the Rewards contract
         nodlToken.grantRole(nodlToken.MINTER_ROLE(), address(rewards));
     }
