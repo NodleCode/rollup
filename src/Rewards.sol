@@ -94,6 +94,12 @@ contract Rewards is AccessControl, EIP712 {
      * @dev The sequence number of the batch reward.
      */
     uint256 public batchSequence;
+    /**
+     * @dev Determines the amount of rewards to be minted for the submitter of batch as a percentage of total rewards in that batch.
+     * This value indicates the cost overhead of minting rewards that the network is happy to take. Though it is set to 2% by default,
+     * the governance can change it to ensure the network is sustainable.
+     */
+    uint256 public batchSubmitterRewardPercentage;
 
     /**
      * @dev Error when the reward quota is exceeded.
@@ -124,6 +130,10 @@ contract Rewards is AccessControl, EIP712 {
      * The recipient and amounts arrays must have the same length.
      */
     error InvalidBatchStructure();
+    /**
+     * @dev Error thrown when the value is out of range. For example for Percentage values should be less than 100.
+     */
+    error OutOfRangeValue();
 
     /**
      * @dev Event emitted when the reward quota is set.
@@ -147,9 +157,13 @@ contract Rewards is AccessControl, EIP712 {
      * @param initialPeriod Initial reward period.
      * @param oracleAddress Address of the authorized oracle.
      */
-    constructor(NODL token, uint256 initialQuota, uint256 initialPeriod, address oracleAddress)
-        EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION)
-    {
+    constructor(
+        NODL token,
+        uint256 initialQuota,
+        uint256 initialPeriod,
+        address oracleAddress,
+        uint256 rewardPercentage
+    ) EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION) {
         // This is to avoid the ongoinb overhead of safe math operations
         if (initialPeriod == 0) {
             revert ZeroPeriod();
@@ -159,6 +173,8 @@ contract Rewards is AccessControl, EIP712 {
             revert TooLongPeriod();
         }
 
+        _mustBeLessThan100(batchSubmitterRewardPercentage);
+
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
         nodl = token;
@@ -166,6 +182,7 @@ contract Rewards is AccessControl, EIP712 {
         period = initialPeriod;
         quotaRenewalTimestamp = block.timestamp + period;
         authorizedOracle = oracleAddress;
+        batchSubmitterRewardPercentage = rewardPercentage;
     }
 
     /**
@@ -208,8 +225,11 @@ contract Rewards is AccessControl, EIP712 {
         _mustBeFromAuthorizedOracle(digestBatchReward(batch), signature);
 
         _checkedUpdateQuota();
+
         uint256 batchSum = _batchSum(batch);
-        _checkedUpdateClaimed(batchSum);
+        uint256 submitterRewardAmount = (batchSum * batchSubmitterRewardPercentage) / 100;
+
+        _checkedUpdateClaimed(batchSum + submitterRewardAmount);
 
         // Safe to increment the sequence after checking this is the expected number (no overflow for the age of universe even with 1000 reward claims per second)
         batchSequence = batch.sequence + 1;
@@ -217,8 +237,22 @@ contract Rewards is AccessControl, EIP712 {
         for (uint256 i = 0; i < batch.recipients.length; i++) {
             nodl.mint(batch.recipients[i], batch.amounts[i]);
         }
+        nodl.mint(msg.sender, submitterRewardAmount);
 
         emit BatchMinted(batchSum, claimed);
+    }
+
+    /**
+     * @dev Sets the reward percentage for the batch submitter.
+     * @param newPercentage The new reward percentage to be set.
+     * Requirements:
+     * - Caller must have the DEFAULT_ADMIN_ROLE.
+     * - The new reward percentage must be less than 100.
+     */
+    function setBatchSubmitterRewardPercentage(uint256 newPercentage) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        _mustBeLessThan100(newPercentage);
+        batchSubmitterRewardPercentage = newPercentage;
     }
 
     /**
@@ -249,6 +283,17 @@ contract Rewards is AccessControl, EIP712 {
             revert QuotaExceeded();
         }
         claimed = newClaimed;
+    }
+
+    /**
+     * @dev Checks if the given percentage value is less than or equal to 100.
+     * @param percent The percentage value to check.
+     * @dev Throws an exception if the value is greater than 100.
+     */
+    function _mustBeLessThan100(uint256 percent) internal pure {
+        if (percent > 100) {
+            revert OutOfRangeValue();
+        }
     }
 
     /**
