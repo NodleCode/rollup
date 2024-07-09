@@ -7,7 +7,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {NODL} from "../src/NODL.sol";
 import {NODLMigration} from "../src/bridge/NODLMigration.sol";
 
-contract DeployClick is Script {
+contract DeployNodlMigration is Script {
     address[] internal voters;
     address internal withdrawer;
 
