@@ -24,19 +24,15 @@ contract DeployRewards is Script {
 
     function run() public {
         vm.startBroadcast();
-
-        NODL nodl;
         if (nodlAddress == address(0)) {
-            nodl = new NODL();
-            nodlAddress = address(nodl);
+            NODL token = new NODL();
+            nodlAddress = address(token);
             console.log("Deployed NODL at %s", nodlAddress);
-        } else {
-            nodl = NODL(nodlAddress);
         }
 
+        NODL nodl = NODL(nodlAddress);
         Rewards rewards = new Rewards(nodl, rewardQuotaPerPeriod, rewardPeriod, oracleAddress, batchSubmitterIncentive);
         address rewardsAddress = address(rewards);
-
         nodl.grantRole(nodl.MINTER_ROLE(), rewardsAddress);
 
         vm.stopBroadcast();
