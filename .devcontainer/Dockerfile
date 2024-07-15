@@ -33,7 +33,7 @@ RUN sudo apt update && \
 
 RUN yarn global add zksync-cli && yarn global add @graphprotocol/graph-cli
 
-ARG KNOWN_GOOD_FORGE_COMMIT=f505a536a8f6ddae2b8618a701f66c047b1a2b0c
+ARG KNOWN_GOOD_FORGE_COMMIT=33b81acf8688f8cc1fc839b7e4a07ec58b347cb4
 RUN git clone https://github.com/matter-labs/foundry-zksync.git /tmp/foundry-zksync && \
     cd /tmp/foundry-zksync && \
     git checkout ${KNOWN_GOOD_FORGE_COMMIT} && \
