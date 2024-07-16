@@ -26,18 +26,18 @@ const project: EthereumProject = {
     file: "./schema.graphql",
   },
   network: {
-    chainId: "300", // zKsync sepolia testnet
+    chainId: "324", // zKsync mainnet
     endpoint: [
-      "https://shy-cosmopolitan-telescope.zksync-sepolia.quiknode.pro/7dca91c43e87ec74294608886badb962826e62a0/",
+      "https://wandering-distinguished-tree.zksync-mainnet.quiknode.pro/20c0bc25076ea895aa263c9296c6892eba46077c/",
     ],
   },
   dataSources: [
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 1993364, // This is the block that the contract was deployed on
+      startBlock: 35438288, // This is the block that the contract was deployed on
       options: {
         abi: "erc721",
-        address: "0x999368030Ba79898E83EaAE0E49E89B7f6410940",
+        address: "0x95b3641d549f719eb5105f9550Eca4A7A2F305De",
       },
       assets: new Map([
         [
@@ -83,10 +83,10 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 1993364, // This is the block that the contract was deployed on
+      startBlock: 35438288, // This is the block that the contract was deployed on
       options: {
         abi: "erc721",
-        address: "0x195e4E251c41e8Ae9E9E961366C73e2CFbfB115A",
+        address: "0xe980886e4072d32784187D547F9663eFef50f58F",
       },
       assets: new Map([
         [
@@ -132,16 +132,16 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 2178049, // This is the block that the contract was deployed on
+      startBlock: 35438288, // This is the block that the contract was deployed on
       options: {
-        abi: "erc20",
-        address: "0xb4B74C2BfeA877672B938E408Bae8894918fE41C",
+        abi: "erc721",
+        address: "0x6FE81f2fDE5775355962B7F3CC9b0E1c83970E15",
       },
       assets: new Map([
         [
-          "erc20",
+          "erc721",
           {
-            file: "./abis/erc20.abi.json",
+            file: "./abis/erc721.abi.json",
           },
         ],
       ]),
@@ -149,15 +149,29 @@ const project: EthereumProject = {
         file: "./dist/index.js",
         handlers: [
           {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleSafeMint",
+            filter: {
+              function: "safeMint(address,string)",
+            },
+          },
+          {
             kind: EthereumHandlerKind.Event,
-            handler: "handleERC20Approval",
+            handler: "handleApproval",
             filter: {
               topics: ["Approval(address,address,uint256)"],
             },
           },
           {
             kind: EthereumHandlerKind.Event,
-            handler: "handleERC20Transfer",
+            handler: "handleApprovalForAll",
+            filter: {
+              topics: ["ApprovalForAll(address,address,bool)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleTransfer",
             filter: {
               topics: ["Transfer(address,address,uint256)"],
             },
@@ -167,16 +181,16 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 2157320,
+      startBlock: 35438288, // This is the block that the contract was deployed on
       options: {
-        abi: "migration",
-        address: "0x1427d38B967435a3F8f476Cda0bc4F51fe66AF4D",
+        abi: "erc721",
+        address: "0x48e5c6f97b00Db0A4F74B1C1bc8ecd78452dDF6F",
       },
       assets: new Map([
         [
-          "migration",
+          "erc721",
           {
-            file: "./abis/migration.abi.json",
+            file: "./abis/erc721.abi.json",
           },
         ],
       ]),
@@ -184,52 +198,38 @@ const project: EthereumProject = {
         file: "./dist/index.js",
         handlers: [
           {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleProposal",
+            kind: EthereumHandlerKind.Call,
+            handler: "handleSafeMint",
             filter: {
-              topics: ["VoteStarted(bytes32, address, address, uint256)"],
+              function: "safeMint(address,string)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleApproval",
+            filter: {
+              function: "approve(address,uint256)",
             },
           },
           {
             kind: EthereumHandlerKind.Event,
-            handler: "handleWithdrawn",
+            handler: "handleApproval",
             filter: {
-              topics: ["Withdrawn(bytes32, address, uint256)"],
+              topics: ["Approval(address,address,uint256)"],
             },
           },
           {
             kind: EthereumHandlerKind.Event,
-            handler: "handleVote",
+            handler: "handleApprovalForAll",
             filter: {
-              topics: ["Voted(bytes32, address)"],
+              topics: ["ApprovalForAll(address,address,bool)"],
             },
           },
-        ],
-      },
-    },
-    {
-      kind: EthereumDatasourceKind.Runtime,
-      startBlock: 3001690, // This is the block that the contract was deployed on
-      options: {
-        abi: "erc721-a",
-        address: "0x9Fed2d216DBE36928613812400Fd1B812f118438",
-      },
-      assets: new Map([
-        [
-          "erc721-a",
-          {
-            file: "./abis/erc721-a.abi.json",
-          },
-        ],
-      ]),
-      mapping: {
-        file: "./dist/index.js",
-        handlers: [
           {
             kind: EthereumHandlerKind.Event,
-            handler: "handleRewardTransfer",
+            handler: "handleTransfer",
             filter: {
-              topics: ["Transfer (address from, address to, uint256 tokenId)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],

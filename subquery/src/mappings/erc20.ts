@@ -16,7 +16,7 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
     const value = event.args.value.toBigInt();
     const timestamp = event.block.timestamp * BigInt(1000);
     const hash = event.transaction.hash;
-
+    
     const transfer = await fetchTransaction(
       hash,
       timestamp,
@@ -24,7 +24,11 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
     );
 
     const transferEvent = new ERC20Transfer(
-      contract.id.concat("/").concat(hash),
+      contract.id
+        .concat("/")
+        .concat(hash)
+        .concat("/")
+        .concat(`${event.logIndex}`),
       emmiter.id,
       transfer.id,
       timestamp,

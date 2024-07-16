@@ -1,10 +1,12 @@
 import assert from "assert";
 import { fetchContract, fetchERC721Operator, fetchToken, getApprovalLog } from "../utils/erc721";
-import { TransferLog, ApprovalForAllLog, SafeMintTransaction } from "../types/abi-interfaces/Erc721Abi";
+import { TransferLog, ApprovalForAllLog, SafeMintTransaction, ApprovalLog } from "../types/abi-interfaces/Erc721Abi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
 
 export async function handleTransfer(event: TransferLog): Promise<void>  {
   assert(event.args, "No event.args");
+
+  console.log("handleTransfer: " + JSON.stringify(event.args));
 
   const contract = await fetchContract(event.address);
   /* if (contract) {
@@ -28,12 +30,12 @@ export async function handleTransfer(event: TransferLog): Promise<void>  {
 }
 
 // This event is not being emitted by the contract, it is an issue?
-/* export function handleApproval(event: ApprovalLog): Promise<void> {
-  logger.info("handleApproval: " + JSON.stringify(event));
+export function handleApproval(event: ApprovalLog): Promise<void> {
+  logger.info("handleApproval: " + JSON.stringify(event.args));
   // const account = await fetchAccount();
 
   return Promise.resolve();
-} */
+}
 
 export async function handleApprovalForAll(event: ApprovalForAllLog) {
   assert(event.args, "No event.args");

@@ -39,8 +39,8 @@ export const fetchMetadata = async (
   if (gateways.length === 0) {
     return null;
   }
-
-  const strppedCid = cid.replace("ipfs://", "");
+  logger.info(`Fetching metadata for CID: ${cid}`);
+  const strppedCid = String(cid).replace("ipfs://", "");
 
   const gateway = gateways[0];
   const url = `https://${gateway}/ipfs/${strppedCid}`;
