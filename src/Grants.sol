@@ -8,7 +8,7 @@ contract Grants {
     using SafeERC20 for IERC20;
 
     struct VestingSchedule {
-        address from;
+        address cancelAuthority;
         uint256 start;
         uint256 period;
         uint32 periodCount;
@@ -19,7 +19,6 @@ contract Grants {
 
     IERC20 public token;
     mapping(address => VestingSchedule[]) public vestingSchedules;
-    mapping(address => mapping(address => bool)) public renounces;
 
     event VestingScheduleAdded(address indexed to, VestingSchedule schedule);
     event Claimed(address indexed who, uint256 amount);
@@ -27,26 +26,31 @@ contract Grants {
     event Renounced(address indexed from, address indexed to);
 
     error InvalidZeroParameter();
-    error InsufficientBalanceToLock();
-    error EmptyVestingSchedules();
     error VestingToSelf();
     error MaxSchedulesReached();
-    error RenouncedCancel();
+    error NoOpIsFailure();
 
     constructor(address _token) {
         token = IERC20(_token);
     }
 
-    function addVestingSchedule(address to, uint256 start, uint256 period, uint32 periodCount, uint256 perPeriodAmount)
-        external
-    {
+    function addVestingSchedule(
+        address to,
+        uint256 start,
+        uint256 period,
+        uint32 periodCount,
+        uint256 perPeriodAmount,
+        address cancelAuthority
+    ) external {
+        _mustBeNonZeroAddress(to);
+        _mustNotBeSelf(to);
         _mustBeNonZero(period);
         _mustBeNonZero(periodCount);
         _mustNotCrossMaxSchedules(to);
 
         token.safeTransferFrom(msg.sender, address(this), perPeriodAmount * periodCount);
 
-        VestingSchedule memory schedule = VestingSchedule(msg.sender, start, period, periodCount, perPeriodAmount);
+        VestingSchedule memory schedule = VestingSchedule(cancelAuthority, start, period, periodCount, perPeriodAmount);
         vestingSchedules[to].push(schedule);
 
         emit VestingScheduleAdded(to, schedule);
@@ -78,18 +82,29 @@ contract Grants {
 
         if (totalClaimable > 0) {
             token.safeTransfer(msg.sender, totalClaimable);
+            emit Claimed(msg.sender, totalClaimable);
+        } else {
+            revert NoOpIsFailure();
         }
-        emit Claimed(msg.sender, totalClaimable);
     }
 
     function renounce(address to) external {
-        renounces[to][msg.sender] = true;
-        emit Renounced(msg.sender, to);
+        bool anySchedulesFound = false;
+        VestingSchedule[] storage schedules = vestingSchedules[to];
+        for (uint256 i = 0; i < schedules.length; i++) {
+            if (schedules[i].cancelAuthority == msg.sender) {
+                schedules[i].cancelAuthority = address(0);
+                anySchedulesFound = true;
+            }
+        }
+        if (!anySchedulesFound) {
+            revert NoOpIsFailure();
+        } else {
+            emit Renounced(msg.sender, to);
+        }
     }
 
     function cancelVestingSchedules(address to) external {
-        _mustNotBeRenounced(msg.sender, to);
-
         uint256 totalClaimable = 0;
         uint256 totalRedeemable = 0;
         uint256 currentTime = block.timestamp;
@@ -98,7 +113,7 @@ contract Grants {
         VestingSchedule[] storage schedules = vestingSchedules[to];
         while (i < schedules.length) {
             VestingSchedule storage schedule = schedules[i];
-            if (schedule.from == msg.sender) {
+            if (schedule.cancelAuthority == msg.sender) {
                 uint256 periodsElapsed =
                     currentTime > schedule.start ? (currentTime - schedule.start) / schedule.period : 0;
                 uint256 effectivePeriods = periodsElapsed > schedule.periodCount ? schedule.periodCount : periodsElapsed;
@@ -111,6 +126,10 @@ contract Grants {
                 continue;
             }
             i++;
+        }
+
+        if (totalClaimable == 0 && totalRedeemable == 0) {
+            revert NoOpIsFailure();
         }
 
         if (totalClaimable > 0) {
@@ -134,15 +153,21 @@ contract Grants {
         }
     }
 
-    function _mustNotCrossMaxSchedules(address to) private view {
-        if (vestingSchedules[to].length >= MAX_SCHEDULES) {
-            revert MaxSchedulesReached();
+    function _mustBeNonZeroAddress(address value) private pure {
+        if (value == address(0)) {
+            revert InvalidZeroParameter();
         }
     }
 
-    function _mustNotBeRenounced(address from, address to) private view {
-        if (renounces[to][from]) {
-            revert RenouncedCancel();
+    function _mustNotBeSelf(address to) private view {
+        if (msg.sender == to) {
+            revert VestingToSelf();
+        }
+    }
+
+    function _mustNotCrossMaxSchedules(address to) private view {
+        if (vestingSchedules[to].length >= MAX_SCHEDULES) {
+            revert MaxSchedulesReached();
         }
     }
 }
