@@ -9,15 +9,6 @@ import {NODL} from "../NODL.sol";
 /// @dev This contract provides basic functionalities for voting on proposals
 /// to bridge tokens and ensuring certain constraints such as voting thresholds and delays.
 abstract contract BridgeBase {
-    /// @notice Struct to store the status of a proposal.
-    /// @dev Tracks the last block number when a vote was cast, the total number of votes,
-    /// and whether the proposal has been executed.
-    struct ProposalStatus {
-        uint256 lastVote;
-        uint8 totalVotes;
-        bool executed;
-    }
-
     /// @notice Token contract address for the NODL token.
     NODL public nodl;
 
@@ -85,20 +76,6 @@ abstract contract BridgeBase {
         delay = minDelay;
     }
 
-    /// @notice Returns the current status of a proposal.
-    /// @dev Must be implemented by inheriting contracts.
-    /// @param proposal The hash identifier of the proposal.
-    /// @return The storage pointer to the status of the proposal.
-    function _proposalStatus(bytes32 proposal) internal view virtual returns (ProposalStatus storage);
-
-    /// @notice Checks if a proposal already exists.
-    /// @param proposal The hash identifier of the proposal.
-    /// @return True if the proposal exists and has votes.
-    function _proposalExists(bytes32 proposal) internal view returns (bool) {
-        ProposalStatus storage status = _proposalStatus(proposal);
-        return status.totalVotes > 0;
-    }
-
     /// @notice Creates a new vote on a proposal.
     /// @dev Sets initial values and emits a VoteStarted event.
     /// @param proposal The hash identifier of the proposal.
@@ -107,10 +84,10 @@ abstract contract BridgeBase {
     /// @param amount The amount of tokens being bridged.
     function _createVote(bytes32 proposal, address oracle, address user, uint256 amount) internal virtual {
         _mustNotHaveVotedYet(proposal, oracle);
+
         voted[oracle][proposal] = true;
-        ProposalStatus storage status = _proposalStatus(proposal);
-        status.totalVotes = 1;
-        status.lastVote = block.number;
+        _incTotalVotes(proposal);
+        _updateLastVote(proposal, block.number);
         emit VoteStarted(proposal, oracle, user, amount);
     }
 
@@ -119,10 +96,10 @@ abstract contract BridgeBase {
     /// @param oracle The oracle casting the vote.
     function _recordVote(bytes32 proposal, address oracle) internal virtual {
         _mustNotHaveVotedYet(proposal, oracle);
+
         voted[oracle][proposal] = true;
-        ProposalStatus storage status = _proposalStatus(proposal);
-        status.totalVotes += 1;
-        status.lastVote = block.number;
+        _incTotalVotes(proposal);
+        _updateLastVote(proposal, block.number);
         emit Voted(proposal, oracle);
     }
 
@@ -133,24 +110,63 @@ abstract contract BridgeBase {
         _mustHaveEnoughVotes(proposal);
         _mustBePastSafetyDelay(proposal);
 
-        ProposalStatus storage status = _proposalStatus(proposal);
-        status.executed = true;
+        _flagAsExecuted(proposal);
     }
 
+    /**
+     * @dev Updates the last vote value for a given proposal.
+     * @param proposal The identifier of the proposal.
+     * @param value The new value for the last vote.
+     */
+    function _updateLastVote(bytes32 proposal, uint256 value) internal virtual;
+
+    /**
+     * @dev Increments the total votes count for a given proposal.
+     * @param proposal The identifier of the proposal.
+     */
+    function _incTotalVotes(bytes32 proposal) internal virtual;
+
+    /**
+     * @dev Flags a proposal as executed.
+     * @param proposal The identifier of the proposal.
+     */
+    function _flagAsExecuted(bytes32 proposal) internal virtual;
+
+    /**
+     * @dev Retrieves the last vote value for a given proposal.
+     * @param proposal The identifier of the proposal.
+     * @return The last vote value.
+     */
+    function _lastVote(bytes32 proposal) internal view virtual returns (uint256);
+
+    /**
+     * @dev Retrieves the total votes count for a given proposal.
+     * @param proposal The identifier of the proposal.
+     * @return The total votes count.
+     */
+    function _totalVotes(bytes32 proposal) internal view virtual returns (uint8);
+
+    /**
+     * @dev Checks if a proposal has been executed.
+     * @param proposal The identifier of the proposal.
+     * @return A boolean indicating if the proposal has been executed.
+     */
+    function _executed(bytes32 proposal) internal view virtual returns (bool);
+
     function _mustNotHaveExecutedYet(bytes32 proposal) internal view {
-        if (_proposalStatus(proposal).executed) {
+        if (_executed(proposal)) {
             revert AlreadyExecuted(proposal);
         }
     }
 
     function _mustBePastSafetyDelay(bytes32 proposal) internal view {
-        if (block.number - _proposalStatus(proposal).lastVote < delay) {
+        if (block.number - _lastVote(proposal) < delay) {
             revert NotYetWithdrawable(proposal);
         }
     }
 
     function _mustHaveEnoughVotes(bytes32 proposal) internal view {
-        if (_proposalStatus(proposal).totalVotes < threshold) {
+        if (_totalVotes(proposal) < threshold) {
             revert NotEnoughVotes(proposal);
         }
     }

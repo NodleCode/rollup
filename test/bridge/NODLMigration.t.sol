@@ -85,24 +85,24 @@ contract NODLMigrationTest is Test {
         vm.prank(oracles[0]);
         migration.bridge(0x0, user, 100);
 
-        (address target, uint256 amount, BridgeBase.ProposalStatus memory status) = migration.proposals(0x0);
+        (address target, uint256 amount, uint256 lastVote, uint256 totalVotes, bool executed) = migration.proposals(0x0);
         assertEq(target, user);
         assertEq(amount, 100);
-        assertEq(status.lastVote, block.number);
-        assertEq(status.totalVotes, 1);
-        assertEq(status.executed, false);
+        assertEq(lastVote, block.number);
+        assertEq(totalVotes, 1);
+        assertEq(executed, false);
 
         vm.expectEmit();
         emit BridgeBase.Voted(0x0, oracles[1]);
         vm.prank(oracles[1]);
         migration.bridge(0x0, user, 100);
 
-        (target, amount, status) = migration.proposals(0x0);
+        (target, amount, lastVote, totalVotes, executed) = migration.proposals(0x0);
         assertEq(target, user);
         assertEq(amount, 100);
-        assertEq(status.lastVote, block.number);
-        assertEq(status.totalVotes, 2);
-        assertEq(status.executed, false);
+        assertEq(lastVote, block.number);
+        assertEq(totalVotes, 2);
+        assertEq(executed, false);
     }
 
     function test_mayNotWithdrawIfNotEnoughVotes() public {
@@ -153,8 +153,8 @@ contract NODLMigrationTest is Test {
         vm.prank(user); // anybody can call withdraw
         migration.withdraw(0x0);
 
-        (,, BridgeBase.ProposalStatus memory status) = migration.proposals(0x0);
-        assertEq(status.executed, true);
+        (,,,, bool executed) = migration.proposals(0x0);
+        assertEq(executed, true);
 
         assertEq(nodl.balanceOf(user), 100);
     }

@@ -12,7 +12,9 @@ contract NODLMigration is BridgeBase {
     struct Proposal {
         address target;
         uint256 amount;
-        ProposalStatus status;
+        uint256 lastVote;
+        uint8 totalVotes;
+        bool executed;
     }
 
     // We track votes in a seperate mapping to avoid having to write helper functions to
@@ -57,8 +59,8 @@ contract NODLMigration is BridgeBase {
         }
     }
 
-    function _proposalStatus(bytes32 proposal) internal view override returns (ProposalStatus storage) {
-        return proposals[proposal].status;
+    function _proposalExists(bytes32 proposal) internal view returns (bool) {
+        return proposals[proposal].totalVotes > 0 && proposals[proposal].amount > 0;
     }
 
     function _createVote(bytes32 proposal, address oracle, address user, uint256 amount) internal override {
@@ -70,5 +72,29 @@ contract NODLMigration is BridgeBase {
     function _withdraw(bytes32 proposal, address user, uint256 amount) internal {
         nodl.mint(user, amount);
         emit Withdrawn(proposal, user, amount);
+    }
+
+    function _flagAsExecuted(bytes32 proposal) internal override {
+        proposals[proposal].executed = true;
+    }
+
+    function _incTotalVotes(bytes32 proposal) internal override {
+        proposals[proposal].totalVotes++;
+    }
+
+    function _updateLastVote(bytes32 proposal, uint256 value) internal override {
+        proposals[proposal].lastVote = value;
+    }
+
+    function _totalVotes(bytes32 proposal) internal view override returns (uint8) {
+        return proposals[proposal].totalVotes;
+    }
+
+    function _lastVote(bytes32 proposal) internal view override returns (uint256) {
+        return proposals[proposal].lastVote;
+    }
+
+    function _executed(bytes32 proposal) internal view override returns (bool) {
+        return proposals[proposal].executed;
     }
 }
