@@ -5,6 +5,7 @@ pragma solidity 0.8.23;
 import {ERC721} from "openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
 import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
 import {NODLMigration} from "./NODLMigration.sol";
+import {BridgeBase} from "./BridgeBase.sol";
 
 contract MigrationNFT is ERC721 {
     uint256 public nextTokenId;
@@ -83,10 +84,10 @@ contract MigrationNFT is ERC721 {
     function safeMint(bytes32 txHash) public {
         _mustNotHaveBeenClaimed(txHash);
 
-        (address target, uint256 amount,,, bool executed) = migration.proposals(txHash);
+        (address target, uint256 amount, BridgeBase.ProposalStatus memory status) = migration.proposals(txHash);
 
         _mustBeAnExistingProposal(target);
-        _mustBeExecuted(executed);
+        _mustBeExecuted(status.executed);
         bool alreadyHolder = _mustAlreadyBeHolderOrEnougHoldersRemaining(target);
 
         (uint256[] memory levelsToMint, uint256 nbLevelsToMint) = _computeLevelUps(target, amount);

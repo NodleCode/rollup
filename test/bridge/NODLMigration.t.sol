@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
 import {NODLMigration} from "../../src/bridge/NODLMigration.sol";
+import {BridgeBase} from "../../src/bridge/BridgeBase.sol";
 import {NODL} from "../../src/NODL.sol";
 
 contract NODLMigrationTest is Test {
@@ -34,7 +35,7 @@ contract NODLMigrationTest is Test {
     }
 
     function test_nonOracleMayNotBridgeTokens() public {
-        vm.expectRevert(abi.encodeWithSelector(NODLMigration.NotAnOracle.selector, user));
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.NotAnOracle.selector, user));
         vm.prank(user);
         migration.bridge(0x0, user, 100);
     }
@@ -44,7 +45,7 @@ contract NODLMigrationTest is Test {
 
         migration.bridge(0x0, user, 100);
 
-        vm.expectRevert(abi.encodeWithSelector(NODLMigration.AlreadyVoted.selector, 0x0, oracles[0]));
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.AlreadyVoted.selector, 0x0, oracles[0]));
         migration.bridge(0x0, user, 100);
 
         vm.stopPrank();
@@ -60,7 +61,7 @@ contract NODLMigrationTest is Test {
         vm.roll(block.number + delay + 1);
         migration.withdraw(0x0);
 
-        vm.expectRevert(abi.encodeWithSelector(NODLMigration.AlreadyExecuted.selector, 0x0));
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.AlreadyExecuted.selector, 0x0));
         vm.prank(oracles[2]);
         migration.bridge(0x0, user, 100);
     }
@@ -69,46 +70,46 @@ contract NODLMigrationTest is Test {
         vm.prank(oracles[0]);
         migration.bridge(0x0, user, 100);
 
-        vm.expectRevert(abi.encodeWithSelector(NODLMigration.ParametersChanged.selector, 0x0));
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.ParametersChanged.selector, 0x0));
         vm.prank(oracles[1]);
         migration.bridge(0x0, user, 200);
 
-        vm.expectRevert(abi.encodeWithSelector(NODLMigration.ParametersChanged.selector, 0x0));
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.ParametersChanged.selector, 0x0));
         vm.prank(oracles[1]);
         migration.bridge(0x0, oracles[1], 100);
     }
 
     function test_recordsVotes() public {
         vm.expectEmit();
-        emit NODLMigration.VoteStarted(0x0, oracles[0], user, 100);
+        emit BridgeBase.VoteStarted(0x0, oracles[0], user, 100);
         vm.prank(oracles[0]);
         migration.bridge(0x0, user, 100);
 
-        (address target, uint256 amount, uint256 lastVote, uint256 totalVotes, bool executed) = migration.proposals(0x0);
+        (address target, uint256 amount, BridgeBase.ProposalStatus memory status) = migration.proposals(0x0);
         assertEq(target, user);
         assertEq(amount, 100);
-        assertEq(lastVote, block.number);
-        assertEq(totalVotes, 1);
-        assertEq(executed, false);
+        assertEq(status.lastVote, block.number);
+        assertEq(status.totalVotes, 1);
+        assertEq(status.executed, false);
 
         vm.expectEmit();
-        emit NODLMigration.Voted(0x0, oracles[1]);
+        emit BridgeBase.Voted(0x0, oracles[1]);
         vm.prank(oracles[1]);
         migration.bridge(0x0, user, 100);
 
-        (target, amount, lastVote, totalVotes, executed) = migration.proposals(0x0);
+        (target, amount, status) = migration.proposals(0x0);
         assertEq(target, user);
         assertEq(amount, 100);
-        assertEq(lastVote, block.number);
-        assertEq(totalVotes, 2);
-        assertEq(executed, false);
+        assertEq(status.lastVote, block.number);
+        assertEq(status.totalVotes, 2);
+        assertEq(status.executed, false);
     }
 
     function test_mayNotWithdrawIfNotEnoughVotes() public {
         vm.prank(oracles[0]);
         migration.bridge(0x0, user, 100);
 
-        vm.expectRevert(abi.encodeWithSelector(NODLMigration.NotEnoughVotes.selector, 0x0));
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.NotEnoughVotes.selector, 0x0));
         migration.withdraw(0x0);
     }
 
@@ -119,7 +120,7 @@ contract NODLMigrationTest is Test {
         vm.prank(oracles[1]);
         migration.bridge(0x0, user, 100);
 
-        vm.expectRevert(abi.encodeWithSelector(NODLMigration.NotYetWithdrawable.selector, 0x0));
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.NotYetWithdrawable.selector, 0x0));
         migration.withdraw(0x0);
     }
 
@@ -134,7 +135,7 @@ contract NODLMigrationTest is Test {
 
         migration.withdraw(0x0);
 
-        vm.expectRevert(abi.encodeWithSelector(NODLMigration.AlreadyExecuted.selector, 0x0));
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.AlreadyExecuted.selector, 0x0));
         migration.withdraw(0x0);
     }
 
@@ -152,8 +153,8 @@ contract NODLMigrationTest is Test {
         vm.prank(user); // anybody can call withdraw
         migration.withdraw(0x0);
 
-        (,,,, bool executed) = migration.proposals(0x0);
-        assertEq(executed, true);
+        (,, BridgeBase.ProposalStatus memory status) = migration.proposals(0x0);
+        assertEq(status.executed, true);
 
         assertEq(nodl.balanceOf(user), 100);
     }
