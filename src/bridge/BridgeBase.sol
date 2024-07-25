@@ -10,7 +10,7 @@ import {NODL} from "../NODL.sol";
 /// to bridge tokens and ensuring certain constraints such as voting thresholds and delays.
 abstract contract BridgeBase {
     /// @notice Token contract address for the NODL token.
-    NODL public nodl;
+    NODL public immutable nodl;
 
     /// @notice Mapping to track whether an address is an oracle.
     mapping(address => bool) public isOracle;
