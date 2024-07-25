@@ -69,9 +69,13 @@ contract GrantsMigrationTest is Test {
     function test_proposalCreationAndVoting() public {
         bytes32 paraTxHash = keccak256(abi.encodePacked("tx1"));
         vm.prank(oracles[0]);
+        vm.expectEmit();
+        emit BridgeBase.VoteStarted(paraTxHash, oracles[0], user, amount);
         migration.bridge(paraTxHash, user, amount, schedules);
 
         vm.prank(oracles[1]);
+        vm.expectEmit();
+        emit BridgeBase.Voted(paraTxHash, oracles[1]);
         migration.bridge(paraTxHash, user, amount, schedules);
 
         (uint256 lastVote, uint8 totalVotes, bool executed) = migration.proposalStatus(paraTxHash);
@@ -91,6 +95,8 @@ contract GrantsMigrationTest is Test {
         vm.roll(block.number + delay + 1);
 
         vm.prank(oracles[0]);
+        vm.expectEmit();
+        emit GrantsMigration.Granted(paraTxHash, user, amount, schedules.length);
         migration.grant(paraTxHash);
 
         (,, bool executed) = migration.proposalStatus(paraTxHash);
@@ -105,17 +111,109 @@ contract GrantsMigrationTest is Test {
         vm.expectRevert(abi.encodeWithSelector(BridgeBase.ParametersChanged.selector, paraTxHash));
         vm.prank(oracles[1]);
         migration.bridge(paraTxHash, user, amount + 1, schedules);
+
+        // Change the target address
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.ParametersChanged.selector, paraTxHash));
+        vm.prank(oracles[1]);
+        migration.bridge(paraTxHash, oracles[1], amount, schedules);
+
+        schedules[0].start += 1 days;
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.ParametersChanged.selector, paraTxHash));
+        vm.prank(oracles[1]);
+        migration.bridge(paraTxHash, user, amount, schedules);
+        schedules[0].start -= 1 days;
+
+        schedules[1].period += 1 days;
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.ParametersChanged.selector, paraTxHash));
+        vm.prank(oracles[1]);
+        migration.bridge(paraTxHash, user, amount, schedules);
+        schedules[1].period -= 1 days;
+
+        schedules[2].periodCount += 1;
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.ParametersChanged.selector, paraTxHash));
+        vm.prank(oracles[1]);
+        migration.bridge(paraTxHash, user, amount, schedules);
+        schedules[2].periodCount -= 1;
+
+        schedules[0].perPeriodAmount += 1;
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.ParametersChanged.selector, paraTxHash));
+        vm.prank(oracles[1]);
+        migration.bridge(paraTxHash, user, amount, schedules);
+        schedules[0].perPeriodAmount -= 1;
+
+        schedules[1].cancelAuthority = oracles[2];
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.ParametersChanged.selector, paraTxHash));
+        vm.prank(oracles[1]);
+        migration.bridge(paraTxHash, user, amount, schedules);
+        schedules[1].cancelAuthority = oracles[0];
+
+        Grants.VestingSchedule[] memory newSchedules = new Grants.VestingSchedule[](schedules.length - 1);
+        newSchedules[0] = schedules[0];
+        newSchedules[1] = schedules[1];
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.ParametersChanged.selector, paraTxHash));
+        vm.prank(oracles[1]);
+        migration.bridge(paraTxHash, user, amount, newSchedules);
+
+        vm.prank(oracles[1]);
+        migration.bridge(paraTxHash, user, amount, schedules);
     }
 
     function test_rejectionOfDuplicateVotes() public {
         bytes32 paraTxHash = keccak256(abi.encodePacked("tx4"));
         vm.prank(oracles[0]);
-        migration.bridge(paraTxHash, user, 100, schedules);
+        migration.bridge(paraTxHash, user, amount, schedules);
 
         vm.expectRevert(abi.encodeWithSelector(BridgeBase.AlreadyVoted.selector, paraTxHash, oracles[0]));
         vm.prank(oracles[0]);
-        migration.bridge(paraTxHash, user, 100, schedules);
+        migration.bridge(paraTxHash, user, amount, schedules);
     }
 
-    // Additional tests for execution without sufficient votes, attempting to execute too early, etc.
+    function test_rejectionOfVoteOnAlreadyExecuted() public {
+        bytes32 paraTxHash = keccak256(abi.encodePacked("tx5"));
+        vm.prank(oracles[0]);
+        migration.bridge(paraTxHash, user, amount, schedules);
+
+        vm.prank(oracles[1]);
+        migration.bridge(paraTxHash, user, amount, schedules);
+
+        vm.roll(block.number + delay + 1);
+        migration.grant(paraTxHash);
+
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.AlreadyExecuted.selector, paraTxHash));
+        vm.prank(oracles[2]);
+        migration.bridge(paraTxHash, user, amount, schedules);
+    }
+
+    function test_executionFailsIfInsufficientVotes() public {
+        bytes32 paraTxHash = keccak256(abi.encodePacked("tx6"));
+        vm.prank(oracles[0]);
+        migration.bridge(paraTxHash, user, 100, schedules);
+
+        vm.roll(block.number + delay + 1);
+
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.NotEnoughVotes.selector, paraTxHash));
+        migration.grant(paraTxHash);
+    }
+
+    function test_executionFailsIfTooEarly() public {
+        bytes32 paraTxHash = keccak256(abi.encodePacked("tx7"));
+        vm.prank(oracles[0]);
+        migration.bridge(paraTxHash, user, 100, schedules);
+
+        vm.prank(oracles[1]);
+        migration.bridge(paraTxHash, user, 100, schedules);
+
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.NotYetWithdrawable.selector, paraTxHash));
+        migration.grant(paraTxHash);
+    }
+
+    function test_registeringTooManyOraclesFails() public {
+        uint8 max_oracles = migration.MAX_ORACLES();
+        address[] memory manyOracles = new address[](max_oracles + 1);
+        for (uint256 i = 0; i < manyOracles.length; i++) {
+            manyOracles[i] = vm.addr(i + 1);
+        }
+        vm.expectRevert(abi.encodeWithSelector(BridgeBase.MaxOraclesExceeded.selector));
+        new GrantsMigration(manyOracles, nodl, grants, uint8(manyOracles.length / 2 + 1), delay);
+    }
 }
