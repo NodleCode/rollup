@@ -1,109 +1,120 @@
 import assert from "assert";
 import { fetchContract, fetchToken } from "../utils/erc721";
-import { TransferLog } from "../types/abi-interfaces/Erc721AAbi";
-import { fetchAccount, fetchMetadata } from "../utils/utils";
-import { ethers } from "ethers";
-import fetch from "node-fetch";
+import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
+import { ApprovalLog, TransferLog } from "../types/abi-interfaces/Erc721Abi";
+import { ERC721Transfer } from "../types";
+import { abi, callContract, nodleContracts } from "../utils/const";
 
-const SEPOLIA_RPC_URL =
-  "https://shy-cosmopolitan-telescope.zksync-sepolia.quiknode.pro/7dca91c43e87ec74294608886badb962826e62a0/";
-
-async function callContract(
-  contractAddress: string,
-  abi: any[],
-  methodName: string,
-  params: any[] = []
-): Promise<any> {
-  // Create an instance of the ethers.js Interface for encoding the data
-  const iface = new ethers.utils.Interface(abi);
-
-  // Encode the function call
-  const data = iface.encodeFunctionData(methodName, params);
-
-  // Define the JSON-RPC payload
-  const payload = {
-    jsonrpc: "2.0",
-    method: "eth_call",
-    params: [
-      {
-        to: contractAddress,
-        data: data,
-      },
-      "latest",
-    ],
-    id: 1,
-  };
-
-  try {
-    // Make the fetch call
-    const response = await fetch(SEPOLIA_RPC_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseData = await response.json();
-
-    if (responseData.result) {
-      // Decode the result if needed
-      const decodedResult = iface.decodeFunctionResult(
-        methodName,
-        responseData.result
-      );
-      return decodedResult;
-    } else {
-      throw new Error(`RPC Error: ${responseData.error.message}`);
-    }
-  } catch (error: any) {
-    throw new Error(`Fetch Error: ${error.message}`);
-  }
-}
-
-const abi = [
-  // Minimal ERC721 ABI with only the tokenURI method
-  "function tokenURI(uint256 tokenId) view returns (string)",
-];
-
-export async function handleRewardTransfer(event: TransferLog): Promise<void> {
+export async function handleNFTTransfer(event: TransferLog): Promise<void> {
   assert(event.args, "No event.args");
 
   const contract = await fetchContract(event.address);
   if (contract) {
-    const from = await fetchAccount(event.args.from);
-    const to = await fetchAccount(event.args.to);
-    const tokenId = event.args.tokenId;
+    // logger.info("handleNFTTransfer");
+    // logger.info(JSON.stringify(event.args));
+    const from = await fetchAccount(event.args[0]);
+    const to = await fetchAccount(event.args[1]);
+    const tokenId = event.args[2];
+
+    const transferTx = await fetchTransaction(
+      event.transaction.hash,
+      event.block.timestamp * BigInt(1000),
+      BigInt(event.block.number)
+    );
 
     const token = await fetchToken(
       `${contract.id}/${tokenId}`,
       contract.id,
-      tokenId.toBigInt(),
+      BigInt(tokenId as any),
       from.id,
       ""
     );
 
-    const tokenUri = await callContract(contract.id, abi, "tokenURI", [
-      tokenId,
-    ]);
-    logger.info("Token URI: " + tokenUri);
-    if (tokenUri) {
-      const metadata = await fetchMetadata(tokenUri, [
-        "nodle-community-nfts.myfilebase.com",
-        "pinning.infura-ipfs.io",
-        "nodle-web-wallet.infura-ipfs.io",
-        "cloudflare-ipfs.com",
-      ]);
+    if (!token.uri) {
+      const tokenUri = await callContract(contract.id, abi, "tokenURI", [
+        tokenId,
+      ]).catch((error) => {
+        return null;
+      });
+      logger.info("Token URI: " + tokenUri);
+      if (tokenUri && nodleContracts.includes(contract.id)) {
+        const metadata = await fetchMetadata(tokenUri, [
+          "nodle-community-nfts.myfilebase.com",
+          "pinning.infura-ipfs.io",
+          "nodle-web-wallet.infura-ipfs.io",
+          "cloudflare-ipfs.com",
+        ]);
 
-      if (metadata) {
-        token.content = metadata.content || metadata.image || "";
-        token.name = metadata.title || metadata.name || "";
-        token.description = metadata.description || "";
+        if (metadata) {
+          token.content = metadata.content || metadata.image || "";
+          token.name = metadata.title || metadata.name || "";
+          token.description = metadata.description || "";
+        }
       }
+      token.uri = String(tokenUri);
+    }
+
+    const transfer = new ERC721Transfer(
+      `${contract.id}/${token.id}`,
+      from.id,
+      transferTx.id,
+      event.block.timestamp * BigInt(1000),
+      contract.id,
+      token.id,
+      from.id,
+      to.id
+    );
+
+    token.ownerId = to.id;
+    token.transactionHash = event.transaction.hash;
+    token.timestamp = event.block.timestamp * BigInt(1000);
+
+    await Promise.all([token.save(), transfer.save()]);
+  }
+}
+
+export async function handleApproval(event: ApprovalLog): Promise<void> {
+  assert(event.args, "No event.args");
+
+  const contract = await fetchContract(event.address);
+  if (contract) {
+    const to = await fetchAccount(event.args[1]);
+    const from = await fetchAccount(event.args[0]);
+    const tokenId = BigInt(event.args[2] as any);
+
+    const token = await fetchToken(
+      `${contract.id}/${tokenId}`,
+      contract.id,
+      tokenId,
+      to.id,
+      from.id
+    );
+
+    if (!token.uri) {
+      const tokenUri = await callContract(contract.id, abi, "tokenURI", [
+        tokenId,
+      ]).catch((error) => {
+        return null;
+      });
+      logger.info("Token URI: " + tokenUri);
+      if (tokenUri && nodleContracts.includes(contract.id)) {
+        const metadata = await fetchMetadata(tokenUri, [
+          "nodle-community-nfts.myfilebase.com",
+          "pinning.infura-ipfs.io",
+          "nodle-web-wallet.infura-ipfs.io",
+          "cloudflare-ipfs.com",
+        ]);
+
+        if (metadata) {
+          token.content = metadata.content || metadata.image || "";
+          token.name = metadata.title || metadata.name || "";
+          token.description = metadata.description || "";
+        }
+      }
+      token.uri = String(tokenUri);
     }
 
     token.ownerId = to.id;
-    token.uri = String(tokenUri);
     token.transactionHash = event.transaction.hash;
     token.timestamp = event.block.timestamp * BigInt(1000);
 

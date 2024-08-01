@@ -1,23 +1,45 @@
 import { EthereumLog, EthereumResult } from "@subql/types-ethereum";
 import { Account, ERC721Contract, ERC721Operator, ERC721Token } from "../types";
 import assert from "assert";
+import { getContractDetails } from "./utils";
 
-export const fetchContract = async (address: string): Promise<ERC721Contract> => {
+const knownAddresses = [
+  "0x000000000000000000000000000000000000800a",
+  "0x5a7d6b2f92c77fad6ccabd7ee0624e64907eaf3e",
+];
+
+export const fetchContract = async (
+  address: string
+): Promise<ERC721Contract | null> => {
   // rewrite to lowercase
   const lowercaseAddress = address?.toLowerCase();
 
+  if (knownAddresses.includes(lowercaseAddress)) {
+    return null;
+  }
 
   const contract = await ERC721Contract.get(lowercaseAddress);
 
   if (!contract) {
-    logger.error(`Contract not found for lowercaseAddress: ${lowercaseAddress}`);
+    logger.info(
+      `Contract not found for lowercaseAddress: ${lowercaseAddress}`
+    );
     const newContract = new ERC721Contract(lowercaseAddress, lowercaseAddress);
-    newContract.save();
 
-    return newContract;
+    const { symbol, name, isErc721 } = await getContractDetails(
+      lowercaseAddress
+    );
+
+    newContract.isValid = isErc721;
+
+    newContract.symbol = symbol;
+    newContract.name = name;
+    await newContract.save();
+
+    return newContract.isValid ? newContract : null;
   }
 
-  return contract;
+  return contract.isValid ? contract : null;
 };
 
 export const fetchToken = async (
@@ -30,7 +52,7 @@ export const fetchToken = async (
   const token = await ERC721Token.get(id);
 
   if (!token) {
-    logger.error(`Token not found for id: ${id}`);
+    logger.info(`Token not found for id: ${id}`);
     const newToken = new ERC721Token(
       id,
       contractId,
@@ -70,8 +92,14 @@ export const fetchERC721Operator = async (
   const op = await ERC721Operator.get(id);
 
   if (!op) {
-    logger.error(`Operator not found for id: ${id}`);
-    const newOp = new ERC721Operator(id, contract.id, owner.id, operator.id, false);
+    logger.info(`Operator not found for id: ${id}`);
+    const newOp = new ERC721Operator(
+      id,
+      contract.id,
+      owner.id,
+      operator.id,
+      false
+    );
     newOp.save();
 
     return newOp;

@@ -1,12 +1,14 @@
-import assert from "assert";
 import { fetchContract } from "../utils/erc20";
 import { ApprovalLog, TransferLog } from "../types/abi-interfaces/Erc20Abi";
 import { fetchAccount, fetchTransaction } from "../utils/utils";
 import { ERC20Approval, ERC20Transfer } from "../types";
 
 export async function handleERC20Transfer(event: TransferLog): Promise<void> {
-  assert(event.args, "No event.args");
-  logger.info("handleERC20Transfer");
+  if (!event.args) {
+    logger.error("No event.args");
+    return;
+  }
+ // logger.info("handleERC20Transfer");
 
   const contract = await fetchContract(event.address);
   if (contract) {
@@ -16,7 +18,7 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
     const value = event.args.value.toBigInt();
     const timestamp = event.block.timestamp * BigInt(1000);
     const hash = event.transaction.hash;
-    
+
     const transfer = await fetchTransaction(
       hash,
       timestamp,
@@ -40,14 +42,17 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
     transferEvent.hash = hash;
     transferEvent.contractId = contract.id;
     transferEvent.emitterId = emmiter.id;
-
-    return transferEvent.save();
+    //logger.info("Saving transferEvent");
+    return transferEvent.save()
   }
 }
 
 export async function handleERC20Approval(event: ApprovalLog): Promise<void> {
-  assert(event.args, "No event.args");
-  logger.info("handleERC20Approval");
+  if (!event.args) {
+    logger.error("No event.args");
+    return;
+  }
+  // logger.info("handleERC20Approval");
 
   const contract = await fetchContract(event.address);
   if (contract) {
@@ -76,7 +81,7 @@ export async function handleERC20Approval(event: ApprovalLog): Promise<void> {
 
     approval.contractId = contract.id;
     approval.hash = hash;
-    
-    await approval.save();
+
+    return approval.save()
   }
 }

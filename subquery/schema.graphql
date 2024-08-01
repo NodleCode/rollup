@@ -30,6 +30,7 @@ type ERC721Contract @entity {
   id: ID!
   asAccount: Account!
   supportsMetadata: Boolean
+  isValid: Boolean
   name: String
   symbol: String
   tokens: [ERC721Token!]! @derivedFrom(field: "contract")
@@ -135,6 +136,7 @@ type Transaction @entity {
 type ERC20Contract @entity {
   id: ID!
   asAccount: Account!
+  isValid: Boolean
   name: String
   symbol: String
   decimals: BigInt
@@ -194,5 +196,19 @@ type ProposalVote @entity {
   voter: Account!
   timestamp: BigInt! @index
   hash: String @index
+}
+
+type NativeTransaction @entity {
+  id: ID!
+  hash: String @index
+  timestamp: BigInt! @index
+  blockNumber: BigInt! @index
+  from: Account!
+  to: Account
+  value: BigInt!
+  gas: BigInt!
+  gasPrice: BigInt!
+  input: String
+  nonce: BigInt!
 }
 
