@@ -34,11 +34,14 @@ const project: EthereumProject = {
   dataSources: [
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 1, // This is the block that the contract was deployed on
-      options: {
-        abi: "erc20",
-      },
+      startBlock: 40605285, // This is the block that the contract was deployed on
       assets: new Map([
+        [
+          "erc721",
+          {
+            file: "./abis/erc721.abi.json",
+          },
+        ],
         [
           "erc20",
           {
@@ -50,18 +53,8 @@ const project: EthereumProject = {
         file: "./dist/index.js",
         handlers: [
           {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleERC20Approval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleERC20Transfer",
-            filter: {
-              topics: ["Transfer(address,address,uint256)"],
-            },
+            kind: EthereumHandlerKind.Block,
+            handler: "handleBlock",
           },
         ],
       },

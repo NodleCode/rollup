@@ -21,9 +21,7 @@ export const fetchContract = async (
   const contract = await ERC721Contract.get(lowercaseAddress);
 
   if (!contract) {
-    logger.info(
-      `Contract not found for lowercaseAddress: ${lowercaseAddress}`
-    );
+    logger.info(`Contract not found for lowercaseAddress: ${lowercaseAddress}`);
     const newContract = new ERC721Contract(lowercaseAddress, lowercaseAddress);
 
     const { symbol, name, isErc721 } = await getContractDetails(

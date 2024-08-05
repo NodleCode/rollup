@@ -18,6 +18,9 @@ export async function checkERC20(address: string) {
 
     return true;
   } catch (error) {
+    logger.info(
+      `Error checking ERC20 for ${address} with error ${JSON.stringify(error)}`
+    );
     return false;
   }
 }
@@ -77,9 +80,9 @@ export async function callContract(
 
 export const nodleContracts = [
   "0x95b3641d549f719eb5105f9550eca4a7a2f305de",
-  "0xd837cFb550b7402665499f136eeE7a37D608Eb18",
-  "0x9Fed2d216DBE36928613812400Fd1B812f118438",
-  "0x999368030Ba79898E83EaAE0E49E89B7f6410940",
+  "0xd837cfb550b7402665499f136eee7a37d608eb18",
+  "0x9Fed2d216DBE36928613812400Fd1B812f118438".toLowerCase(),
+  "0x999368030Ba79898E83EaAE0E49E89B7f6410940".toLowerCase(),
 ];
 
 export const abi = [
@@ -91,8 +94,16 @@ export const abi = [
   // ERC20 ABI
   "function totalSupply() view returns (uint256)",
   "function balanceOf(address account) view returns (uint256)",
-  "function transfer(address recipient, uint256 amount) returns (bool)",
   "function allowance(address owner, address spender) view returns (uint256)",
-  "function approve(address spender, uint256 amount) returns (bool)",
-  "function transferFrom(address sender, address recipient, uint256 amount) returns (bool)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+  "event Approval(address indexed owner, address indexed spender, uint256 value)",
+];
+
+export const erc721Abi = [
+  "function tokenURI(uint256 tokenId) view returns (string)",
+  "function symbol() view returns (string)",
+  "function name() view returns (string)",
+  "function supportsInterface(bytes4 interfaceId) view returns (bool)",
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
+  "event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId)",
 ];
