@@ -26,17 +26,15 @@ const project: EthereumProject = {
     file: "./schema.graphql",
   },
   network: {
-    chainId: "300", // zKsync sepolia testnet
-    endpoint: ["https://sepolia.era.zksync.dev"],
+    chainId: "324", // zKsync mainnet
+    endpoint: [
+      "https://wandering-distinguished-tree.zksync-mainnet.quiknode.pro/20c0bc25076ea895aa263c9296c6892eba46077c/",
+    ],
   },
   dataSources: [
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 1453992, // This is the block that the contract was deployed on
-      options: {
-        abi: "erc721",
-        address: "0x999368030Ba79898E83EaAE0E49E89B7f6410940",
-      },
+      startBlock: 40605285, // This is the block that the contract was deployed on
       assets: new Map([
         [
           "erc721",
@@ -44,44 +42,19 @@ const project: EthereumProject = {
             file: "./abis/erc721.abi.json",
           },
         ],
+        [
+          "erc20",
+          {
+            file: "./abis/erc20.abi.json",
+          },
+        ],
       ]),
       mapping: {
         file: "./dist/index.js",
         handlers: [
           {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleSafeMint",
-            filter: {
-              function: "safeMint(address,string)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleApprove",
-            filter: {
-              function: "approve(address,uint256)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleTransfer",
-            filter: {
-              topics: ["Transfer(address from,address to,uint256 tokenId)"],
-            },
+            kind: EthereumHandlerKind.Block,
+            handler: "handleBlock",
           },
         ],
       },
