@@ -35,7 +35,7 @@ contract Rewards is AccessControl, EIP712 {
      * The batch reward type consists of the recipients, amounts, and sequence of that batch.
      */
     bytes32 public constant BATCH_REWARD_TYPE_HASH =
-        keccak256("BatchReward(address[] recipients,uint256[] amounts,uint256 sequence)");
+        keccak256("BatchReward(bytes32 recipientsHash,bytes32 amountsHash,uint256 sequence)");
     /**
      * @dev The maximum period for reward quota renewal. This is to prevent overflows while avoiding the ongoing overhead of safe math operations.
      */
