@@ -17,7 +17,10 @@ contract Grants {
     uint32 public constant MAX_SCHEDULES = 100;
 
     // Token used for vesting.
-    IERC20 public token;
+    IERC20 public immutable token;
+
+    // Minimum amount of tokens that can be vested per period. This is a safety bound to prevent dusting attacks.
+    uint256 public immutable perPeriodMinAmount;
 
     // Mapping from recipient address to array of vesting schedules.
     mapping(address => VestingSchedule[]) public vestingSchedules;
@@ -41,9 +44,11 @@ contract Grants {
     error VestingToSelf(); // Thrown when the creator attempts to vest tokens to themselves.
     error MaxSchedulesReached(); // Thrown when the addition of a new schedule would exceed the maximum allowed.
     error NoOpIsFailure(); // Thrown when an operation that should change state does not.
+    error LowVestingAmount(); // Thrown when the amount to be vested is below the minimum allowed.
 
-    constructor(address _token) {
+    constructor(address _token, uint256 _perPeriodMinAmount) {
         token = IERC20(_token);
+        perPeriodMinAmount = _perPeriodMinAmount;
     }
 
     /**
@@ -68,6 +73,7 @@ contract Grants {
         _mustBeNonZero(period);
         _mustBeNonZero(periodCount);
         _mustNotExceedMaxSchedules(to);
+        _mustBeEqualOrExceedMinAmount(perPeriodAmount);
 
         token.safeTransferFrom(msg.sender, address(this), perPeriodAmount * periodCount);
 
@@ -207,6 +213,12 @@ contract Grants {
     function _mustNotExceedMaxSchedules(address to) private view {
         if (vestingSchedules[to].length >= MAX_SCHEDULES) {
             revert MaxSchedulesReached();
+        }
+    }
+
+    function _mustBeEqualOrExceedMinAmount(uint256 amount) private view {
+        if (amount < perPeriodMinAmount) {
+            revert LowVestingAmount();
         }
     }
 }

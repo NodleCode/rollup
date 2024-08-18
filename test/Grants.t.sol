@@ -20,7 +20,7 @@ contract GrantsTest is Test {
 
     function setUp() public {
         token = new MockToken();
-        grants = new Grants(address(token));
+        grants = new Grants(address(token), 100);
         alice = address(0x1);
         bob = address(0x2);
         charlie = address(0x3);
@@ -376,9 +376,9 @@ contract GrantsTest is Test {
 
     function test_addingTooManyScheduleReverts() public {
         vm.startPrank(alice);
-        token.approve(address(grants), 1000);
+        token.approve(address(grants), 10100);
         for (uint32 i = 0; i < grants.MAX_SCHEDULES(); i++) {
-            grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 1, 1, alice);
+            grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 1, 100, alice);
         }
         vm.expectRevert(Grants.MaxSchedulesReached.selector);
         grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 4, 100, alice);
@@ -393,6 +393,14 @@ contract GrantsTest is Test {
             abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(grants), 100, 400)
         );
         grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 4, 100, alice);
+        vm.stopPrank();
+    }
+
+    function test_addVestingScheduleFailsIfDustVesting() public {
+        vm.startPrank(alice);
+        token.approve(address(grants), 400);
+        vm.expectRevert(Grants.LowVestingAmount.selector);
+        grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 4, 1, alice);
         vm.stopPrank();
     }
 
