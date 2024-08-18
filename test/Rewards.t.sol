@@ -260,6 +260,26 @@ contract RewardsTest is Test {
         rewards.mintReward(reward, signature);
     }
 
+    function test_digestBatchReward() public {
+        bytes32 hashedEIP712DomainType =
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+        bytes32 hashedName = keccak256(bytes("rewards.depin.nodle"));
+        bytes32 hashedVersion = keccak256(bytes("1"));
+        bytes32 domainSeparator =
+            keccak256(abi.encode(hashedEIP712DomainType, hashedName, hashedVersion, block.chainid, address(rewards)));
+
+        address[] memory recipients = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+        recipients[0] = address(11);
+        recipients[1] = address(22);
+        amounts[0] = 100;
+        amounts[1] = 200;
+
+        bytes32 structHash = keccak256(abi.encode(rewards.BATCH_REWARD_TYPE_HASH(), recipients, amounts, 0));
+        bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
+        assertEq(rewards.digestBatchReward(Rewards.BatchReward(recipients, amounts, 0)), digest);
+    }
+
     function test_mintBatchRewardInvalidDigest() public {
         bytes32 hashedEIP712DomainType =
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -275,9 +295,7 @@ contract RewardsTest is Test {
         amounts[0] = 100;
         amounts[1] = 200;
 
-        bytes32 receipentsHash = keccak256(abi.encodePacked(recipients));
-        bytes32 amountsHash = keccak256(abi.encodePacked(amounts));
-        bytes32 structHash = keccak256(abi.encode(rewards.BATCH_REWARD_TYPE_HASH(), receipentsHash, amountsHash, 0));
+        bytes32 structHash = keccak256(abi.encode(rewards.BATCH_REWARD_TYPE_HASH(), recipients, amounts, 0));
         bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);

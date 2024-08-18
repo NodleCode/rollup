@@ -368,9 +368,8 @@ contract Rewards is AccessControl, EIP712 {
      * @return The digest of the BatchReward struct.
      */
     function digestBatchReward(BatchReward memory batch) public view returns (bytes32) {
-        bytes32 receipentsHash = keccak256(abi.encodePacked(batch.recipients));
-        bytes32 amountsHash = keccak256(abi.encodePacked(batch.amounts));
-        return
-            _hashTypedDataV4(keccak256(abi.encode(BATCH_REWARD_TYPE_HASH, receipentsHash, amountsHash, batch.sequence)));
+        return _hashTypedDataV4(
+            keccak256(abi.encode(BATCH_REWARD_TYPE_HASH, batch.recipients, batch.amounts, batch.sequence))
+        );
     }
 }
