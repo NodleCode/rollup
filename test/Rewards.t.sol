@@ -386,6 +386,11 @@ contract RewardsTest is Test {
         rewards.setBatchSubmitterRewardPercentage(101);
     }
 
+    function test_deployRewardsWithInvalidSubmitterRewardPercentage() public {
+        vm.expectRevert(Rewards.OutOfRangeValue.selector);
+        new Rewards(nodlToken, 1000, RENEWAL_PERIOD, vm.addr(1), 101);
+    }
+
     function test_changingSubmitterRewardPercentageIsEffective() public {
         address alice = address(2);
         rewards.grantRole(rewards.DEFAULT_ADMIN_ROLE(), alice);
