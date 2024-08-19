@@ -1,5 +1,11 @@
 import { EthereumBlock } from "@subql/types-ethereum";
-import { ERC20Approval, ERC20Transfer, ERC721Transfer } from "../types";
+import {
+  ERC20Approval,
+  ERC20Transfer,
+  ERC721Token,
+  ERC721Transfer,
+  Transaction,
+} from "../types";
 import { ethers } from "ethers";
 import { abi, erc721Abi } from "../utils/const";
 import { handleApproval, handleTransfer } from "./common";
@@ -7,10 +13,11 @@ import { ApprovalLog, TransferLog } from "../types/abi-interfaces/Erc721Abi";
 
 export const handleBlock = async (block: EthereumBlock): Promise<void> => {
   logger.info(`Processing block ${block.number}`);
-  const transactions = block.transactions;
   const nftTransfersToSave: ERC721Transfer[] = [];
   const erc20TransfersToSave: ERC20Transfer[] = [];
   const erc20ApprovalsToSave: ERC20Approval[] = [];
+  const tokenToSave: ERC721Token[] = [];
+  const transactionToSave: Transaction[] = [];
 
   for (const log of block.logs) {
     try {
@@ -19,17 +26,33 @@ export const handleBlock = async (block: EthereumBlock): Promise<void> => {
         isPossibleERC721 ? erc721Abi : abi
       );
       let _log = iface.parseLog(log);
-      logger.info(`Processing log ${_log.name}`);
+      // logger.info(`Processing log ${_log.name}`);
 
       if (_log.name === "Transfer") {
         log.args = _log.args as any;
 
         const tosave = await handleTransfer(log as TransferLog);
 
-        if (tosave && tosave._name === "ERC20Transfer") {
-          erc20TransfersToSave.push(tosave as ERC20Transfer);
-        } else if (tosave && tosave._name === "ERC721Transfer") {
-          nftTransfersToSave.push(tosave as ERC721Transfer);
+        if (tosave?.length) {
+          tosave?.forEach(async (t) => {
+            switch (t?._name) {
+              case "ERC20Transfer":
+                erc20TransfersToSave.push(t as ERC20Transfer);
+                break;
+
+              case "ERC721Token":
+                tokenToSave.push(t as ERC721Token);
+                break;
+
+              case "Transaction":
+                transactionToSave.push(t as Transaction);
+                break;
+
+              default:
+                nftTransfersToSave.push(t as ERC721Transfer);
+                break;
+            }
+          });
         }
       }
 
@@ -37,8 +60,22 @@ export const handleBlock = async (block: EthereumBlock): Promise<void> => {
         log.args = _log.args as any;
         const tosave = await handleApproval(log as ApprovalLog);
 
-        if (tosave) {
-          erc20ApprovalsToSave.push(tosave);
+        if (tosave?.length) {
+          tosave?.forEach(async (t) => {
+            switch (t?._name) {
+              case "Transaction":
+                transactionToSave.push(t as Transaction);
+                break;
+
+              case "ERC721Token":
+                tokenToSave.push(t as ERC721Token);
+                break;
+
+              default:
+                erc20ApprovalsToSave.push(t as ERC20Approval);
+                break;
+            }
+          });
         }
       }
     } catch (error: any) {
@@ -51,6 +88,12 @@ export const handleBlock = async (block: EthereumBlock): Promise<void> => {
   }
 
   await Promise.all([
+    transactionToSave.length &&
+      store.bulkCreate("Transaction", transactionToSave),
+    tokenToSave.length && store.bulkCreate("ERC721Token", tokenToSave),
+  ]);
+
+  Promise.all([
     nftTransfersToSave.length &&
       store.bulkCreate("ERC721Transfer", nftTransfersToSave),
     erc20TransfersToSave.length &&
@@ -59,7 +102,7 @@ export const handleBlock = async (block: EthereumBlock): Promise<void> => {
       store.bulkCreate("ERC20Approval", erc20ApprovalsToSave),
   ]);
 
-  logger.info(`Processed block ${block.number}`);
+  //  logger.info(`Processed block ${block.number}`);
 };
 
 /* export const handleContractDeployed = async (

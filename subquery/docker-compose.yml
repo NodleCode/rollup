@@ -39,6 +39,7 @@ services:
       - --batch-size=30
       - --unfinalized-blocks=false
       - --unsafe
+      - --timeout=3600
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://subquery-node:3000/ready"]

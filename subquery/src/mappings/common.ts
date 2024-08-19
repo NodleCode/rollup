@@ -22,9 +22,7 @@ const knownAddresses = [
   "0x5a7d6b2f92c77fad6ccabd7ee0624e64907eaf3e",
 ];
 
-export async function handleTransfer(
-  event: TransferLog
-): Promise<ERC721Transfer | ERC20Transfer | undefined> {
+export async function handleTransfer(event: TransferLog) {
   try {
     const lowercaseAddress = event?.address?.toLowerCase();
 
@@ -35,8 +33,6 @@ export async function handleTransfer(
     let contract: ERC20Contract | ERC721Contract | undefined =
       (await ERC20Contract.get(lowercaseAddress)) ||
       (await ERC721Contract.get(lowercaseAddress));
-    let _isErc721 = false;
-    let _isErc20 = false;
 
     if (!contract) {
       const { symbol, name, isErc20, isErc721 } = await getContractDetails(
@@ -49,9 +45,6 @@ export async function handleTransfer(
         ? new ERC721Contract(lowercaseAddress, lowercaseAddress)
         : new ERC20Contract(lowercaseAddress, lowercaseAddress);
 
-      _isErc721 = isErc721;
-      _isErc20 = isErc20;
-
       newContract.isValid = isErc20 || isErc721 ? true : false;
 
       newContract.symbol = symbol;
@@ -62,9 +55,9 @@ export async function handleTransfer(
     }
 
     if (contract?.isValid) {
-      if (_isErc721) {
+      if (contract._name === "ERC721Contract") {
         return handleNFTTransfer(event, contract);
-      } else if (_isErc20) {
+      } else if (contract._name === "ERC20Contract") {
         return handleERC20Transfer(event as TransferLogERC20, contract);
       }
     }
@@ -76,7 +69,7 @@ export async function handleTransfer(
 export async function handleERC20Transfer(
   event: TransferLogERC20,
   contract: ERC20Contract
-): Promise<ERC20Transfer | undefined> {
+) {
   if (!event.args) {
     logger.error("No event.args");
     return;
@@ -90,7 +83,7 @@ export async function handleERC20Transfer(
     const timestamp = event.block.timestamp * BigInt(1000);
     const hash = event.transaction.hash;
 
-    const transfer = await fetchTransaction(
+    const transaction = await fetchTransaction(
       hash,
       timestamp,
       BigInt(event.blockNumber)
@@ -103,7 +96,7 @@ export async function handleERC20Transfer(
         .concat("/")
         .concat(`${event.logIndex}`),
       emmiter.id,
-      transfer.id,
+      transaction.id,
       timestamp,
       from.id,
       to.id,
@@ -113,14 +106,14 @@ export async function handleERC20Transfer(
     transferEvent.hash = hash;
     transferEvent.contractId = contract.id;
     transferEvent.emitterId = emmiter.id;
-    return transferEvent;
+    return [transferEvent, transaction];
   }
 }
 
 export async function handleNFTTransfer(
   event: TransferLog,
   contract: ERC721Contract
-): Promise<ERC721Transfer | undefined> {
+) {
   if (!event.args) {
     logger.error("No event.args: " + JSON.stringify(event));
     return;
@@ -131,7 +124,7 @@ export async function handleNFTTransfer(
     const to = await fetchAccount(event.args[1]);
     const tokenId = event.args[2];
 
-    const transferTx = await fetchTransaction(
+    const transaction = await fetchTransaction(
       event.transaction.hash,
       event.block.timestamp * BigInt(1000),
       BigInt(event.block.number)
@@ -141,14 +134,15 @@ export async function handleNFTTransfer(
       `${contract.id}/${tokenId}`,
       contract.id,
       BigInt(tokenId as any),
-      from.id,
-      ""
+      to.id,
+      "",
+      from.id !== "0x0000000000000000000000000000000000000000"
     );
 
     const transfer = new ERC721Transfer(
       `${contract.id}/${token.id}`,
       from.id,
-      transferTx.id,
+      transaction.id,
       event.block.timestamp * BigInt(1000),
       contract.id,
       token.id,
@@ -165,15 +159,12 @@ export async function handleNFTTransfer(
       tokenId.toBigInt(),
       token
     );
-    await tokenToSave.save();
 
-    return transfer;
+    return [transfer, transaction, tokenToSave];
   }
 }
 
-export async function handleApproval(
-  event: ApprovalLog
-): Promise<ERC20Approval | undefined> {
+export async function handleApproval(event: ApprovalLog) {
   try {
     const lowercaseAddress = event?.address?.toLowerCase();
 
@@ -211,7 +202,7 @@ export async function handleApproval(
       if (contract._name === "ERC20Contract") {
         return handleERC20Approval(event, contract);
       } else if (contract._name === "ERC721Contract") {
-        handleERC721Approval(event, contract);
+        return handleERC721Approval(event, contract);
       }
     }
   } catch (error) {
@@ -222,7 +213,7 @@ export async function handleApproval(
 export async function handleERC20Approval(
   event: ApprovalLog,
   contract: ERC20Contract
-): Promise<ERC20Approval | undefined> {
+) {
   if (!event.args) {
     logger.error("No event.args");
     return;
@@ -236,7 +227,7 @@ export async function handleERC20Approval(
     const hash = event.transaction.hash;
     const emmiter = await fetchAccount(event.transaction.from);
 
-    const transfer = await fetchTransaction(
+    const transaction = await fetchTransaction(
       hash,
       timestamp,
       BigInt(event.blockNumber)
@@ -245,7 +236,7 @@ export async function handleERC20Approval(
     const approval = new ERC20Approval(
       contract.id.concat("/").concat(hash),
       emmiter.id,
-      transfer.id,
+      transaction.id,
       timestamp,
       owner.id,
       spender.id,
@@ -255,14 +246,14 @@ export async function handleERC20Approval(
     approval.contractId = contract.id;
     approval.hash = hash;
 
-    return approval;
+    return [approval, transaction];
   }
 }
 
 export async function handleERC721Approval(
   event: ApprovalLog,
   contract: ERC721Contract
-): Promise<void> {
+) {
   if (!event.args) {
     logger.error("No event.args: " + JSON.stringify(event));
     return;
@@ -278,7 +269,8 @@ export async function handleERC721Approval(
       contract.id,
       tokenId,
       to.id,
-      from.id
+      "",
+      from.id !== "0x0000000000000000000000000000000000000000"
     );
 
     token.ownerId = to.id;
@@ -287,9 +279,7 @@ export async function handleERC721Approval(
 
     const toSave = await getTokenWithUri(contract.id, tokenId, token);
 
-    await toSave.save();
-
-    return;
+    return [toSave];
   }
 }
 
@@ -298,17 +288,17 @@ const getTokenWithUri = async (
   tokenId: bigint,
   token: ERC721Token
 ): Promise<ERC721Token> => {
-  if (!token.uri) {
+  if (
+    !token.uri &&
+    nodleContracts.includes(String(contractId).toLocaleLowerCase())
+  ) {
     const tokenUri = await callContract(contractId, abi, "tokenURI", [
       tokenId,
     ]).catch((error) => {
       return null;
     });
     // logger.info("Token URI: " + tokenUri);
-    if (
-      tokenUri &&
-      nodleContracts.includes(String(contractId).toLocaleLowerCase())
-    ) {
+    if (tokenUri) {
       const metadata = await fetchMetadata(tokenUri, [
         "nodle-community-nfts.myfilebase.com",
         "pinning.infura-ipfs.io",

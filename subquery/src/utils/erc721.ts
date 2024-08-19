@@ -45,20 +45,28 @@ export const fetchToken = async (
   contractId: string,
   identifier: bigint,
   ownerId: string,
-  approvalId: string
+  approvalId: string,
+  shouldLookup = true
 ): Promise<ERC721Token> => {
+  const newToken = new ERC721Token(
+    id,
+    contractId,
+    identifier,
+    ownerId,
+    approvalId
+  );
+
+  if (!shouldLookup) {
+    logger.info(`Token id: ${id}`);
+    return newToken;
+  }
+  
   const token = await ERC721Token.get(id);
 
   if (!token) {
     logger.info(`Token not found for id: ${id}`);
-    const newToken = new ERC721Token(
-      id,
-      contractId,
-      identifier,
-      ownerId,
-      approvalId
-    );
-    newToken.save();
+
+    // newToken.save();
 
     return newToken;
   }

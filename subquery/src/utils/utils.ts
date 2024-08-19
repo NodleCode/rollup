@@ -68,17 +68,11 @@ export const fetchTransaction = async (
   timestamp: bigint,
   blocknumber: bigint
 ): Promise<Transaction> => {
-  const tx = await Transaction.get(txHash);
+  // logger.info(`Transaction not found for hash: ${txHash}`);
+  const newTx = new Transaction(txHash, timestamp, blocknumber);
+  // newTx.save();
 
-  if (!tx) {
-    logger.info(`Transaction not found for hash: ${txHash}`);
-    const newTx = new Transaction(txHash, timestamp, blocknumber);
-    newTx.save();
-
-    return newTx;
-  }
-
-  return tx;
+  return newTx;
 };
 
 export const fetchMetadata = async (
