@@ -4,7 +4,7 @@
   "description": "SubQuery Project for Nodle Zk contracts",
   "main": "dist/index.js",
   "scripts": {
-    "build": "subql build",
+    "build": "subql build && node enrich-dist.js",
     "codegen": "subql codegen",
     "publish": "subql publish",
     "start:docker": "docker-compose pull && docker-compose up --remove-orphans",
