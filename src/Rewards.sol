@@ -99,7 +99,7 @@ contract Rewards is AccessControl, EIP712 {
      * This value indicates the cost overhead of minting rewards that the network is happy to take. Though it is set to 2% by default,
      * the governance can change it to ensure the network is sustainable.
      */
-    uint256 public batchSubmitterRewardPercentage;
+    uint8 public batchSubmitterRewardPercentage;
 
     /**
      * @dev Error when the reward quota is exceeded.
@@ -157,13 +157,9 @@ contract Rewards is AccessControl, EIP712 {
      * @param initialPeriod Initial reward period.
      * @param oracleAddress Address of the authorized oracle.
      */
-    constructor(
-        NODL token,
-        uint256 initialQuota,
-        uint256 initialPeriod,
-        address oracleAddress,
-        uint256 rewardPercentage
-    ) EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION) {
+    constructor(NODL token, uint256 initialQuota, uint256 initialPeriod, address oracleAddress, uint8 rewardPercentage)
+        EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION)
+    {
         // This is to avoid the ongoinb overhead of safe math operations
         if (initialPeriod == 0) {
             revert ZeroPeriod();
@@ -173,7 +169,7 @@ contract Rewards is AccessControl, EIP712 {
             revert TooLongPeriod();
         }
 
-        _mustBeLessThan100(batchSubmitterRewardPercentage);
+        _mustBeLessThan100(rewardPercentage);
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
@@ -249,7 +245,7 @@ contract Rewards is AccessControl, EIP712 {
      * - Caller must have the DEFAULT_ADMIN_ROLE.
      * - The new reward percentage must be less than 100.
      */
-    function setBatchSubmitterRewardPercentage(uint256 newPercentage) external {
+    function setBatchSubmitterRewardPercentage(uint8 newPercentage) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
         _mustBeLessThan100(newPercentage);
         batchSubmitterRewardPercentage = newPercentage;
@@ -290,7 +286,7 @@ contract Rewards is AccessControl, EIP712 {
      * @param percent The percentage value to check.
      * @dev Throws an exception if the value is greater than 100.
      */
-    function _mustBeLessThan100(uint256 percent) internal pure {
+    function _mustBeLessThan100(uint8 percent) internal pure {
         if (percent > 100) {
             revert OutOfRangeValue();
         }
