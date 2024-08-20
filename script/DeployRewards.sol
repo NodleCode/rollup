@@ -12,14 +12,14 @@ contract DeployRewards is Script {
     address internal oracleAddress;
     uint256 internal rewardQuotaPerPeriod;
     uint256 internal rewardPeriod;
-    uint256 internal batchSubmitterIncentive; // in percentage of total rewards in a batch. 1 = 1%
+    uint8 internal batchSubmitterIncentive; // in percentage of total rewards in a batch. 1 = 1%
 
     function setUp() public {
         nodlAddress = vm.envOr("N_TOKEN_ADDR", address(0));
         oracleAddress = vm.envAddress("N_REWARDS_ORACLE_ADDR");
         rewardQuotaPerPeriod = vm.envUint("N_REWARDS_QUOTA");
         rewardPeriod = vm.envUint("N_REWARDS_PERIOD");
-        batchSubmitterIncentive = vm.envUint("N_REWARDS_SUBMITTER_INCENTIVE");
+        batchSubmitterIncentive = uint8(vm.envUint("N_REWARDS_SUBMITTER_INCENTIVE"));
     }
 
     function run() public {
