@@ -122,6 +122,10 @@ contract RewardsTest is Test {
         assertEq(rewards.sequences(recipients[0]), 0);
         assertEq(rewards.sequences(recipients[1]), 0);
         assertEq(rewards.batchSequence(), 1);
+
+        (uint256 currentSeq, bytes32 batchHash) = rewards.latestBatchDetails();
+        assertEq(currentSeq, 1);
+        assertEq(batchHash, rewards.digestBatchReward(rewardsBatch));
     }
 
     function test_gasUsed() public {
@@ -284,6 +288,10 @@ contract RewardsTest is Test {
 
         vm.expectRevert();
         rewards.mintBatchReward(Rewards.BatchReward(recipients, amounts, 0), signature);
+
+        (uint256 currentSeq, bytes32 batchHash) = rewards.latestBatchDetails();
+        assertEq(currentSeq, 0);
+        assertEq(batchHash, bytes32(0));
     }
 
     function test_rewardsClaimedResetsOnNewPeriod() public {
