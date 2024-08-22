@@ -383,7 +383,7 @@ contract Rewards is AccessControl, EIP712 {
      * @dev Returns the latest batch details.
      * @return The next batch sequence and the latest digest of a successfully submitted batch which must have been for batchSequence - 1.
      */
-    function getLatestBatchDetails() external view returns (uint256, bytes32) {
+    function latestBatchDetails() external view returns (uint256, bytes32) {
         return (batchSequence, latestBatchRewardDigest);
     }
 }
