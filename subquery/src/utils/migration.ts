@@ -1,4 +1,4 @@
-import { Proposal, ProposalContract } from "../types";
+import { Proposal, ProposalContract, ProposalGrant } from "../types";
 
 export const fetchContract = async (
   address: string
@@ -24,19 +24,30 @@ export const fetchContract = async (
   return contract;
 };
 
+export const fetchProposal = async (proposal: string): Promise<Proposal> => {
+  const contract = await Proposal.get(proposal);
 
-export const fetchProposal = async (
-  proposal: string
-): Promise<Proposal> => {
-  const prop = await Proposal.get(proposal);
-
-  if (!prop) {
+  if (!contract) {
     logger.error(`Proposal not found for: ${proposal}`);
-    const newProp = new Proposal(proposal);
-    newProp.save(); 
+    const newContract = new Proposal(proposal);
+    newContract.save();
 
-    return newProp;
+    return newContract;
   }
 
-  return prop;
+  return contract;
+};
+
+export const fetchGrantProposal = async (proposal: string): Promise<ProposalGrant> => {
+  const contract = await ProposalGrant.get(proposal);
+
+  if (!contract) {
+    logger.error(`Proposal not found for: ${proposal}`);
+    const newContract = new ProposalGrant(proposal);
+    newContract.save();
+
+    return newContract;
+  }
+
+  return contract;
 };

@@ -25,6 +25,7 @@ type Account @entity {
   roleRevoked: [RoleRevoked!]! @derivedFrom(field: "account")
   roleRevokedSender: [RoleRevoked!]! @derivedFrom(field: "sender")
   events: [Event!]! @derivedFrom(field: "emitter")
+  vestingSchedules: [VestingSchedule!]! @derivedFrom(field: "beneficiary")
 }
 type ERC721Contract @entity {
   id: ID!
@@ -175,6 +176,20 @@ type ProposalContract @entity {
   id: ID!
   asAccount: Account!
   proposals: [Proposal!]! @derivedFrom(field: "contract")
+  grants: [ProposalGrant!]! @derivedFrom(field: "contract")
+}
+
+type ProposalGrant @entity {
+  id: ID!
+  contract: ProposalContract
+  proposal: String @index
+  recipient: Account
+  initiator: Account
+  amount: BigInt
+  timestamp: BigInt @index
+  hash: String @index
+  granted: Boolean
+  votes: [ProposalVote!]! @derivedFrom(field: "proposal")
 }
 
 type Proposal @entity {
@@ -198,17 +213,29 @@ type ProposalVote @entity {
   hash: String @index
 }
 
-type NativeTransaction @entity {
+type VestingSchedule @entity {
   id: ID!
-  hash: String @index
-  timestamp: BigInt! @index
-  blockNumber: BigInt! @index
-  from: Account!
-  to: Account
-  value: BigInt!
-  gas: BigInt!
-  gasPrice: BigInt!
-  input: String
-  nonce: BigInt!
+  beneficiary: Account! @index
+  cancelAuthority: Account @index
+  start: BigInt
+  period: BigInt
+  periodCount: Number
+  perPeriodAmount: BigInt
+  transaction: Transaction!
 }
 
+type VestingScheduleCanceled @entity {
+  id: ID!
+  beneficiary: Account! @index
+  cancelAuthority: Account @index
+  affectedVestingSchedules: [String!]!
+  transaction: Transaction!
+}
+
+type VestingScheduleRenounced @entity {
+  id: ID!
+  beneficiary: Account! @index
+  cancelAuthority: Account @index
+  affectedVestingSchedules: [String!]!
+  transaction: Transaction!
+}

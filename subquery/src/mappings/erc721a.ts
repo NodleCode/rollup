@@ -1,7 +1,7 @@
 import assert from "assert";
 import { fetchContract, fetchToken } from "../utils/erc721";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
-import { ApprovalLog, TransferLog } from "../types/abi-interfaces/Erc721Abi";
+import { ApprovalLog, TransferLog } from "../types/abi-interfaces/Erc721AAbi";
 import { ERC721Transfer } from "../types";
 import { abi, callContract, nodleContracts } from "../utils/const";
 
