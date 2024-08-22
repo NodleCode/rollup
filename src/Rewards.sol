@@ -95,6 +95,10 @@ contract Rewards is AccessControl, EIP712 {
      */
     uint256 public batchSequence;
     /**
+     * @dev Represents the latest batch reward digest.
+     */
+    bytes32 public latestBatchRewardDigest;
+    /**
      * @dev Determines the amount of rewards to be minted for the submitter of batch as a percentage of total rewards in that batch.
      * This value indicates the cost overhead of minting rewards that the network is happy to take. Though it is set to 2% by default,
      * the governance can change it to ensure the network is sustainable.
@@ -148,7 +152,7 @@ contract Rewards is AccessControl, EIP712 {
      * @param batchSum The sum of rewards in the batch.
      * @param totalRewardsClaimed The total number of rewards claimed so far.
      */
-    event BatchMinted(uint256 batchSum, uint256 totalRewardsClaimed);
+    event BatchMinted(uint256 batchSum, uint256 totalRewardsClaimed, bytes32 digest);
 
     /**
      * @dev Initializes the contract with the specified parameters.
@@ -218,7 +222,10 @@ contract Rewards is AccessControl, EIP712 {
     function mintBatchReward(BatchReward memory batch, bytes memory signature) external {
         _mustBeValidBatchStructure(batch);
         _mustBeExpectedBatchSequence(batch.sequence);
-        _mustBeFromAuthorizedOracle(digestBatchReward(batch), signature);
+
+        bytes32 digest = digestBatchReward(batch);
+
+        _mustBeFromAuthorizedOracle(digest, signature);
 
         _checkedUpdateQuota();
 
@@ -230,12 +237,14 @@ contract Rewards is AccessControl, EIP712 {
         // Safe to increment the sequence after checking this is the expected number (no overflow for the age of universe even with 1000 reward claims per second)
         batchSequence = batch.sequence + 1;
 
+        latestBatchRewardDigest = digest;
+
         for (uint256 i = 0; i < batch.recipients.length; i++) {
             nodl.mint(batch.recipients[i], batch.amounts[i]);
         }
         nodl.mint(msg.sender, submitterRewardAmount);
 
-        emit BatchMinted(batchSum, claimed);
+        emit BatchMinted(batchSum, claimed, digest);
     }
 
     /**
@@ -368,5 +377,13 @@ contract Rewards is AccessControl, EIP712 {
         bytes32 amountsHash = keccak256(abi.encodePacked(batch.amounts));
         return
             _hashTypedDataV4(keccak256(abi.encode(BATCH_REWARD_TYPE_HASH, receipentsHash, amountsHash, batch.sequence)));
+    }
+
+    /**
+     * @dev Returns the latest batch details.
+     * @return The next batch sequence and the latest digest of a successfully submitted batch which must have been for batchSequence - 1.
+     */
+    function getLatestBatchDetails() external view returns (uint256, bytes32) {
+        return (batchSequence, latestBatchRewardDigest);
     }
 }
