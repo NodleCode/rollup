@@ -219,16 +219,22 @@ type VestingSchedule @entity {
   cancelAuthority: Account @index
   start: BigInt
   period: BigInt
-  periodCount: Number
+  periodCount: Int
   perPeriodAmount: BigInt
   transaction: Transaction!
+  cancelled: Boolean
+  cancelTransaction: Transaction
+  cancelTimestamp: BigInt
+  renounced: Boolean
+  renounceTransaction: Transaction
+  renounceTimestamp: BigInt
 }
 
 type VestingScheduleCanceled @entity {
   id: ID!
   beneficiary: Account! @index
   cancelAuthority: Account @index
-  affectedVestingSchedules: [String!]!
+  affectedVestingSchedules: [String!]
   transaction: Transaction!
 }
 
@@ -236,6 +242,13 @@ type VestingScheduleRenounced @entity {
   id: ID!
   beneficiary: Account! @index
   cancelAuthority: Account @index
-  affectedVestingSchedules: [String!]!
+  affectedVestingSchedules: [String!]
+  transaction: Transaction!
+}
+
+type VestingScheduleClaimed @entity {
+  id: ID!
+  beneficiary: Account! @index
+  amount: BigInt
   transaction: Transaction!
 }
