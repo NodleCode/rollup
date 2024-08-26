@@ -258,28 +258,30 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleClaimed",
             filter: {
-              topics: ["Claimed (address,  uint256)"],
+              topics: ["Claimed(address, uint256)"],
             },
           },
           {
             kind: EthereumHandlerKind.Event,
             handler: "handleRenounced",
             filter: {
-              topics: ["Renounced (address, address)"],
+              topics: ["Renounced(address, address)"],
             },
           },
           {
             kind: EthereumHandlerKind.Event,
             handler: "handleVestingScheduleAdded",
             filter: {
-              topics: ["VestingScheduleAdded (address, tuple)"],
+              topics: [
+                "VestingScheduleAdded(address,tuple(address,uint256,uint256,uint32,uint256))",
+              ],
             },
           },
           {
             kind: EthereumHandlerKind.Event,
             handler: "handleVestingSchedulesCanceled",
             filter: {
-              topics: ["VestingSchedulesCanceled (address, address)"],
+              topics: ["VestingSchedulesCanceled(address, address)"],
             },
           },
         ],

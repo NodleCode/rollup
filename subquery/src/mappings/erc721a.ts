@@ -37,6 +37,7 @@ export async function handleNFTTransfer(event: TransferLog): Promise<void> {
         return null;
       });
       logger.info("Token URI: " + tokenUri);
+      
       if (tokenUri && nodleContracts.includes(contract.id)) {
         const metadata = await fetchMetadata(tokenUri, [
           "nodle-community-nfts.myfilebase.com",

@@ -142,7 +142,7 @@ export async function handleRenounced(event: RenouncedLog): Promise<void> {
     });
 
     await store.bulkUpdate("VestingSchedule", schedules);
-    action.affectedVestingSchedules = schedules.map((schedule) => schedule.id);
+    action.affectedVestingSchedules = schedules?.map((schedule) => schedule.id);
   }
 
   action.cancelAuthorityId = from;
@@ -161,7 +161,7 @@ export async function handleVestingScheduleAdded(
   const id = event.transactionHash + "-" + event.logIndex.toString();
   const to = event.args.to.toString();
   const schedule = event.args.schedule;
-
+  logger.info("schedule: " + JSON.stringify(schedule) + " to: " + to);
   const transaction = await fetchTransaction(
     event.transactionHash,
     event.block.timestamp,
@@ -203,14 +203,14 @@ export async function handleVestingSchedulesCanceled(
   const schedules = await VestingSchedule.getByCancelAuthorityId(from);
 
   if (schedules && schedules.length > 0) {
-    schedules.forEach((schedule) => {
+    schedules?.forEach((schedule) => {
       schedule.cancelled = true;
       schedule.cancelTimestamp = event.block.timestamp * BigInt(1000);
       schedule.cancelTransactionId = transaction.id;
     });
 
     await store.bulkUpdate("VestingSchedule", schedules);
-    action.affectedVestingSchedules = schedules.map((schedule) => schedule.id);
+    action.affectedVestingSchedules = schedules?.map((schedule) => schedule.id);
   }
 
   action.cancelAuthorityId = from;

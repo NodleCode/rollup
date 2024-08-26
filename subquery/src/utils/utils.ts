@@ -30,18 +30,25 @@ export const fetchTransaction = async (
   return tx;
 };
 
+export const isValidTokenUri = (uri: string): boolean => {
+  const isCid = uri.startsWith("ipfs://") && uri.length === 59;
+  return isCid || uri.startsWith("https://");
+};
+
 export const fetchMetadata = async (
   cid: string,
   gateways: string[]
 ): Promise<any> => {
-  if (gateways.length === 0) {
+  if (gateways.length === 0 || !isValidTokenUri(cid)) {
     return null;
   }
 
   const strppedCid = String(cid).replace("ipfs://", "");
 
   const gateway = gateways[0];
-  const url = `https://${gateway}/ipfs/${strppedCid}`;
+  const url = cid.startsWith("https://")
+    ? cid
+    : `https://${gateway}/ipfs/${strppedCid}`;
 
   try {
     const res = await fetch(url);
