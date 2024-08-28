@@ -95,11 +95,15 @@ contract Rewards is AccessControl, EIP712 {
      */
     uint256 public batchSequence;
     /**
+     * @dev Represents the latest batch reward digest.
+     */
+    bytes32 public latestBatchRewardDigest;
+    /**
      * @dev Determines the amount of rewards to be minted for the submitter of batch as a percentage of total rewards in that batch.
      * This value indicates the cost overhead of minting rewards that the network is happy to take. Though it is set to 2% by default,
      * the governance can change it to ensure the network is sustainable.
      */
-    uint256 public batchSubmitterRewardPercentage;
+    uint8 public batchSubmitterRewardPercentage;
 
     /**
      * @dev Error when the reward quota is exceeded.
@@ -148,7 +152,7 @@ contract Rewards is AccessControl, EIP712 {
      * @param batchSum The sum of rewards in the batch.
      * @param totalRewardsClaimed The total number of rewards claimed so far.
      */
-    event BatchMinted(uint256 batchSum, uint256 totalRewardsClaimed);
+    event BatchMinted(uint256 batchSum, uint256 totalRewardsClaimed, bytes32 digest);
 
     /**
      * @dev Initializes the contract with the specified parameters.
@@ -157,13 +161,9 @@ contract Rewards is AccessControl, EIP712 {
      * @param initialPeriod Initial reward period.
      * @param oracleAddress Address of the authorized oracle.
      */
-    constructor(
-        NODL token,
-        uint256 initialQuota,
-        uint256 initialPeriod,
-        address oracleAddress,
-        uint256 rewardPercentage
-    ) EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION) {
+    constructor(NODL token, uint256 initialQuota, uint256 initialPeriod, address oracleAddress, uint8 rewardPercentage)
+        EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION)
+    {
         // This is to avoid the ongoinb overhead of safe math operations
         if (initialPeriod == 0) {
             revert ZeroPeriod();
@@ -173,7 +173,7 @@ contract Rewards is AccessControl, EIP712 {
             revert TooLongPeriod();
         }
 
-        _mustBeLessThan100(batchSubmitterRewardPercentage);
+        _mustBeLessThan100(rewardPercentage);
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
@@ -222,7 +222,10 @@ contract Rewards is AccessControl, EIP712 {
     function mintBatchReward(BatchReward memory batch, bytes memory signature) external {
         _mustBeValidBatchStructure(batch);
         _mustBeExpectedBatchSequence(batch.sequence);
-        _mustBeFromAuthorizedOracle(digestBatchReward(batch), signature);
+
+        bytes32 digest = digestBatchReward(batch);
+
+        _mustBeFromAuthorizedOracle(digest, signature);
 
         _checkedUpdateQuota();
 
@@ -234,12 +237,14 @@ contract Rewards is AccessControl, EIP712 {
         // Safe to increment the sequence after checking this is the expected number (no overflow for the age of universe even with 1000 reward claims per second)
         batchSequence = batch.sequence + 1;
 
+        latestBatchRewardDigest = digest;
+
         for (uint256 i = 0; i < batch.recipients.length; i++) {
             nodl.mint(batch.recipients[i], batch.amounts[i]);
         }
         nodl.mint(msg.sender, submitterRewardAmount);
 
-        emit BatchMinted(batchSum, claimed);
+        emit BatchMinted(batchSum, claimed, digest);
     }
 
     /**
@@ -249,7 +254,7 @@ contract Rewards is AccessControl, EIP712 {
      * - Caller must have the DEFAULT_ADMIN_ROLE.
      * - The new reward percentage must be less than 100.
      */
-    function setBatchSubmitterRewardPercentage(uint256 newPercentage) external {
+    function setBatchSubmitterRewardPercentage(uint8 newPercentage) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
         _mustBeLessThan100(newPercentage);
         batchSubmitterRewardPercentage = newPercentage;
@@ -290,7 +295,7 @@ contract Rewards is AccessControl, EIP712 {
      * @param percent The percentage value to check.
      * @dev Throws an exception if the value is greater than 100.
      */
-    function _mustBeLessThan100(uint256 percent) internal pure {
+    function _mustBeLessThan100(uint8 percent) internal pure {
         if (percent > 100) {
             revert OutOfRangeValue();
         }
@@ -372,5 +377,13 @@ contract Rewards is AccessControl, EIP712 {
         bytes32 amountsHash = keccak256(abi.encodePacked(batch.amounts));
         return
             _hashTypedDataV4(keccak256(abi.encode(BATCH_REWARD_TYPE_HASH, receipentsHash, amountsHash, batch.sequence)));
+    }
+
+    /**
+     * @dev Returns the latest batch details.
+     * @return The next batch sequence and the latest digest of a successfully submitted batch which must have been for batchSequence - 1.
+     */
+    function latestBatchDetails() external view returns (uint256, bytes32) {
+        return (batchSequence, latestBatchRewardDigest);
     }
 }
