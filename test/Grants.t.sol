@@ -20,7 +20,7 @@ contract GrantsTest is Test {
 
     function setUp() public {
         token = new MockToken();
-        grants = new Grants(address(token), 100);
+        grants = new Grants(address(token), 100, 3);
         alice = address(0x1);
         bob = address(0x2);
         charlie = address(0x3);
@@ -46,9 +46,9 @@ contract GrantsTest is Test {
 
         assertEq(token.balanceOf(address(grants)), 1700);
 
-        checkSchedule(bob, 0, alice, block.timestamp + 1 days, 2 days, 4, 100);
-        checkSchedule(bob, 1, alice, block.timestamp + 3 days, 7 days, 3, 200);
-        checkSchedule(bob, 2, charlie, block.timestamp + 5 days, 1 days, 2, 350);
+        checkP0Schedule(bob, 0, alice, block.timestamp + 1 days, 2 days, 4, 100);
+        checkP0Schedule(bob, 1, alice, block.timestamp + 3 days, 7 days, 3, 200);
+        checkP0Schedule(bob, 2, charlie, block.timestamp + 5 days, 1 days, 2, 350);
 
         emit log("Test Add Vesting Schedule Passed!");
     }
@@ -61,11 +61,11 @@ contract GrantsTest is Test {
 
         vm.startPrank(bob);
         vm.expectRevert(Grants.NoOpIsFailure.selector);
-        grants.claim();
+        grants.claim(0, 0);
         vm.stopPrank();
 
         assertEq(token.balanceOf(bob), 0);
-        checkSchedule(bob, 0, alice, block.timestamp + 1 days, 2 days, 4, 100);
+        checkP0Schedule(bob, 0, alice, block.timestamp + 1 days, 2 days, 4, 100);
         emit log("Test Nothing to Claim Before Start Passed!");
     }
 
@@ -79,11 +79,11 @@ contract GrantsTest is Test {
 
         vm.startPrank(bob);
         vm.expectRevert(Grants.NoOpIsFailure.selector);
-        grants.claim();
+        grants.claim(0, 0);
         vm.stopPrank();
 
         assertEq(token.balanceOf(bob), 0);
-        checkSchedule(bob, 0, alice, block.timestamp + 1 days, 2 days, 4, 100);
+        checkP0Schedule(bob, 0, alice, block.timestamp + 1 days, 2 days, 4, 100);
         emit log("Test Nothing to Claim Before One Period!");
     }
 
@@ -100,12 +100,12 @@ contract GrantsTest is Test {
 
         vm.startPrank(bob);
         vm.expectEmit();
-        emit Grants.Claimed(bob, 100);
-        grants.claim();
+        emit Grants.Claimed(bob, 100, 0, 1);
+        grants.claim(0, 0);
         vm.stopPrank();
 
         assertEq(token.balanceOf(bob), 100);
-        checkSchedule(bob, 0, alice, nextStart, 2 days, 3, 100);
+        checkP0Schedule(bob, 0, alice, nextStart, 2 days, 3, 100);
         emit log("Test Claim After One Period!");
     }
 
@@ -125,15 +125,79 @@ contract GrantsTest is Test {
         vm.warp(start + 10 days);
 
         vm.startPrank(bob);
-        grants.claim();
+        grants.claim(0, 0);
         vm.stopPrank();
 
         assertEq(token.balanceOf(bob), 1400);
-        checkSchedule(bob, 0, alice, block.timestamp, 2 days, 1, 100);
-        checkSchedule(bob, 1, alice, block.timestamp, 3 days, 2, 200);
-        checkSchedule(bob, 2, charlie, block.timestamp - 1 days, 7 days, 3, 300);
+        checkP0Schedule(bob, 0, alice, block.timestamp, 2 days, 1, 100);
+        checkP0Schedule(bob, 1, alice, block.timestamp, 3 days, 2, 200);
+        checkP0Schedule(bob, 2, charlie, block.timestamp - 1 days, 7 days, 3, 300);
 
         emit log("Test Add Vesting Schedule Passed!");
+    }
+
+    function test_claimAllPages() public {
+        Grants grants2 = new Grants(address(token), 100, 1);
+        uint256 start = block.timestamp + 1 days;
+        vm.startPrank(alice);
+        token.approve(address(grants2), 1600);
+        grants2.addVestingSchedule(bob, start, 2 days, 6, 100, alice);
+        grants2.addVestingSchedule(bob, start + 1 days, 3 days, 5, 200, alice);
+        vm.stopPrank();
+
+        vm.startPrank(charlie);
+        token.approve(address(grants2), 1200);
+        grants2.addVestingSchedule(bob, start + 2 days, 7 days, 4, 300, charlie);
+        vm.stopPrank();
+
+        vm.warp(start + 10 days);
+
+        vm.startPrank(bob);
+        vm.expectEmit();
+        emit Grants.Claimed(bob, 1400, 0, 3);
+        grants2.claim(0, 0);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(bob), 1400);
+        emit log("Test Claim All Grants In All Pages Passed!");
+    }
+
+    function test_claimLimitedPageRange() public {
+        Grants grants2 = new Grants(address(token), 100, 1);
+        uint256 start = block.timestamp + 1 days;
+        vm.startPrank(alice);
+        token.approve(address(grants2), 1600);
+        grants2.addVestingSchedule(bob, start, 2 days, 6, 100, alice);
+        grants2.addVestingSchedule(bob, start + 1 days, 3 days, 5, 200, alice);
+        vm.stopPrank();
+
+        vm.startPrank(charlie);
+        token.approve(address(grants2), 1200);
+        grants2.addVestingSchedule(bob, start + 2 days, 7 days, 4, 300, charlie);
+        vm.stopPrank();
+
+        vm.warp(start + 10 days);
+
+        vm.startPrank(bob);
+
+        vm.expectEmit();
+        emit Grants.Claimed(bob, 500, 0, 1);
+        grants2.claim(0, 1);
+        assertEq(token.balanceOf(bob), 500);
+
+        vm.expectEmit();
+        emit Grants.Claimed(bob, 600, 1, 2);
+        grants2.claim(1, 2);
+        assertEq(token.balanceOf(bob), 1100);
+
+        vm.expectEmit();
+        emit Grants.Claimed(bob, 300, 2, 3);
+        grants2.claim(2, 3);
+        assertEq(token.balanceOf(bob), 1400);
+
+        vm.stopPrank();
+
+        emit log("Test Claim Limited Page Range Passed!");
     }
 
     function test_claimRemovesFullyVestedSchedules() public {
@@ -149,12 +213,12 @@ contract GrantsTest is Test {
         vm.warp(start + 8 days);
 
         vm.startPrank(bob);
-        grants.claim();
+        grants.claim(0, 0);
         vm.stopPrank();
 
         assertEq(grants.getGrantsCount(bob), 1);
 
-        checkSchedule(bob, 0, alice, start + 10 days, 3 days, 2, 100);
+        checkP0Schedule(bob, 0, alice, start + 10 days, 3 days, 2, 100);
         emit log("Test Claim Removes Fully Vested Schedules Passed!");
     }
 
@@ -171,7 +235,7 @@ contract GrantsTest is Test {
         vm.warp(start + 20 days);
 
         vm.startPrank(bob);
-        grants.claim();
+        grants.claim(0, 0);
         vm.stopPrank();
 
         assertEq(grants.getGrantsCount(bob), 0);
@@ -193,8 +257,8 @@ contract GrantsTest is Test {
         vm.warp(start + 3 days);
 
         vm.expectEmit();
-        emit Grants.VestingSchedulesCanceled(alice, bob);
-        grants.cancelVestingSchedules(bob);
+        emit Grants.VestingSchedulesCanceled(alice, bob, 0, 1);
+        grants.cancelVestingSchedules(bob, 0, 0);
 
         vm.stopPrank();
 
@@ -217,7 +281,7 @@ contract GrantsTest is Test {
 
         vm.warp(start + 5 days);
 
-        grants.cancelVestingSchedules(bob);
+        grants.cancelVestingSchedules(bob, 0, 0);
 
         vm.stopPrank();
 
@@ -240,7 +304,7 @@ contract GrantsTest is Test {
 
         vm.warp(start + 20 days);
 
-        grants.cancelVestingSchedules(bob);
+        grants.cancelVestingSchedules(bob, 0, 0);
 
         vm.stopPrank();
 
@@ -265,10 +329,63 @@ contract GrantsTest is Test {
         assertEq(grants.getGrantsCount(bob), 3);
 
         vm.startPrank(alice);
-        grants.cancelVestingSchedules(bob);
+        grants.cancelVestingSchedules(bob, 0, 0);
         vm.stopPrank();
         assertEq(grants.getGrantsCount(bob), 1);
-        checkSchedule(bob, 0, charlie, block.timestamp + 5 days, 1 days, 2, 350);
+        checkP0Schedule(bob, 0, charlie, block.timestamp + 5 days, 1 days, 2, 350);
+    }
+
+    function test_cancelAllPages() public {
+        Grants grants2 = new Grants(address(token), 100, 1);
+        uint256 start = block.timestamp + 1 days;
+
+        vm.startPrank(alice);
+
+        token.approve(address(grants2), 2800);
+        grants2.addVestingSchedule(bob, start, 2 days, 6, 100, alice);
+        grants2.addVestingSchedule(bob, start + 1 days, 3 days, 5, 200, alice);
+        grants2.addVestingSchedule(bob, start + 2 days, 7 days, 4, 300, alice);
+        assertEq(grants2.getGrantsCount(bob), 3);
+
+        vm.expectEmit();
+        emit Grants.VestingSchedulesCanceled(alice, bob, 0, 3);
+        grants2.cancelVestingSchedules(bob, 0, 0);
+        vm.stopPrank();
+
+        assertEq(grants2.getGrantsCount(bob), 0);
+        emit log("Test Cancel All Grants In All Pages Passed!");
+    }
+
+    function test_cancelLimitedPageRange() public {
+        Grants grants2 = new Grants(address(token), 100, 1);
+        uint256 start = block.timestamp + 1 days;
+
+        vm.startPrank(alice);
+
+        token.approve(address(grants2), 2800);
+        grants2.addVestingSchedule(bob, start, 2 days, 6, 100, alice);
+        grants2.addVestingSchedule(bob, start + 1 days, 3 days, 5, 200, alice);
+        grants2.addVestingSchedule(bob, start + 2 days, 7 days, 4, 300, alice);
+        assertEq(grants2.getGrantsCount(bob), 3);
+
+        vm.expectEmit();
+        emit Grants.VestingSchedulesCanceled(alice, bob, 1, 2);
+        grants2.cancelVestingSchedules(bob, 1, 2);
+        assertEq(grants2.getGrantsCount(bob), 2);
+
+        vm.expectEmit();
+        emit Grants.VestingSchedulesCanceled(alice, bob, 0, 1);
+        grants2.cancelVestingSchedules(bob, 0, 1);
+        assertEq(grants2.getGrantsCount(bob), 1);
+
+        vm.expectEmit();
+        emit Grants.VestingSchedulesCanceled(alice, bob, 2, 3);
+        grants2.cancelVestingSchedules(bob, 2, 3);
+
+        vm.stopPrank();
+
+        assertEq(grants2.getGrantsCount(bob), 0);
+        emit log("Test Cancel Grants Limited Page Range Passed!");
     }
 
     function test_renouncedCannotBeCanceled() public {
@@ -285,18 +402,18 @@ contract GrantsTest is Test {
 
         vm.startPrank(alice);
         vm.expectEmit();
-        emit Grants.Renounced(alice, bob);
-        grants.renounce(bob);
+        emit Grants.Renounced(alice, bob, 0, 1);
+        grants.renounce(bob, 0, 0);
         vm.stopPrank();
 
         vm.startPrank(alice);
         vm.expectRevert(Grants.NoOpIsFailure.selector);
-        grants.cancelVestingSchedules(bob);
+        grants.cancelVestingSchedules(bob, 0, 0);
         vm.stopPrank();
         assertEq(grants.getGrantsCount(bob), 3);
 
         vm.startPrank(charlie);
-        grants.cancelVestingSchedules(bob);
+        grants.cancelVestingSchedules(bob, 0, 0);
         vm.stopPrank();
         assertEq(grants.getGrantsCount(bob), 2);
     }
@@ -316,7 +433,7 @@ contract GrantsTest is Test {
         assertEq(grants.getGrantsCount(bob), 3);
 
         vm.startPrank(charlie);
-        grants.cancelVestingSchedules(bob);
+        grants.cancelVestingSchedules(bob, 0, 0);
         vm.stopPrank();
         assertEq(grants.getGrantsCount(bob), 0);
     }
@@ -326,8 +443,70 @@ contract GrantsTest is Test {
         token.approve(address(grants), 400);
         grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 4, 100, address(0));
         vm.expectRevert(Grants.NoOpIsFailure.selector);
-        grants.renounce(bob);
+        grants.renounce(bob, 0, 0);
         vm.stopPrank();
+    }
+
+    function test_renounceAllPages() public {
+        Grants grants2 = new Grants(address(token), 100, 1);
+        uint256 start = block.timestamp + 1 days;
+
+        vm.startPrank(alice);
+
+        token.approve(address(grants2), 2800);
+        grants2.addVestingSchedule(bob, start, 2 days, 6, 100, alice);
+        grants2.addVestingSchedule(bob, start + 1 days, 3 days, 5, 200, alice);
+        grants2.addVestingSchedule(bob, start + 2 days, 7 days, 4, 300, alice);
+
+        vm.expectEmit();
+        emit Grants.Renounced(alice, bob, 0, 3);
+        grants2.renounce(bob, 0, 0);
+
+        assertEq(grants2.getGrantsCount(bob), 3);
+
+        vm.expectRevert(Grants.NoOpIsFailure.selector);
+        grants2.cancelVestingSchedules(bob, 0, 0);
+
+        vm.stopPrank();
+
+        emit log("Test Renounce All Grants In All Pages Passed!");
+    }
+
+    function test_renounceLimitedPageRange() public {
+        Grants grants2 = new Grants(address(token), 100, 1);
+        uint256 start = block.timestamp + 1 days;
+
+        vm.startPrank(alice);
+
+        token.approve(address(grants2), 2800);
+        grants2.addVestingSchedule(bob, start, 2 days, 6, 100, alice);
+        grants2.addVestingSchedule(bob, start + 1 days, 3 days, 5, 200, alice);
+        grants2.addVestingSchedule(bob, start + 2 days, 7 days, 4, 300, alice);
+
+        vm.expectEmit();
+        emit Grants.Renounced(alice, bob, 1, 2);
+        grants2.renounce(bob, 1, 2);
+
+        vm.expectRevert(Grants.NoOpIsFailure.selector);
+        grants2.cancelVestingSchedules(bob, 1, 2);
+
+        vm.expectEmit();
+        emit Grants.Renounced(alice, bob, 0, 1);
+        grants2.renounce(bob, 0, 1);
+
+        vm.expectRevert(Grants.NoOpIsFailure.selector);
+        grants2.cancelVestingSchedules(bob, 0, 2);
+
+        vm.expectEmit();
+        emit Grants.Renounced(alice, bob, 2, 3);
+        grants2.renounce(bob, 2, 3);
+
+        vm.expectRevert(Grants.NoOpIsFailure.selector);
+        grants2.cancelVestingSchedules(bob, 0, 0);
+
+        vm.stopPrank();
+
+        emit log("Test Renounce Grants Limited Page Range Passed!");
     }
 
     function test_nonCancellabelSchedule() public {
@@ -338,7 +517,7 @@ contract GrantsTest is Test {
 
         vm.startPrank(alice);
         vm.expectRevert(Grants.NoOpIsFailure.selector);
-        grants.cancelVestingSchedules(bob);
+        grants.cancelVestingSchedules(bob, 0, 0);
         vm.stopPrank();
     }
 
@@ -374,16 +553,17 @@ contract GrantsTest is Test {
         vm.stopPrank();
     }
 
-    function test_addingTooManyScheduleReverts() public {
+    function test_addingManySchedule() public {
         vm.startPrank(alice);
         token.approve(address(grants), 10100);
-        for (uint32 i = 0; i < grants.MAX_SCHEDULES(); i++) {
+        for (uint32 i = 0; i < grants.pageLimit(); i++) {
             grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 1, 100, alice);
         }
-        vm.expectRevert(Grants.MaxSchedulesReached.selector);
+        assertEq(grants.currentPage(bob), 0);
         grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 4, 100, alice);
+        assertEq(grants.currentPage(bob), 1);
         vm.stopPrank();
-        assertEq(grants.getGrantsCount(bob), grants.MAX_SCHEDULES());
+        assertEq(grants.getGrantsCount(bob), grants.pageLimit() + 1);
     }
 
     function test_addVestingScheduleFailsIfNotEnoughToken() public {
@@ -404,7 +584,53 @@ contract GrantsTest is Test {
         vm.stopPrank();
     }
 
-    function checkSchedule(
+    function test_invalidPageReverts(uint256 randomInput) public {
+        uint256 startPage = bound(randomInput, 2, type(uint256).max);
+        uint256 endPage = bound(randomInput, 1, startPage - 1);
+        assert(startPage > endPage);
+
+        Grants grants2 = new Grants(address(token), 100, 1);
+        uint256 start = block.timestamp + 1 days;
+
+        vm.startPrank(alice);
+
+        token.approve(address(grants2), 2800);
+        grants2.addVestingSchedule(bob, start, 2 days, 6, 100, alice);
+        grants2.addVestingSchedule(bob, start + 1 days, 3 days, 5, 200, alice);
+        grants2.addVestingSchedule(bob, start + 2 days, 7 days, 4, 300, alice);
+
+        uint256 numOfPages = grants2.currentPage(bob) + 1;
+
+        // start > end
+        vm.expectRevert(Grants.InvalidPage.selector);
+        grants2.cancelVestingSchedules(bob, startPage, endPage);
+        vm.expectRevert(Grants.InvalidPage.selector);
+        grants2.renounce(bob, startPage, endPage);
+
+        // start > total
+        vm.expectRevert(Grants.InvalidPage.selector);
+        grants2.cancelVestingSchedules(bob, numOfPages + 1, numOfPages + 2);
+        vm.expectRevert(Grants.InvalidPage.selector);
+        grants2.renounce(bob, numOfPages + 1, numOfPages + 2);
+
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+
+        // start > end
+        vm.expectRevert(Grants.InvalidPage.selector);
+        grants2.claim(startPage, endPage);
+
+        // start > total
+        vm.expectRevert(Grants.InvalidPage.selector);
+        grants2.claim(numOfPages + 1, numOfPages + 2);
+
+        vm.stopPrank();
+
+        emit log("Test Invalid Page Reverts Passed!");
+    }
+
+    function checkP0Schedule(
         address beneficiary,
         uint256 index,
         address expectedCancelAuthority,
@@ -414,7 +640,7 @@ contract GrantsTest is Test {
         uint256 expectedPerPeriodAmount
     ) internal {
         (address cancelAuthority, uint256 start, uint256 period, uint32 periodCount, uint256 perPeriodAmount) =
-            grants.vestingSchedules(beneficiary, index);
+            grants.vestingSchedules(beneficiary, 0, index);
         assertEq(cancelAuthority, expectedCancelAuthority);
         assertEq(start, expectedStart);
         assertEq(period, expectedPeriod);
