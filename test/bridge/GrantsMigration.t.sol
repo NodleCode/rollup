@@ -20,7 +20,7 @@ contract GrantsMigrationTest is Test {
 
     function setUp() public {
         nodl = new NODL();
-        grants = new Grants(address(nodl), 19);
+        grants = new Grants(address(nodl), 19, 100);
         migration = new GrantsMigration(oracles, nodl, grants, 2, delay);
 
         schedules.push(
