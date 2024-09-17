@@ -19,7 +19,7 @@ contract GrantsMigrationTest is Test {
     uint256 amount = 0;
 
     function setUp() public {
-        nodl = new NODL();
+        nodl = new NODL(address(this));
         grants = new Grants(address(nodl), 19, 100);
         migration = new GrantsMigration(oracles, nodl, grants, 2, delay);
 

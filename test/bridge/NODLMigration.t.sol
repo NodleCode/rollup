@@ -16,7 +16,7 @@ contract NODLMigrationTest is Test {
     address user = vm.addr(4);
 
     function setUp() public {
-        nodl = new NODL();
+        nodl = new NODL(address(this));
         migration = new NODLMigration(oracles, nodl, 2, delay);
 
         nodl.grantRole(nodl.MINTER_ROLE(), address(migration));

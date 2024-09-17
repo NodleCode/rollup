@@ -9,9 +9,9 @@ import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessContr
 contract NODL is ERC20Burnable, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    constructor() ERC20("Nodle Token", "NODL") {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(MINTER_ROLE, msg.sender);
+    constructor(address admin) ERC20("Nodle Token", "NODL") {
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(MINTER_ROLE, admin);
     }
 
     function mint(address to, uint256 amount) public {
