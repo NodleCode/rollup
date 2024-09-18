@@ -57,13 +57,23 @@ contract WhitelistPaymasterTest is Test {
         assert(!paymaster.isWhitelistedUser(charlie));
         assert(!paymaster.isWhitelistedContract(charlie));
 
+        vm.expectEmit();
+        emit WhitelistPaymaster.WhitelistedUsersAdded(whitelistTargets);
         paymaster.addWhitelistedUsers(whitelistTargets);
+
+        vm.expectEmit();
+        emit WhitelistPaymaster.WhitelistedContractsAdded(whitelistTargets);
         paymaster.addWhitelistedContracts(whitelistTargets);
 
         assert(paymaster.isWhitelistedUser(charlie));
         assert(paymaster.isWhitelistedContract(charlie));
 
+        vm.expectEmit();
+        emit WhitelistPaymaster.WhitelistedUsersRemoved(whitelistTargets);
         paymaster.removeWhitelistedUsers(whitelistTargets);
+
+        vm.expectEmit();
+        emit WhitelistPaymaster.WhitelistedContractsRemoved(whitelistTargets);
         paymaster.removeWhitelistedContracts(whitelistTargets);
 
         assert(!paymaster.isWhitelistedUser(charlie));

@@ -43,6 +43,8 @@ contract BasePaymasterTest is Test {
 
     function test_withdrawExcessETH() public {
         vm.prank(bob);
+        vm.expectEmit();
+        emit BasePaymaster.Withdrawn(bob, 1 ether);
         paymaster.withdraw(bob, 1 ether);
 
         assertEq(address(paymaster).balance, 0);

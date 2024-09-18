@@ -146,6 +146,17 @@ contract Rewards is AccessControl, EIP712 {
      * @dev Event emitted when the reward quota is set.
      */
     event QuotaSet(uint256 quota);
+
+    /**
+     * @dev Event emitted when the reward period is set.
+     */
+    event PeriodSet(uint256 period);
+
+    /**
+     * @dev Event emitted when the submitter's reward basis point is set.
+     */
+    event BatchSubmitterRewardSet(uint16 bp);
+
     /**
      * @dev Event emitted when a reward is minted.
      */
@@ -205,6 +216,7 @@ contract Rewards is AccessControl, EIP712 {
         _checkRole(DEFAULT_ADMIN_ROLE);
         _mustBeWithinPeriodRange(newPeriod);
         period = newPeriod;
+        emit PeriodSet(newPeriod);
     }
 
     /**
@@ -267,6 +279,8 @@ contract Rewards is AccessControl, EIP712 {
         _checkRole(DEFAULT_ADMIN_ROLE);
         _mustBeLessThanBasisPointsDivisor(newBasisPoints);
         batchSubmitterRewardBasisPoints = newBasisPoints;
+
+        emit BatchSubmitterRewardSet(newBasisPoints);
     }
 
     /**
