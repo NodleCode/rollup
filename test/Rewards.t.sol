@@ -24,7 +24,7 @@ contract RewardsTest is Test {
         address oracle = vm.addr(oraclePrivateKey);
 
         nodlToken = new NODL(address(this));
-        rewards = new Rewards(nodlToken, 1000, RENEWAL_PERIOD, oracle, 2, address(this));
+        rewards = new Rewards(nodlToken, 1000, RENEWAL_PERIOD, oracle, 200, address(this));
         // Grant MINTER_ROLE to the Rewards contract
         nodlToken.grantRole(nodlToken.MINTER_ROLE(), address(rewards));
     }
@@ -128,7 +128,8 @@ contract RewardsTest is Test {
         recipients[1] = address(22);
         amounts[0] = 100;
         amounts[1] = 200;
-        uint256 submitterReward = (amounts[0] + amounts[1]) * rewards.batchSubmitterRewardPercentage() / 100;
+        uint256 submitterReward =
+            (amounts[0] + amounts[1]) * rewards.batchSubmitterRewardBasisPoints() / rewards.BASIS_POINTS_DIVISOR();
 
         Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
 
@@ -349,7 +350,9 @@ contract RewardsTest is Test {
         Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
         bytes memory batchSignature = createBatchSignature(rewardsBatch, oraclePrivateKey);
         rewards.mintBatchReward(rewardsBatch, batchSignature);
-        assertEq(rewards.claimed(), 300 + 300 * rewards.batchSubmitterRewardPercentage() / 100);
+        assertEq(
+            rewards.claimed(), 300 + 300 * rewards.batchSubmitterRewardBasisPoints() / rewards.BASIS_POINTS_DIVISOR()
+        );
 
         assertEq(rewards.quotaRenewalTimestamp(), sixthRenewal);
     }
@@ -388,49 +391,54 @@ contract RewardsTest is Test {
         assertEq(rewards.claimed(), 30);
     }
 
-    function test_setBatchSubmitterRewardPercentage() public {
+    function test_setBatchSubmitterReward() public {
         address alice = address(2);
         rewards.grantRole(rewards.DEFAULT_ADMIN_ROLE(), alice);
 
-        assertEq(rewards.batchSubmitterRewardPercentage(), 2);
+        assertEq(rewards.batchSubmitterRewardBasisPoints(), 200);
 
         vm.prank(alice);
-        rewards.setBatchSubmitterRewardPercentage(10);
+        rewards.setBatchSubmitterRewardBasisPoints(10);
 
-        assertEq(rewards.batchSubmitterRewardPercentage(), 10);
+        assertEq(rewards.batchSubmitterRewardBasisPoints(), 10);
     }
 
-    function test_setBatchSubmitterRewardPercentageUnauthorized() public {
+    function test_setBatchSubmitterRewardUnauthorized() public {
         address bob = address(3);
         vm.expectRevert_AccessControlUnauthorizedAccount(bob, rewards.DEFAULT_ADMIN_ROLE());
         vm.prank(bob);
-        rewards.setBatchSubmitterRewardPercentage(10);
+        rewards.setBatchSubmitterRewardBasisPoints(10);
     }
 
-    function test_setBatchSubmitterRewardPercentageOutOfRange() public {
+    function test_setBatchSubmitterRewardOutOfRange() public {
         address alice = address(2);
         rewards.grantRole(rewards.DEFAULT_ADMIN_ROLE(), alice);
 
+        uint16 maxRewardFactor = rewards.BASIS_POINTS_DIVISOR();
+
         vm.expectRevert(Rewards.OutOfRangeValue.selector);
         vm.prank(alice);
-        rewards.setBatchSubmitterRewardPercentage(101);
+        rewards.setBatchSubmitterRewardBasisPoints(maxRewardFactor + 1);
     }
 
-    function test_deployRewardsWithInvalidSubmitterRewardPercentage() public {
+    function test_deployRewardsWithInvalidSubmitterReward() public {
+        uint16 basisPointsDivisor = rewards.BASIS_POINTS_DIVISOR();
         vm.expectRevert(Rewards.OutOfRangeValue.selector);
-        new Rewards(nodlToken, 1000, RENEWAL_PERIOD, vm.addr(1), 101, address(this));
+        new Rewards(nodlToken, 1000, RENEWAL_PERIOD, vm.addr(1), basisPointsDivisor + 1, address(this));
     }
 
-    function test_changingSubmitterRewardPercentageIsEffective() public {
+    function test_changingSubmitterRewardIsEffective() public {
         address alice = address(2);
         rewards.grantRole(rewards.DEFAULT_ADMIN_ROLE(), alice);
 
-        assertEq(rewards.batchSubmitterRewardPercentage(), 2);
+        assertEq(rewards.batchSubmitterRewardBasisPoints(), 200);
+
+        uint16 maxRewardFactor = rewards.BASIS_POINTS_DIVISOR();
 
         vm.prank(alice);
-        rewards.setBatchSubmitterRewardPercentage(100);
+        rewards.setBatchSubmitterRewardBasisPoints(maxRewardFactor);
 
-        assertEq(rewards.batchSubmitterRewardPercentage(), 100);
+        assertEq(rewards.batchSubmitterRewardBasisPoints(), maxRewardFactor);
 
         address[] memory recipients = new address[](2);
         uint256[] memory amounts = new uint256[](2);
@@ -471,23 +479,24 @@ contract RewardsTest is Test {
         vm.prank(alice);
         rewards.setQuota(type(uint256).max);
 
-        // Check initial submitter reward percentage
-        assertEq(rewards.batchSubmitterRewardPercentage(), 2);
+        assertEq(rewards.batchSubmitterRewardBasisPoints(), 200);
 
         address[] memory recipients = new address[](1);
         uint256[] memory amounts = new uint256[](1);
 
         recipients[0] = address(11);
         // This amount, even though high, should not cause an overflow
-        amounts[0] = type(uint256).max / (2 * rewards.batchSubmitterRewardPercentage());
+        amounts[0] = type(uint256).max / (2 * rewards.batchSubmitterRewardBasisPoints());
 
         Rewards.BatchReward memory rewardsBatch = Rewards.BatchReward(recipients, amounts, 0);
         bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
         rewards.mintBatchReward(rewardsBatch, signature);
 
+        uint16 maxRewardFactor = rewards.BASIS_POINTS_DIVISOR();
+
         vm.prank(alice);
         // Same batch sum should now cause an overflow in the submitter reward calculation
-        rewards.setBatchSubmitterRewardPercentage(100);
+        rewards.setBatchSubmitterRewardBasisPoints(maxRewardFactor);
 
         Rewards.BatchReward memory rewardsBatch2 = Rewards.BatchReward(recipients, amounts, 1);
         bytes memory signature2 = createBatchSignature(rewardsBatch2, oraclePrivateKey);
