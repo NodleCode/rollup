@@ -82,8 +82,6 @@ contract Grants {
     ) external {
         validateVestingSchedule(to, period, periodCount, perPeriodAmount);
 
-        token.safeTransferFrom(msg.sender, address(this), perPeriodAmount * periodCount);
-
         VestingSchedule memory schedule = VestingSchedule(cancelAuthority, start, period, periodCount, perPeriodAmount);
 
         uint256 page = currentPage[to];
@@ -92,6 +90,8 @@ contract Grants {
             currentPage[to] = page;
         }
         vestingSchedules[to][page].push(schedule);
+
+        token.safeTransferFrom(msg.sender, address(this), perPeriodAmount * periodCount);
 
         emit VestingScheduleAdded(to, schedule);
     }
