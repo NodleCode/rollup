@@ -7,6 +7,9 @@ import {NODL} from "../NODL.sol";
 import {BridgeBase} from "./BridgeBase.sol";
 
 contract GrantsMigration is BridgeBase {
+    /// @notice Maximum number of vesting schedules allowed per proposal. The 100 limit is coming from the Eden parachain.
+    uint8 public constant MAX_SCHEDULES = 100;
+
     /// @dev Represents the vesting details of a proposal.
     struct Proposal {
         address target; // Address of the grant recipient.
@@ -28,6 +31,21 @@ contract GrantsMigration is BridgeBase {
 
     // Events
     event Granted(bytes32 indexed proposal, address indexed user, uint256 amount, uint256 numOfSchedules);
+
+    /**
+     * @notice Error to indicate that the schedule array is empty.
+     */
+    error EmptySchedules();
+
+    /**
+     * @notice Error to indicate that the schedule array is too large.
+     */
+    error TooManySchedules();
+
+    /**
+     * @notice Error to indicate that the schedules do not add up to the total amount.
+     */
+    error AmountMismatch();
 
     /**
      * @param bridgeOracles Array of addresses authorized to initiate and vote on proposals.
@@ -125,6 +143,22 @@ contract GrantsMigration is BridgeBase {
         uint256 amount,
         Grants.VestingSchedule[] memory schedules
     ) internal {
+        if (schedules.length == 0) {
+            revert EmptySchedules();
+        }
+        if (schedules.length > MAX_SCHEDULES) {
+            revert TooManySchedules();
+        }
+        uint256 totalAmount = 0;
+        for (uint256 i = 0; i < schedules.length; i++) {
+            grants.validateVestingSchedule(
+                user, schedules[i].period, schedules[i].periodCount, schedules[i].perPeriodAmount
+            );
+            totalAmount += schedules[i].perPeriodAmount * schedules[i].periodCount;
+        }
+        if (totalAmount != amount) {
+            revert AmountMismatch();
+        }
         proposals[proposal] = Proposal({target: user, amount: amount, schedules: schedules});
         super._createVote(proposal, oracle, user, amount);
     }

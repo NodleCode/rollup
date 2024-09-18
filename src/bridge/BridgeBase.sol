@@ -56,15 +56,20 @@ abstract contract BridgeBase {
     /// @notice Error to indicate that the number of oracles exceeds the allowed maximum.
     error MaxOraclesExceeded();
 
+    /// @notice Error to indicate that the number of oracles is less than the minimum required.
+    error NotEnoughOracles();
+
+    /// @notice Error to indicate an invalid value for the minimum votes.
+    error InvalidZeroForMinVotes();
+
     /// @notice Initializes the contract with specified parameters.
     /// @param bridgeOracles Array of oracle accounts.
     /// @param token Contract address of the NODL token.
     /// @param minVotes Minimum required votes to consider a proposal valid.
     /// @param minDelay Blocks to wait before a passed proposal can be executed.
     constructor(address[] memory bridgeOracles, NODL token, uint8 minVotes, uint256 minDelay) {
-        require(bridgeOracles.length >= minVotes, "Not enough oracles");
-        require(minVotes > 0, "Votes must be more than zero");
-
+        _mustNotBeZeroMinVotes(minVotes);
+        _mustHaveEnoughOracles(bridgeOracles.length, minVotes);
         _mustNotExceedMaxOracles(bridgeOracles.length);
 
         for (uint256 i = 0; i < bridgeOracles.length; i++) {
@@ -171,6 +176,12 @@ abstract contract BridgeBase {
         }
     }
 
+    function _mustHaveEnoughOracles(uint256 length, uint256 minOracles) internal pure {
+        if (length < minOracles) {
+            revert NotEnoughOracles();
+        }
+    }
+
     function _mustBeAnOracle(address maybeOracle) internal view {
         if (!isOracle[maybeOracle]) {
             revert NotAnOracle(maybeOracle);
@@ -180,6 +191,12 @@ abstract contract BridgeBase {
     function _mustNotExceedMaxOracles(uint256 length) internal pure {
         if (length > MAX_ORACLES) {
             revert MaxOraclesExceeded();
+        }
+    }
+
+    function _mustNotBeZeroMinVotes(uint8 value) internal pure {
+        if (value == 0) {
+            revert InvalidZeroForMinVotes();
         }
     }
 

@@ -80,11 +80,7 @@ contract Grants {
         uint256 perPeriodAmount,
         address cancelAuthority
     ) external {
-        _mustBeNonZeroAddress(to);
-        _mustNotBeSelf(to);
-        _mustBeNonZero(period);
-        _mustBeNonZero(periodCount);
-        _mustBeEqualOrExceedMinAmount(perPeriodAmount);
+        validateVestingSchedule(to, period, periodCount, perPeriodAmount);
 
         token.safeTransferFrom(msg.sender, address(this), perPeriodAmount * periodCount);
 
@@ -98,6 +94,24 @@ contract Grants {
         vestingSchedules[to][page].push(schedule);
 
         emit VestingScheduleAdded(to, schedule);
+    }
+
+    /**
+     * @notice Checks if the vesting schedule parameters are valid.
+     * @param to Recipient of the tokens under the vesting schedule.
+     * @param period Duration of each period in seconds.
+     * @param periodCount Number of periods in the vesting schedule.
+     * @param perPeriodAmount Amount of tokens to be released each period.
+     */
+    function validateVestingSchedule(address to, uint256 period, uint32 periodCount, uint256 perPeriodAmount)
+        public
+        view
+    {
+        _mustBeNonZeroAddress(to);
+        _mustNotBeSelf(to);
+        _mustBeNonZero(period);
+        _mustBeNonZero(periodCount);
+        _mustBeEqualOrExceedMinAmount(perPeriodAmount);
     }
 
     /**
