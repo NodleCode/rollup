@@ -88,11 +88,7 @@ abstract contract BridgeBase {
     /// @param user The user address associated with the vote.
     /// @param amount The amount of tokens being bridged.
     function _createVote(bytes32 proposal, address oracle, address user, uint256 amount) internal virtual {
-        _mustNotHaveVotedYet(proposal, oracle);
-
-        voted[proposal][oracle] = true;
-        _incTotalVotes(proposal);
-        _updateLastVote(proposal, block.number);
+        _processVote(proposal, oracle);
         emit VoteStarted(proposal, oracle, user, amount);
     }
 
@@ -100,12 +96,17 @@ abstract contract BridgeBase {
     /// @param proposal The hash identifier of the proposal.
     /// @param oracle The oracle casting the vote.
     function _recordVote(bytes32 proposal, address oracle) internal virtual {
+        _processVote(proposal, oracle);
+        emit Voted(proposal, oracle);
+    }
+
+    /// @notice Processes a vote for a proposal.
+    function _processVote(bytes32 proposal, address oracle) internal virtual {
         _mustNotHaveVotedYet(proposal, oracle);
 
         voted[proposal][oracle] = true;
         _incTotalVotes(proposal);
         _updateLastVote(proposal, block.number);
-        emit Voted(proposal, oracle);
     }
 
     /// @notice Executes a proposal after all conditions are met.
