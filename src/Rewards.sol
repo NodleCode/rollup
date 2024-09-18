@@ -72,7 +72,7 @@ contract Rewards is AccessControl, EIP712 {
     /**
      * @dev Reward quota renewal period.
      */
-    uint256 public immutable period;
+    uint256 public period;
 
     /**
      * @dev Maximum amount of rewards that can be distributed in a period.
@@ -170,15 +170,7 @@ contract Rewards is AccessControl, EIP712 {
         uint8 rewardPercentage,
         address admin
     ) EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION) {
-        // This is to avoid the ongoinb overhead of safe math operations
-        if (initialPeriod == 0) {
-            revert ZeroPeriod();
-        }
-        // This is to prevent overflows while avoiding the ongoing overhead of safe math operations
-        if (initialPeriod > MAX_PERIOD) {
-            revert TooLongPeriod();
-        }
-
+        _mustBeWithinPeriodRange(initialPeriod);
         _mustBeLessThan100(rewardPercentage);
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
@@ -199,6 +191,16 @@ contract Rewards is AccessControl, EIP712 {
         _checkRole(DEFAULT_ADMIN_ROLE);
         quota = newQuota;
         emit QuotaSet(newQuota);
+    }
+
+    /**
+     * @dev Sets the reward period. Only accounts with the DEFAULT_ADMIN_ROLE can call this function.
+     * @param newPeriod The new reward period.
+     */
+    function setPeriod(uint256 newPeriod) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        _mustBeWithinPeriodRange(newPeriod);
+        period = newPeriod;
     }
 
     /**
@@ -361,6 +363,21 @@ contract Rewards is AccessControl, EIP712 {
             sum += batch.amounts[i];
         }
         return sum;
+    }
+
+    /**
+     * @dev Internal function to ensure the period is within the acceptable range.
+     * @param newPeriod The new period to be checked.
+     */
+    function _mustBeWithinPeriodRange(uint256 newPeriod) internal {
+        // This is to avoid the ongoing overhead of safe math operations
+        if (newPeriod == 0) {
+            revert ZeroPeriod();
+        }
+        // This is to prevent overflows while avoiding the ongoing overhead of safe math operations
+        if (newPeriod > MAX_PERIOD) {
+            revert TooLongPeriod();
+        }
     }
 
     /**

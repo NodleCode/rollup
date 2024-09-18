@@ -46,6 +46,28 @@ contract RewardsTest is Test {
         assertEq(rewards.quota(), 2000);
     }
 
+    function test_setPeriod() public {
+        assertEq(rewards.period(), RENEWAL_PERIOD);
+        rewards.setPeriod(2 * RENEWAL_PERIOD);
+        assertEq(rewards.period(), 2 * RENEWAL_PERIOD);
+        rewards.setPeriod(RENEWAL_PERIOD);
+    }
+
+    function test_setPeriodOutOfRange() public {
+        vm.expectRevert(Rewards.ZeroPeriod.selector);
+        rewards.setPeriod(0);
+        uint256 tooLongPeriod = rewards.MAX_PERIOD() + 1;
+        vm.expectRevert(Rewards.TooLongPeriod.selector);
+        rewards.setPeriod(tooLongPeriod);
+    }
+
+    function test_setPeriodUnauthorized() public {
+        address bob = address(3);
+        vm.expectRevert_AccessControlUnauthorizedAccount(bob, rewards.DEFAULT_ADMIN_ROLE());
+        vm.prank(bob);
+        rewards.setPeriod(2 * RENEWAL_PERIOD);
+    }
+
     function test_setQuotaUnauthorized() public {
         address bob = address(3);
         vm.expectRevert_AccessControlUnauthorizedAccount(bob, rewards.DEFAULT_ADMIN_ROLE());
