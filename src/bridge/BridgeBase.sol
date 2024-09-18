@@ -24,8 +24,8 @@ abstract contract BridgeBase {
     /// @notice Maximum number of oracles allowed.
     uint8 public constant MAX_ORACLES = 10;
 
-    /// @notice Mapping of oracles to proposals to track which oracle has voted on which proposal.
-    mapping(address => mapping(bytes32 => bool)) public voted;
+    /// @notice Mapping of proposals to oracles votes on them.
+    mapping(bytes32 => mapping(address => bool)) public voted;
 
     /// @notice Emitted when the first vote a proposal has been cast.
     event VoteStarted(bytes32 indexed proposal, address oracle, address indexed user, uint256 amount);
@@ -90,7 +90,7 @@ abstract contract BridgeBase {
     function _createVote(bytes32 proposal, address oracle, address user, uint256 amount) internal virtual {
         _mustNotHaveVotedYet(proposal, oracle);
 
-        voted[oracle][proposal] = true;
+        voted[proposal][oracle] = true;
         _incTotalVotes(proposal);
         _updateLastVote(proposal, block.number);
         emit VoteStarted(proposal, oracle, user, amount);
@@ -102,7 +102,7 @@ abstract contract BridgeBase {
     function _recordVote(bytes32 proposal, address oracle) internal virtual {
         _mustNotHaveVotedYet(proposal, oracle);
 
-        voted[oracle][proposal] = true;
+        voted[proposal][oracle] = true;
         _incTotalVotes(proposal);
         _updateLastVote(proposal, block.number);
         emit Voted(proposal, oracle);
@@ -201,7 +201,7 @@ abstract contract BridgeBase {
     }
 
     function _mustNotHaveVotedYet(bytes32 proposal, address oracle) internal view {
-        if (voted[oracle][proposal]) {
+        if (voted[proposal][oracle]) {
             revert AlreadyVoted(proposal, oracle);
         }
     }
