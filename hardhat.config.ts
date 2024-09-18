@@ -15,6 +15,7 @@ const config: HardhatUserConfig = {
             ethNetwork: "sepolia",
             zksync: true,
             verifyURL: "https://explorer.sepolia.era.zksync.dev/contract_verification",
+            deployPaths: ["script"],
         },
         zkSyncMainnet: {
             url: "https://mainnet.era.zksync.io",
@@ -37,7 +38,7 @@ const config: HardhatUserConfig = {
         },
     },
     zksolc: {
-        version: "1.4.1",
+        version: "1.5.3",
         settings: {
             // find all available options in the official documentation
             // https://era.zksync.io/docs/tools/hardhat/hardhat-zksync-solc.html#configuration
