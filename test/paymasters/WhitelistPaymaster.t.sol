@@ -9,7 +9,7 @@ import {BasePaymaster} from "../../src/paymasters/BasePaymaster.sol";
 import {WhitelistPaymaster} from "../../src/paymasters/WhitelistPaymaster.sol";
 
 contract MockWhitelistPaymaster is WhitelistPaymaster {
-    constructor(address withdrawer) WhitelistPaymaster(withdrawer) {}
+    constructor(address admin, address withdrawer) WhitelistPaymaster(admin, withdrawer) {}
 
     function mock_validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) public view {
         _validateAndPayGeneralFlow(from, to, requiredETH);
@@ -39,8 +39,7 @@ contract WhitelistPaymasterTest is Test {
     address[] internal whitelistTargets;
 
     function setUp() public {
-        vm.prank(alice);
-        paymaster = new MockWhitelistPaymaster(bob);
+        paymaster = new MockWhitelistPaymaster(alice, bob);
 
         whitelistTargets = new address[](1);
         whitelistTargets[0] = charlie;

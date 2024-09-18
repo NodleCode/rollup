@@ -160,14 +160,20 @@ contract Rewards is AccessControl, EIP712 {
      * @param initialQuota Initial reward quota.
      * @param initialPeriod Initial reward period.
      * @param oracleAddress Address of the authorized oracle.
+     * @param admin Address of the admin who can change parameters like quota, period and submitter's reward percentage.
      */
-    constructor(NODL token, uint256 initialQuota, uint256 initialPeriod, address oracleAddress, uint8 rewardPercentage)
-        EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION)
-    {
+    constructor(
+        NODL token,
+        uint256 initialQuota,
+        uint256 initialPeriod,
+        address oracleAddress,
+        uint8 rewardPercentage,
+        address admin
+    ) EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION) {
         _mustBeWithinPeriodRange(initialPeriod);
         _mustBeLessThan100(rewardPercentage);
 
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
 
         nodl = token;
         quota = initialQuota;

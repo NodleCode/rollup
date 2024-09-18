@@ -10,16 +10,18 @@ import {EnterpriseContentSign} from "../src/contentsign/EnterpriseContentSign.so
 contract DeployContentSignEnterprise is Script {
     string internal name;
     string internal symbol;
+    address internal nodlTokenAdmin;
 
     function setUp() public {
         name = vm.envString("N_NAME");
         symbol = vm.envString("N_SYMBOL");
+        nodlTokenAdmin = vm.envAddress("N_NODL_TOKEN_ADMIN");
     }
 
     function run() public {
         vm.startBroadcast();
 
-        EnterpriseContentSign nft = new EnterpriseContentSign(name, symbol);
+        EnterpriseContentSign nft = new EnterpriseContentSign(name, symbol, nodlTokenAdmin);
 
         vm.stopBroadcast();
 
