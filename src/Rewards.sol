@@ -42,6 +42,11 @@ contract Rewards is AccessControl, EIP712 {
     uint256 public constant MAX_PERIOD = 30 days;
 
     /**
+     * @dev The maximum value for basis points values.
+     */
+    uint16 public constant BASIS_POINTS_DIVISOR = 10000;
+
+    /**
      * @dev Struct on which basis an individual reward must be issued.
      */
     struct Reward {
@@ -99,11 +104,9 @@ contract Rewards is AccessControl, EIP712 {
      */
     bytes32 public latestBatchRewardDigest;
     /**
-     * @dev Determines the amount of rewards to be minted for the submitter of batch as a percentage of total rewards in that batch.
-     * This value indicates the cost overhead of minting rewards that the network is happy to take. Though it is set to 2% by default,
-     * the governance can change it to ensure the network is sustainable.
+     * @notice The fraction of the batch reward that the submitter will receive.
      */
-    uint8 public batchSubmitterRewardPercentage;
+    uint16 public batchSubmitterRewardBasisPoints;
 
     /**
      * @dev Error when the reward quota is exceeded.
@@ -135,7 +138,7 @@ contract Rewards is AccessControl, EIP712 {
      */
     error InvalidBatchStructure();
     /**
-     * @dev Error thrown when the value is out of range. For example for Percentage values should be less than 100.
+     * @dev Error thrown when the value is out of range. For example for basis point values they should be less than BASIS_POINTS_DIVISOR.
      */
     error OutOfRangeValue();
 
@@ -160,18 +163,19 @@ contract Rewards is AccessControl, EIP712 {
      * @param initialQuota Initial reward quota.
      * @param initialPeriod Initial reward period.
      * @param oracleAddress Address of the authorized oracle.
-     * @param admin Address of the admin who can change parameters like quota, period and submitter's reward percentage.
+     * @param rewardBasisPoints The fraction of the reward to be given to the batch submitter.
+     * @param admin Address of the admin who can change parameters like quota, period and submitter's reward fraction.
      */
     constructor(
         NODL token,
         uint256 initialQuota,
         uint256 initialPeriod,
         address oracleAddress,
-        uint8 rewardPercentage,
+        uint16 rewardBasisPoints,
         address admin
     ) EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION) {
         _mustBeWithinPeriodRange(initialPeriod);
-        _mustBeLessThan100(rewardPercentage);
+        _mustBeLessThanBasisPointsDivisor(rewardBasisPoints);
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
 
@@ -180,7 +184,7 @@ contract Rewards is AccessControl, EIP712 {
         period = initialPeriod;
         quotaRenewalTimestamp = block.timestamp + period;
         authorizedOracle = oracleAddress;
-        batchSubmitterRewardPercentage = rewardPercentage;
+        batchSubmitterRewardBasisPoints = rewardBasisPoints;
     }
 
     /**
@@ -238,7 +242,7 @@ contract Rewards is AccessControl, EIP712 {
         _checkedUpdateQuota();
 
         uint256 batchSum = _batchSum(batch);
-        uint256 submitterRewardAmount = (batchSum * batchSubmitterRewardPercentage) / 100;
+        uint256 submitterRewardAmount = (batchSum * batchSubmitterRewardBasisPoints) / BASIS_POINTS_DIVISOR;
 
         _checkedUpdateClaimed(batchSum + submitterRewardAmount);
 
@@ -256,16 +260,13 @@ contract Rewards is AccessControl, EIP712 {
     }
 
     /**
-     * @dev Sets the reward percentage for the batch submitter.
-     * @param newPercentage The new reward percentage to be set.
-     * Requirements:
-     * - Caller must have the DEFAULT_ADMIN_ROLE.
-     * - The new reward percentage must be less than 100.
+     * @dev Sets the fraction of the batch reward that the submitter will receive.
+     * @param newBasisPoints The new basis points value.
      */
-    function setBatchSubmitterRewardPercentage(uint8 newPercentage) external {
+    function setBatchSubmitterRewardBasisPoints(uint16 newBasisPoints) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        _mustBeLessThan100(newPercentage);
-        batchSubmitterRewardPercentage = newPercentage;
+        _mustBeLessThanBasisPointsDivisor(newBasisPoints);
+        batchSubmitterRewardBasisPoints = newBasisPoints;
     }
 
     /**
@@ -299,12 +300,11 @@ contract Rewards is AccessControl, EIP712 {
     }
 
     /**
-     * @dev Checks if the given percentage value is less than or equal to 100.
-     * @param percent The percentage value to check.
-     * @dev Throws an exception if the value is greater than 100.
+     * @dev Internal check to ensure the basis points value is less than the divisor.
+     * @param basisPoints The basis points value to be checked.
      */
-    function _mustBeLessThan100(uint8 percent) internal pure {
-        if (percent > 100) {
+    function _mustBeLessThanBasisPointsDivisor(uint16 basisPoints) internal pure {
+        if (basisPoints > BASIS_POINTS_DIVISOR) {
             revert OutOfRangeValue();
         }
     }
