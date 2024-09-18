@@ -40,10 +40,10 @@ export const fetchMetadata = async (
     return null;
   }
 
-  const strppedCid = cid.replace("ipfs://", "");
+  const strippedCid = cid.replace("ipfs://", "");
 
   const gateway = gateways[0];
-  const url = `https://${gateway}/ipfs/${strppedCid}`;
+  const url = `https://${gateway}/ipfs/${strippedCid}`;
 
   try {
     const res = await fetch(url);
@@ -55,7 +55,7 @@ export const fetchMetadata = async (
     if (err instanceof SyntaxError && toMatch.includes(err.message)) {
       return null;
     }
-    
+
     return fetchMetadata(cid, gateways.slice(1));
   }
 };

@@ -23,7 +23,7 @@ const config: HardhatUserConfig = {
             zksync: true,
             verifyURL: "https://zksync2-mainnet-explorer.zksync.io/contract_verification",
         },
-        dockerizedNode: {
+        localDockerNode: {
             url: "http://localhost:3050",
             ethNetwork: "http://localhost:8545",
             zksync: true,

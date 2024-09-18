@@ -37,7 +37,7 @@ contract MigrationNFT is ERC721 {
     error NoLevelUp();
     error ProposalDoesNotExist();
     error NotExecuted();
-    error SoulboundIsNotTransferrable();
+    error SoulBoundIsNotTransferrable();
 
     /**
      * @notice Construct a new MigrationNFT contract
@@ -97,7 +97,7 @@ contract MigrationNFT is ERC721 {
 
         _mustBeAnExistingProposal(target);
         _mustBeExecuted(executed);
-        bool alreadyHolder = _mustAlreadyBeHolderOrEnougHoldersRemaining(target);
+        bool alreadyHolder = _mustAlreadyBeHolderOrEnoughHoldersRemaining(target);
 
         (uint256[] memory levelsToMint, uint256 nbLevelsToMint) = _computeLevelUps(target, amount);
 
@@ -157,7 +157,7 @@ contract MigrationNFT is ERC721 {
         }
     }
 
-    function _mustAlreadyBeHolderOrEnougHoldersRemaining(address target) internal view returns (bool alreadyHolder) {
+    function _mustAlreadyBeHolderOrEnoughHoldersRemaining(address target) internal view returns (bool alreadyHolder) {
         alreadyHolder = balanceOf(target) > 0;
         if (!alreadyHolder && individualHolders == maxHolders) {
             revert TooManyHolders();
@@ -167,8 +167,8 @@ contract MigrationNFT is ERC721 {
     function _update(address to, uint256 tokenId, address auth) internal override(ERC721) returns (address) {
         address from = _ownerOf(tokenId);
         if (from != address(0) && to != address(0)) {
-            // only burn or mint is allowed for a soulbound token
-            revert SoulboundIsNotTransferrable();
+            // only burn or mint is allowed for a SoulBound token
+            revert SoulBoundIsNotTransferrable();
         }
 
         return super._update(to, tokenId, auth);

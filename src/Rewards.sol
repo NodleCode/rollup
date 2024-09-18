@@ -26,7 +26,7 @@ contract Rewards is AccessControl, EIP712 {
     /**
      * @dev The hash of the reward type structure.
      * It is calculated using the keccak256 hash function.
-     * The structure consists of the recipient's address, the amount of the reward, and the sequence number for that receipent.
+     * The structure consists of the recipient's address, the amount of the reward, and the sequence number for that recipient.
      */
     bytes32 public constant REWARD_TYPE_HASH = keccak256("Reward(address recipient,uint256 amount,uint256 sequence)");
     /**
@@ -117,7 +117,7 @@ contract Rewards is AccessControl, EIP712 {
      */
     error ZeroPeriod();
     /**
-     * @dev Error indicating that scheduling the reward quota renewal has failed most likley due to the period being too long.
+     * @dev Error indicating that scheduling the reward quota renewal has failed most likely due to the period being too long.
      */
     error TooLongPeriod();
     /**
@@ -323,12 +323,12 @@ contract Rewards is AccessControl, EIP712 {
     }
 
     /**
-     * @dev Internal check to ensure the `sequence` value is expected for `receipent`.
-     * @param receipent The address of the receipent to check.
+     * @dev Internal check to ensure the `sequence` value is expected for `recipient`.
+     * @param recipient The address of the recipient to check.
      * @param sequence The sequence value.
      */
-    function _mustBeExpectedSequence(address receipent, uint256 sequence) internal view {
-        if (sequences[receipent] != sequence) {
+    function _mustBeExpectedSequence(address recipient, uint256 sequence) internal view {
+        if (sequences[recipient] != sequence) {
             revert InvalidRecipientSequence();
         }
     }
@@ -409,10 +409,10 @@ contract Rewards is AccessControl, EIP712 {
      * @return The digest of the BatchReward struct.
      */
     function digestBatchReward(BatchReward memory batch) public view returns (bytes32) {
-        bytes32 receipentsHash = keccak256(abi.encodePacked(batch.recipients));
+        bytes32 recipientsHash = keccak256(abi.encodePacked(batch.recipients));
         bytes32 amountsHash = keccak256(abi.encodePacked(batch.amounts));
         return
-            _hashTypedDataV4(keccak256(abi.encode(BATCH_REWARD_TYPE_HASH, receipentsHash, amountsHash, batch.sequence)));
+            _hashTypedDataV4(keccak256(abi.encode(BATCH_REWARD_TYPE_HASH, recipientsHash, amountsHash, batch.sequence)));
     }
 
     /**

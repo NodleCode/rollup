@@ -418,7 +418,7 @@ contract GrantsTest is Test {
         assertEq(grants.getGrantsCount(bob), 2);
     }
 
-    function test_cancelAuthorityCouldbeADifferentAccount() public {
+    function test_cancelAuthorityCouldBeDifferentFromGranter() public {
         vm.startPrank(alice);
         token.approve(address(grants), 1000);
         grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 4, 100, charlie);
@@ -509,7 +509,7 @@ contract GrantsTest is Test {
         emit log("Test Renounce Grants Limited Page Range Passed!");
     }
 
-    function test_nonCancellabelSchedule() public {
+    function test_nonCancellableSchedule() public {
         vm.startPrank(alice);
         token.approve(address(grants), 400);
         grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 4, 100, address(0));
