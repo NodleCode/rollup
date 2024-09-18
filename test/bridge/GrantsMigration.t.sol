@@ -187,7 +187,7 @@ contract GrantsMigrationTest is Test {
     function test_executionFailsIfInsufficientVotes() public {
         bytes32 paraTxHash = keccak256(abi.encodePacked("tx6"));
         vm.prank(oracles[0]);
-        migration.bridge(paraTxHash, user, 100, schedules);
+        migration.bridge(paraTxHash, user, amount, schedules);
 
         vm.roll(block.number + delay + 1);
 
@@ -198,10 +198,10 @@ contract GrantsMigrationTest is Test {
     function test_executionFailsIfTooEarly() public {
         bytes32 paraTxHash = keccak256(abi.encodePacked("tx7"));
         vm.prank(oracles[0]);
-        migration.bridge(paraTxHash, user, 100, schedules);
+        migration.bridge(paraTxHash, user, amount, schedules);
 
         vm.prank(oracles[1]);
-        migration.bridge(paraTxHash, user, 100, schedules);
+        migration.bridge(paraTxHash, user, amount, schedules);
 
         vm.expectRevert(abi.encodeWithSelector(BridgeBase.NotYetWithdrawable.selector, paraTxHash));
         migration.grant(paraTxHash);
@@ -215,5 +215,47 @@ contract GrantsMigrationTest is Test {
         }
         vm.expectRevert(abi.encodeWithSelector(BridgeBase.MaxOraclesExceeded.selector));
         new GrantsMigration(manyOracles, nodl, grants, uint8(manyOracles.length / 2 + 1), delay);
+    }
+
+    function test_createProposalFailsWithEmptySchedules() public {
+        bytes32 paraTxHash = keccak256(abi.encodePacked("tx8"));
+        Grants.VestingSchedule[] memory emptySchedules;
+        vm.prank(oracles[0]);
+        vm.expectRevert(GrantsMigration.EmptySchedules.selector);
+        migration.bridge(paraTxHash, user, amount, emptySchedules);
+    }
+
+    function test_createProposalFailIfTooManySchedules() public {
+        bytes32 paraTxHash = keccak256(abi.encodePacked("tx9"));
+        Grants.VestingSchedule[] memory manySchedules = new Grants.VestingSchedule[](migration.MAX_SCHEDULES() + 1);
+        for (uint256 i = 0; i < manySchedules.length; i++) {
+            manySchedules[i] = schedules[0];
+        }
+        vm.prank(oracles[0]);
+        vm.expectRevert(GrantsMigration.TooManySchedules.selector);
+        migration.bridge(paraTxHash, user, amount, manySchedules);
+    }
+
+    function test_createProposalFailsIfAmountMismatch() public {
+        bytes32 paraTxHash = keccak256(abi.encodePacked("tx10"));
+        vm.prank(oracles[0]);
+        vm.expectRevert(GrantsMigration.AmountMismatch.selector);
+        migration.bridge(paraTxHash, user, amount + 1, schedules);
+    }
+
+    function test_createProposalFailsIfVestingScheduleInvalid() public {
+        bytes32 paraTxHash = keccak256(abi.encodePacked("tx11"));
+        Grants.VestingSchedule[] memory invalidSchedules = new Grants.VestingSchedule[](1);
+        invalidSchedules[0] = Grants.VestingSchedule({
+            start: block.timestamp + 1 days,
+            period: 1 days,
+            periodCount: 5,
+            perPeriodAmount: 0,
+            cancelAuthority: user
+        });
+        schedules[0].perPeriodAmount = 0;
+        vm.prank(oracles[0]);
+        vm.expectRevert(abi.encodeWithSelector(Grants.LowVestingAmount.selector));
+        migration.bridge(paraTxHash, user, amount, invalidSchedules);
     }
 }

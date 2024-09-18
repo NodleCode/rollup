@@ -14,6 +14,10 @@ contract MigrationNFT is ERC721 {
     uint256[] public levels;
     string[] public levelToTokenURI;
 
+    error InvalidZeroHolders();
+
+    error InvalidZeroLevels();
+
     /**
      * @notice Mapping of token IDs to the levels they represent denominated from 1 (0 means token does not exists)
      */
@@ -49,20 +53,26 @@ contract MigrationNFT is ERC721 {
         uint256[] memory _levels,
         string[] memory _levelToTokenURI
     ) ERC721("OG ZK NODL", "OG_ZK_NODL") {
-        migration = _migration;
-        maxHolders = _maxHolders;
-        levels = _levels;
-        levelToTokenURI = _levelToTokenURI;
-
+        if (_maxHolders == 0) {
+            revert InvalidZeroHolders();
+        }
+        if (_levels.length == 0) {
+            revert InvalidZeroLevels();
+        }
         if (_levels.length != _levelToTokenURI.length) {
             revert UnequalLengths();
         }
 
-        for (uint256 i = 1; i < levels.length; i++) {
-            if (levels[i] <= levels[i - 1]) {
+        for (uint256 i = 1; i < _levels.length; i++) {
+            if (_levels[i] <= _levels[i - 1]) {
                 revert UnsortedLevelsList();
             }
         }
+
+        migration = _migration;
+        maxHolders = _maxHolders;
+        levels = _levels;
+        levelToTokenURI = _levelToTokenURI;
     }
 
     /**

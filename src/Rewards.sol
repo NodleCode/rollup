@@ -228,7 +228,7 @@ contract Rewards is AccessControl, EIP712 {
         _mustBeExpectedSequence(reward.recipient, reward.sequence);
         _mustBeFromAuthorizedOracle(digestReward(reward), signature);
 
-        _checkedUpdateQuota();
+        _checkedResetClaimed();
         _checkedUpdateClaimed(reward.amount);
 
         // Safe to increment the sequence after checking this is the expected number (no overflow for the age of universe even with 1000 reward claims per second)
@@ -251,7 +251,7 @@ contract Rewards is AccessControl, EIP712 {
 
         _mustBeFromAuthorizedOracle(digest, signature);
 
-        _checkedUpdateQuota();
+        _checkedResetClaimed();
 
         uint256 batchSum = _batchSum(batch);
         uint256 submitterRewardAmount = (batchSum * batchSubmitterRewardBasisPoints) / BASIS_POINTS_DIVISOR;
@@ -284,11 +284,10 @@ contract Rewards is AccessControl, EIP712 {
     }
 
     /**
-     * @dev Internal function to update the rewards quota if the current block timestamp is greater than or equal to the quota renewal timestamp.
      * @notice This function resets the rewards claimed to 0 and updates the quota renewal timestamp based on the reward period.
      * @notice The following operations are safe based on the constructor's requirements for longer than the age of the universe.
      */
-    function _checkedUpdateQuota() internal {
+    function _checkedResetClaimed() internal {
         if (block.timestamp >= quotaRenewalTimestamp) {
             claimed = 0;
 

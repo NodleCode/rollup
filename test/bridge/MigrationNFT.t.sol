@@ -61,6 +61,11 @@ contract MigrationNFTTest is Test {
         }
     }
 
+    function test_zeroHoldersWillRevert() public {
+        vm.expectRevert(MigrationNFT.InvalidZeroHolders.selector);
+        new MigrationNFT(migration, 0, levels, levelToTokenURI);
+    }
+
     function test_enforceSorting() public {
         uint256[] memory unsortedLevels = new uint256[](5);
         unsortedLevels[0] = 1000;
