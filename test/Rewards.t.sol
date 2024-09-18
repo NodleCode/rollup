@@ -23,8 +23,8 @@ contract RewardsTest is Test {
         oraclePrivateKey = 0xBEEF;
         address oracle = vm.addr(oraclePrivateKey);
 
-        nodlToken = new NODL();
-        rewards = new Rewards(nodlToken, 1000, RENEWAL_PERIOD, oracle, 2);
+        nodlToken = new NODL(address(this));
+        rewards = new Rewards(nodlToken, 1000, RENEWAL_PERIOD, oracle, 2, address(this));
         // Grant MINTER_ROLE to the Rewards contract
         nodlToken.grantRole(nodlToken.MINTER_ROLE(), address(rewards));
     }
@@ -396,7 +396,7 @@ contract RewardsTest is Test {
 
     function test_deployRewardsWithInvalidSubmitterRewardPercentage() public {
         vm.expectRevert(Rewards.OutOfRangeValue.selector);
-        new Rewards(nodlToken, 1000, RENEWAL_PERIOD, vm.addr(1), 101);
+        new Rewards(nodlToken, 1000, RENEWAL_PERIOD, vm.addr(1), 101, address(this));
     }
 
     function test_changingSubmitterRewardPercentageIsEffective() public {

@@ -9,9 +9,10 @@ import {NODLMigration} from "../src/bridge/NODLMigration.sol";
 
 contract DeployNodlMigration is Script {
     address[] internal voters;
-    address internal withdrawer;
+    address internal nodlTokenAdmin;
 
     function setUp() public {
+        nodlTokenAdmin = vm.envAddress("N_NODL_TOKEN_ADMIN");
         voters = new address[](3);
 
         voters[0] = vm.envAddress("N_VOTER1_ADDR");
@@ -22,7 +23,7 @@ contract DeployNodlMigration is Script {
     function run() public {
         vm.startBroadcast();
 
-        NODL nodl = new NODL();
+        NODL nodl = new NODL(nodlTokenAdmin);
         address nodlAddress = address(nodl);
 
         NODLMigration nodlMigration = new NODLMigration(voters, nodl, 2, 3);

@@ -44,7 +44,7 @@ contract MigrationNFTTest is Test {
     uint256[] levels = [500, 1000, 5000, 10000, 100000];
 
     function setUp() public {
-        nodl = new NODL();
+        nodl = new NODL(address(this));
         migration = new NODLMigration(oracles, nodl, 1, 0);
         migrationNFT = new MigrationNFT(migration, maxHolders, levels, levelToTokenURI);
 

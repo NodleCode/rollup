@@ -22,7 +22,7 @@ contract DeployClick is Script {
     function run() public {
         vm.startBroadcast();
 
-        WhitelistPaymaster paymaster = new WhitelistPaymaster(withdrawer);
+        WhitelistPaymaster paymaster = new WhitelistPaymaster(whitelistAdmin, withdrawer);
         ClickContentSign nft = new ClickContentSign("ContentSign", "SIGNED", paymaster);
 
         address[] memory whitelist = new address[](1);

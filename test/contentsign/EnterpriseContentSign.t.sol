@@ -13,8 +13,8 @@ contract EnterpriseContentSignTest is Test {
     address internal bob = vm.addr(2);
 
     function setUp() public {
+        nft = new EnterpriseContentSign("Name", "Symbol", alice);
         vm.startPrank(alice);
-        nft = new EnterpriseContentSign("Name", "Symbol");
         nft.grantRole(nft.WHITELISTED_ROLE(), bob);
         vm.stopPrank();
     }

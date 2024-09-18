@@ -9,6 +9,7 @@ import {Rewards} from "../src/Rewards.sol";
 
 contract DeployRewards is Script {
     address internal nodlAddress;
+    address internal nodlTokenAdmin;
     address internal oracleAddress;
     uint256 internal rewardQuotaPerPeriod;
     uint256 internal rewardPeriod;
@@ -20,18 +21,21 @@ contract DeployRewards is Script {
         rewardQuotaPerPeriod = vm.envUint("N_REWARDS_QUOTA");
         rewardPeriod = vm.envUint("N_REWARDS_PERIOD");
         batchSubmitterIncentive = uint8(vm.envUint("N_REWARDS_SUBMITTER_INCENTIVE"));
+        nodlTokenAdmin = vm.envAddress("N_NODL_TOKEN_ADMIN");
     }
 
     function run() public {
         vm.startBroadcast();
         if (nodlAddress == address(0)) {
-            NODL token = new NODL();
+            NODL token = new NODL(nodlTokenAdmin);
             nodlAddress = address(token);
             console.log("Deployed NODL at %s", nodlAddress);
         }
 
         NODL nodl = NODL(nodlAddress);
-        Rewards rewards = new Rewards(nodl, rewardQuotaPerPeriod, rewardPeriod, oracleAddress, batchSubmitterIncentive);
+        Rewards rewards = new Rewards(
+            nodl, rewardQuotaPerPeriod, rewardPeriod, oracleAddress, batchSubmitterIncentive, nodlTokenAdmin
+        );
         address rewardsAddress = address(rewards);
         nodl.grantRole(nodl.MINTER_ROLE(), rewardsAddress);
 
