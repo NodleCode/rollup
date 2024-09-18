@@ -40,6 +40,8 @@ contract RewardsTest is Test {
 
         // Set the new quota
         vm.prank(alice);
+        vm.expectEmit();
+        emit Rewards.QuotaSet(2000);
         rewards.setQuota(2000);
 
         // Check new quota
@@ -48,6 +50,8 @@ contract RewardsTest is Test {
 
     function test_setPeriod() public {
         assertEq(rewards.period(), RENEWAL_PERIOD);
+        vm.expectEmit();
+        emit Rewards.PeriodSet(2 * RENEWAL_PERIOD);
         rewards.setPeriod(2 * RENEWAL_PERIOD);
         assertEq(rewards.period(), 2 * RENEWAL_PERIOD);
         rewards.setPeriod(RENEWAL_PERIOD);
@@ -398,6 +402,8 @@ contract RewardsTest is Test {
         assertEq(rewards.batchSubmitterRewardBasisPoints(), 200);
 
         vm.prank(alice);
+        vm.expectEmit();
+        emit Rewards.BatchSubmitterRewardSet(10);
         rewards.setBatchSubmitterRewardBasisPoints(10);
 
         assertEq(rewards.batchSubmitterRewardBasisPoints(), 10);
