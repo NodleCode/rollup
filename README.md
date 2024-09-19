@@ -99,7 +99,7 @@ cast send -i $NFT "grantRole(bytes32,address)" $ROLE 0x68e3981280792A19cC03B5A77
 In the following example `N_VOTER1_ADDR` is the public address of the bridge oracle whose role is going to be a voter for funds coming from
 the parachain side. Similarly `N_VOTER2_ADDR` and `N_VOTER3_ADDR` are addresses of the other two voter oracles. 
 The closer oracle does not need special permissions and thus need not to be mentioned.
-NOTE: `i` flag in the command will make the tool prompt you for the private key of the deployer. So remember to have that handy but you don't need to define it in yout environment.
+NOTE: `i` flag in the command will make the tool prompt you for the private key of the deployer. So remember to have that handy but you don't need to define it in your environment.
 ```shell
 N_VOTER1_ADDR="0x18AB6B4310d89e9cc5521D33D5f24Fb6bc6a215E" \
 N_VOTER2_ADDR="0x571C969688991C6A35420C62d44666c47eB3F752" \
@@ -110,7 +110,7 @@ forge script script/DeployNodlMigration.sol --zksync --rpc-url https://sepolia.e
 Afterwards the user you onboarded should be able to mint NFTs as usual via the `safeMint(ownerAddress, metadataUri)` function.
 
 ### Deploying MigrationNFT contract
-The `MigrationNFT` contract allows the minting of a reward soulbound NFT when users bridge enough tokens through `NODLMigration`. Users can "level up" depending on the amount of tokens they bring in, with each levels being a sorted list of bridged amounts.
+The `MigrationNFT` contract allows the minting of a reward SoulBound NFT when users bridge enough tokens through `NODLMigration`. Users can "level up" depending on the amount of tokens they bring in, with each levels being a sorted list of bridged amounts.
 
 You will need to set the following environment variables:
 - `N_MIGRATION`: address of the `NODLMigration` contract
@@ -136,7 +136,7 @@ forge script script/DeployMigrationNFT.s.sol --zksync --rpc-url https://sepolia.
 ## Scripts
 
 ### Checking on bridging proposals
-Given a tracker id (`proposal`) and the bridge address you may run the script available in `./script/CheckBridge.s.sol`. The script will output proposal details and outline expecations as to the proposal's execution timeline. Here is a simple example:
+Given a tracker id (`proposal`) and the bridge address you may run the script available in `./script/CheckBridge.s.sol`. The script will output proposal details and outline expectations as to the proposal's execution timeline. Here is a simple example:
 ```shell
 N_PROPOSAL_ID=c43005c880cad7b699122b403607187a78251b9850d387521ffb123c473e3392 \
 N_BRIDGE=0x5de7fe085ee66Fb48447e75AA8fb0598a080AEe0 \
@@ -174,4 +174,4 @@ Verification on Etherscan is best done via the Solidity Json Input method as it 
   2. Look for the input data variable named `_input`
   3. Copy paste its value and **strip the `0x prefix** as Etherscan will throw an error otherwise
 
-Use all these artefacts on the contract verification page on Etherscan for your given contract (open your contract on Etherscan, select `Contract` and the link starting with `Verify`). When prompted, enter the compiler versions, the license (we use BSD-3 Clause Clear). Then on the next page, enter your normalized JSON input file, and the contract constructor inputs.
+Use all these artifacts on the contract verification page on Etherscan for your given contract (open your contract on Etherscan, select `Contract` and the link starting with `Verify`). When prompted, enter the compiler versions, the license (we use BSD-3 Clause Clear). Then on the next page, enter your normalized JSON input file, and the contract constructor inputs.

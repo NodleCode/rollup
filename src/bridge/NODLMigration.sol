@@ -17,7 +17,7 @@ contract NODLMigration is BridgeBase {
         bool executed;
     }
 
-    // We track votes in a seperate mapping to avoid having to write helper functions to
+    // We track votes in a separate mapping to avoid having to write helper functions to
     // expose the votes for each proposal.
     mapping(bytes32 => Proposal) public proposals;
 

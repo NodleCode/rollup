@@ -113,7 +113,7 @@ contract RewardsTest is Test {
         rewards.mintReward(reward, signature);
     }
 
-    function test_mintRewardInvalidsequence() public {
+    function test_mintRewardInvalidSequence() public {
         // Prepare the reward and signature
         Rewards.Reward memory reward = Rewards.Reward(recipient, 100, 1); // Invalid sequence
         bytes memory signature = createSignature(reward, oraclePrivateKey);
@@ -183,7 +183,7 @@ contract RewardsTest is Test {
         gasAfter = gasleft();
         console.log("Gas used per recipient in a solo:  %d", gasBefore - gasAfter);
         uint256 ratio = (gasBefore - gasAfter) / gasUsedPerRecipient;
-        console.log("Batch efficieny >= %dX", ratio);
+        console.log("Batch efficiency >= %dX", ratio);
 
         assertTrue(ratio >= 1, "Batch efficiency must be at least 1X to be worth it.");
     }
@@ -306,9 +306,9 @@ contract RewardsTest is Test {
         amounts[0] = 100;
         amounts[1] = 200;
 
-        bytes32 receipentsHash = keccak256(abi.encodePacked(recipients));
+        bytes32 recipientsHash = keccak256(abi.encodePacked(recipients));
         bytes32 amountsHash = keccak256(abi.encodePacked(amounts));
-        bytes32 structHash = keccak256(abi.encode(rewards.BATCH_REWARD_TYPE_HASH(), receipentsHash, amountsHash, 0));
+        bytes32 structHash = keccak256(abi.encode(rewards.BATCH_REWARD_TYPE_HASH(), recipientsHash, amountsHash, 0));
         bytes32 digest = MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);

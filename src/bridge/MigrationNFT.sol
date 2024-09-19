@@ -1,5 +1,25 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
-
+/*
+ * NOTE: For anyone considering reusing this contract, we recommend reading through the 
+ * matter-labs audit results carefully before proceeding. The Nodle team will not address 
+ * this issue because we may not use this contract in the near future.
+ *
+ * NFT Minting Can Be Blocked
+ * Severity: Medium
+ * Status: Reported
+ *
+ * Users cannot mint NFTs once the `individualHolders` variable exceeds the `maxHolders` 
+ * value, which is enforced by _mustAlreadyBeHolderOrEnoughHoldersRemaining. To mint a 
+ * level-1 NFT, users will need to bridge a relatively small amount of NODL tokens compared 
+ * to other levels. Given that the `individualHolders` variable is shared among all NFT 
+ * levels, malicious actors could exploit this by bridging small amounts of NODL tokens to 
+ * multiple addresses until reaching the `maxHolders` limit and minting level-1 NFTs for 
+ * them. As a result, it will disrupt the minting process for legitimate users.
+ *
+ * Recommendation:
+ * We recommend revising the NFT minting process to allow unlimited NFT minting for lower 
+ * levels.
+ */
 pragma solidity 0.8.23;
 
 import {ERC721} from "openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
@@ -37,7 +57,7 @@ contract MigrationNFT is ERC721 {
     error NoLevelUp();
     error ProposalDoesNotExist();
     error NotExecuted();
-    error SoulboundIsNotTransferrable();
+    error SoulBoundIsNotTransferrable();
 
     /**
      * @notice Construct a new MigrationNFT contract
@@ -97,7 +117,7 @@ contract MigrationNFT is ERC721 {
 
         _mustBeAnExistingProposal(target);
         _mustBeExecuted(executed);
-        bool alreadyHolder = _mustAlreadyBeHolderOrEnougHoldersRemaining(target);
+        bool alreadyHolder = _mustAlreadyBeHolderOrEnoughHoldersRemaining(target);
 
         (uint256[] memory levelsToMint, uint256 nbLevelsToMint) = _computeLevelUps(target, amount);
 
@@ -157,7 +177,7 @@ contract MigrationNFT is ERC721 {
         }
     }
 
-    function _mustAlreadyBeHolderOrEnougHoldersRemaining(address target) internal view returns (bool alreadyHolder) {
+    function _mustAlreadyBeHolderOrEnoughHoldersRemaining(address target) internal view returns (bool alreadyHolder) {
         alreadyHolder = balanceOf(target) > 0;
         if (!alreadyHolder && individualHolders == maxHolders) {
             revert TooManyHolders();
@@ -167,8 +187,8 @@ contract MigrationNFT is ERC721 {
     function _update(address to, uint256 tokenId, address auth) internal override(ERC721) returns (address) {
         address from = _ownerOf(tokenId);
         if (from != address(0) && to != address(0)) {
-            // only burn or mint is allowed for a soulbound token
-            revert SoulboundIsNotTransferrable();
+            // only burn or mint is allowed for a SoulBound token
+            revert SoulBoundIsNotTransferrable();
         }
 
         return super._update(to, tokenId, auth);

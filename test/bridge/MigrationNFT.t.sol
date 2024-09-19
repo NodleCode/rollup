@@ -198,11 +198,11 @@ contract MigrationNFTTest is Test {
         assertEq(migrationNFT.nextTokenId(), maxHolders + 1); // we minted `maxHolders` NFTs in the FOR loop + 1 after
     }
 
-    function test_isSoulbound() public {
+    function test_isSoulBound() public {
         vm.bridgeTokens(migration, oracles[0], 0x0, vm.addr(42), levels[0]);
         migrationNFT.safeMint(0x0);
 
-        vm.expectRevert(MigrationNFT.SoulboundIsNotTransferrable.selector);
+        vm.expectRevert(MigrationNFT.SoulBoundIsNotTransferrable.selector);
         migrationNFT.transferFrom(vm.addr(42), vm.addr(43), 0);
     }
 }
