@@ -91,9 +91,9 @@ contract Grants {
         }
         vestingSchedules[to][page].push(schedule);
 
-        token.safeTransferFrom(msg.sender, address(this), perPeriodAmount * periodCount);
-
         emit VestingScheduleAdded(to, schedule);
+
+        token.safeTransferFrom(msg.sender, address(this), perPeriodAmount * periodCount);
     }
 
     /**
