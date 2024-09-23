@@ -74,7 +74,6 @@ contract GrantsMigration is BridgeBase {
         _mustNotHaveExecutedYet(paraTxHash);
 
         if (_proposalExists(paraTxHash)) {
-            _mustNotHaveVotedYet(paraTxHash, msg.sender);
             _mustNotBeChangingParameters(paraTxHash, user, amount, schedules);
             _recordVote(paraTxHash, msg.sender);
         } else {
