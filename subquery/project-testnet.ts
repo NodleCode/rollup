@@ -34,7 +34,7 @@ const project: EthereumProject = {
   dataSources: [
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 3798170, // This is the block that the contract was deployed on
+      startBlock: 1993364, // This is the block that the contract was deployed on
       options: {
         abi: "erc721",
         address: "0x999368030Ba79898E83EaAE0E49E89B7f6410940",
@@ -83,7 +83,7 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 3798170, // This is the block that the contract was deployed on
+      startBlock: 1993364, // This is the block that the contract was deployed on
       options: {
         abi: "erc721",
         address: "0x195e4E251c41e8Ae9E9E961366C73e2CFbfB115A",
@@ -132,7 +132,7 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 3798170, // This is the block that the contract was deployed on
+      startBlock: 2178049, // This is the block that the contract was deployed on
       options: {
         abi: "erc20",
         address: "0xb4B74C2BfeA877672B938E408Bae8894918fE41C",
@@ -167,7 +167,7 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 3798170,
+      startBlock: 2157320,
       options: {
         abi: "migration",
         address: "0x1427d38B967435a3F8f476Cda0bc4F51fe66AF4D",
@@ -209,7 +209,7 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 3798170, // This is the block that the contract was deployed on
+      startBlock: 3001690, // This is the block that the contract was deployed on
       options: {
         abi: "erc721-a",
         address: "0x9Fed2d216DBE36928613812400Fd1B812f118438",
@@ -235,51 +235,10 @@ const project: EthereumProject = {
         ],
       },
     },
+    //handleGrants
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 42332281, // This is the block that the contract was deployed on
-      options: {
-        abi: "grantsMigration",
-        address: "0xF81b3b954221BeDcf762cd18FEc1A22D25016B2E",
-      },
-      assets: new Map([
-        [
-          "grantsMigration",
-          {
-            file: "./abis/grantsMigration.abi.json",
-          },
-        ],
-      ]),
-      mapping: {
-        file: "./dist/index.js",
-        handlers: [
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleGrantsVoteStarted",
-            filter: {
-              topics: ["VoteStarted(bytes32, address, address, uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleGranted",
-            filter: {
-              topics: ["Granted(bytes32, address, uint256, uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleGrantsVoted",
-            filter: {
-              topics: ["Voted(bytes32, address)"],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: EthereumDatasourceKind.Runtime,
-      startBlock: 3798170, // This is the block that the contract was deployed on
+      startBlock: 3548139, // This is the block that the contract was deployed on
       options: {
         abi: "grants",
         address: "0xdAdF329E8b30D878b139074De163D3A591aAB394",
@@ -330,6 +289,48 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
+      startBlock: 3548120, // This is the block that the contract was deployed on
+      options: {
+        abi: "grantsMigration",
+        address: "0xF81b3b954221BeDcf762cd18FEc1A22D25016B2E",
+      },
+      assets: new Map([
+        [
+          "grantsMigration",
+          {
+            file: "./abis/grantsMigration.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleGrantsVoteStarted",
+            filter: {
+              topics: ["VoteStarted(bytes32, address, address, uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleGranted",
+            filter: {
+              topics: ["Granted(bytes32, address, uint256, uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleGrantsVoted",
+            filter: {
+              topics: ["Voted(bytes32, address)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
       startBlock: 3798170, // This is the block that the contract was deployed on
       options: {
         abi: "rewards",
@@ -350,14 +351,14 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Call,
             handler: "handleMintReward",
             filter: {
-              function: "0x58893201",
+              function: "mintReward((address,uint256,uint256),bytes)",
             },
           },
           {
             kind: EthereumHandlerKind.Call,
             handler: "handleMintBatchReward",
             filter: {
-              function: "0xbe123145",
+              function: "mintBatchReward((address[],uint256[],uint256),bytes)",
             },
           },
         ],
