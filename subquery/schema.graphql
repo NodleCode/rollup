@@ -26,7 +26,16 @@ type Account @entity {
   roleRevokedSender: [RoleRevoked!]! @derivedFrom(field: "sender")
   events: [Event!]! @derivedFrom(field: "emitter")
   vestingSchedules: [VestingSchedule!]! @derivedFrom(field: "beneficiary")
+  timestamp: BigInt @index
+  balance: BigInt @index
 }
+
+type Wallet @entity {
+  id: ID!
+  asAccount: Account!
+  timestamp: BigInt!
+}
+
 type ERC721Contract @entity {
   id: ID!
   asAccount: Account!
@@ -251,4 +260,22 @@ type VestingScheduleClaimed @entity {
   beneficiary: Account! @index
   amount: BigInt
   transaction: Transaction!
+}
+
+type BatchMetadata @entity {
+  id: ID!
+  batchSum: String @index
+  digest: String @index
+}
+
+type Reward @entity {
+  id: ID!
+  sender: Account! @index
+  beneficiary: Account! @index
+  amount: BigInt @index
+  transaction: Transaction!
+  BatchMetadata: BatchMetadata
+  sequence: BigInt @index
+  status: Boolean @index
+  signature: String @index
 }

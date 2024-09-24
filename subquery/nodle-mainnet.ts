@@ -130,9 +130,137 @@ const project: EthereumProject = {
         handlers: [
           {
             kind: EthereumHandlerKind.Event,
-            handler: "handleRewardTransfer",
+            handler: "handleNFTTransfer",
             filter: {
               topics: ["Transfer (address from, address to, uint256 tokenId)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 42332281, // This is the block that the contract was deployed on
+      options: {
+        abi: "grants",
+        address: "0xdAdF329E8b30D878b139074De163D3A591aAB394",
+      },
+      assets: new Map([
+        [
+          "grants",
+          {
+            file: "./abis/grants.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleClaimed",
+            filter: {
+              topics: ["Claimed(address, uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleRenounced",
+            filter: {
+              topics: ["Renounced(address, address)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleVestingScheduleAdded",
+            filter: {
+              topics: [
+                "VestingScheduleAdded(address,tuple(address,uint256,uint256,uint32,uint256))",
+              ],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleVestingSchedulesCanceled",
+            filter: {
+              topics: ["VestingSchedulesCanceled(address, address)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 42332281, // This is the block that the contract was deployed on
+      options: {
+        abi: "grantsMigration",
+        address: "0xF81b3b954221BeDcf762cd18FEc1A22D25016B2E",
+      },
+      assets: new Map([
+        [
+          "grantsMigration",
+          {
+            file: "./abis/grantsMigration.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleGrantsVoteStarted",
+            filter: {
+              topics: ["VoteStarted(bytes32, address, address, uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleGranted",
+            filter: {
+              topics: ["Granted(bytes32, address, uint256, uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleGrantsVoted",
+            filter: {
+              topics: ["Voted(bytes32, address)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 44627456, // This is the block that the contract was deployed on
+      options: {
+        abi: "rewards",
+        address: "0xE629B208046F7A33dE3A43931c9FE505A7Ac3d36",
+      },
+      assets: new Map([
+        [
+          "rewards",
+          {
+            file: "./abis/rewards.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleReward",
+            filter: {
+              function: "0x58893201",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleReward",
+            filter: {
+              function: "0xbe123145",
             },
           },
         ],
