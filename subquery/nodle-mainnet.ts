@@ -230,13 +230,12 @@ const project: EthereumProject = {
           },
         ],
       },
-    },
-    {
+    }, {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 44627456, // This is the block that the contract was deployed on
       options: {
         abi: "rewards",
-        address: "0xE629B208046F7A33dE3A43931c9FE505A7Ac3d36",
+        address: "0xe629b208046f7a33de3a43931c9fe505a7ac3d36",
       },
       assets: new Map([
         [
@@ -251,16 +250,16 @@ const project: EthereumProject = {
         handlers: [
           {
             kind: EthereumHandlerKind.Call,
-            handler: "handleReward",
+            handler: "handleMintReward",
             filter: {
-              function: "0x58893201",
+              function: "mintReward((address,uint256,uint256),bytes)",
             },
           },
           {
             kind: EthereumHandlerKind.Call,
-            handler: "handleReward",
+            handler: "handleMintBatchReward",
             filter: {
-              function: "0xbe123145",
+              function: "mintBatchReward((address[],uint256[],uint256),bytes)",
             },
           },
         ],

@@ -1,11 +1,16 @@
 import { Account, Transaction } from "../types";
 import fetch from "node-fetch";
 
-export async function fetchAccount(address: string): Promise<Account> {
+export async function fetchAccount(
+  address: string,
+  timestamp?: bigint
+): Promise<Account> {
   let account = await Account.get(address);
 
   if (!account) {
     account = new Account(address);
+    account.timestamp = timestamp || BigInt(0);
+    account.balance = BigInt(0);
     account.save();
   }
 
