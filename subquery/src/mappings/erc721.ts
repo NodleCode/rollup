@@ -12,6 +12,27 @@ import {
 } from "../types/abi-interfaces/Erc721Abi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
 
+const keysMapping = {
+  application: "Application",
+  channel: "Channel",
+  contentType: "Content Type",
+  duration: "Duration (sec)",
+  captureDate: "Capture date",
+  longitude: "Longtitude",
+  latitude: "Latitude",
+  locationPrecision: "Location Precision",
+};
+
+function convertArrayToObject(arr: any[]) {
+  // validate array
+  if (!Array.isArray(arr)) return null;
+
+  return arr.reduce((acc, { trait_type, value }) => {
+    acc[trait_type] = value;
+    return acc;
+  }, {});
+}
+
 export async function handleTransfer(event: TransferLog): Promise<void> {
   assert(event.args, "No event.args");
 
@@ -109,6 +130,25 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
       token.contentType = metadata.contentType || "";
       token.thumbnail = metadata.thumbnail || "";
       token.name = metadata.name || "";
+      token.description = metadata.description || "";
+      token.contentHash = metadata.content_hash || "";
+
+      // new metadata from attributes
+      if (metadata.attributes && metadata.attributes?.length > 0) {
+        const objectAttributes = convertArrayToObject(metadata.attributes);
+        
+        if (objectAttributes) {
+          token.application = objectAttributes[keysMapping.application];
+          token.channel = objectAttributes[keysMapping.channel];
+          token.contentType = objectAttributes[keysMapping.contentType];
+          token.duration = objectAttributes[keysMapping.duration] || 0;
+          token.captureDate = objectAttributes[keysMapping.captureDate] ? BigInt(objectAttributes[keysMapping.captureDate]) : BigInt(0);
+          token.longitude = objectAttributes[keysMapping.longitude] ? parseFloat(objectAttributes[keysMapping.longitude]) : 0;
+          token.latitude = objectAttributes[keysMapping.latitude] ? parseFloat(objectAttributes[keysMapping.latitude]) : 0;
+          token.locationPrecision =
+            objectAttributes[keysMapping.locationPrecision];
+        }
+      }
     }
   }
 

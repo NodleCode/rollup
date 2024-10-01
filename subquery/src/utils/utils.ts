@@ -36,7 +36,7 @@ export const fetchTransaction = async (
 };
 
 export const isValidTokenUri = (uri: string): boolean => {
-  const isCid = uri.startsWith("ipfs://") && uri.length === 59;
+  const isCid = uri.startsWith("ipfs://");
   return isCid || uri.startsWith("https://");
 };
 

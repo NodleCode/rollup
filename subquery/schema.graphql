@@ -63,6 +63,13 @@ type ERC721Token @entity {
   transactionHash: String
   description: String
   transfers: [ERC721Transfer!]! @derivedFrom(field: "token")
+  application: String
+  duration: Int
+  captureDate: BigInt @index
+  longitude: Float @index
+  latitude: Float @index
+  locationPrecision: String
+  contentHash: String
 }
 type ERC721Operator @entity {
   id: ID!
