@@ -2,6 +2,7 @@
 pragma solidity 0.8.23;
 
 import {NODL} from "./NODL.sol";
+import {QuotaControl} from "./QuotaControl.sol";
 import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 import {EIP712} from "openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol";
 import {SignatureChecker} from "openzeppelin-contracts/contracts/utils/cryptography/SignatureChecker.sol";
@@ -12,7 +13,7 @@ import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
  * @dev This contract allows an authorized oracle to issue off-chain signed rewards to recipients.
  * This contract must have the MINTER_ROLE in the NODL token contract.
  */
-contract Rewards is AccessControl, EIP712 {
+contract Rewards is QuotaControl, EIP712 {
     using Math for uint256;
 
     /**
@@ -36,10 +37,6 @@ contract Rewards is AccessControl, EIP712 {
      */
     bytes32 public constant BATCH_REWARD_TYPE_HASH =
         keccak256("BatchReward(bytes32 recipientsHash,bytes32 amountsHash,uint256 sequence)");
-    /**
-     * @dev The maximum period for reward quota renewal. This is to prevent overflows while avoiding the ongoing overhead of safe math operations.
-     */
-    uint256 public constant MAX_PERIOD = 30 days;
 
     /**
      * @dev The maximum value for basis points values.
@@ -75,23 +72,6 @@ contract Rewards is AccessControl, EIP712 {
      */
     address public immutable authorizedOracle;
     /**
-     * @dev Reward quota renewal period.
-     */
-    uint256 public period;
-
-    /**
-     * @dev Maximum amount of rewards that can be distributed in a period.
-     */
-    uint256 public quota;
-    /**
-     * @dev Timestamp indicating when the reward quota is due to be renewed.
-     */
-    uint256 public quotaRenewalTimestamp;
-    /**
-     * @dev Amount of rewards claimed in the current period.
-     */
-    uint256 public claimed;
-    /**
      * @dev Mapping to store reward sequences for each recipient to prevent replay attacks.
      */
     mapping(address => uint256) public sequences;
@@ -108,18 +88,6 @@ contract Rewards is AccessControl, EIP712 {
      */
     uint16 public batchSubmitterRewardBasisPoints;
 
-    /**
-     * @dev Error when the reward quota is exceeded.
-     */
-    error QuotaExceeded();
-    /**
-     * @dev Error indicating the reward renewal period is set to zero which is not acceptable.
-     */
-    error ZeroPeriod();
-    /**
-     * @dev Error indicating that scheduling the reward quota renewal has failed most likely due to the period being too long.
-     */
-    error TooLongPeriod();
     /**
      * @dev Error when the reward is not from the authorized oracle.
      */
@@ -141,16 +109,6 @@ contract Rewards is AccessControl, EIP712 {
      * @dev Error thrown when the value is out of range. For example for basis point values they should be less than BASIS_POINTS_DIVISOR.
      */
     error OutOfRangeValue();
-
-    /**
-     * @dev Event emitted when the reward quota is set.
-     */
-    event QuotaSet(uint256 quota);
-
-    /**
-     * @dev Event emitted when the reward period is set.
-     */
-    event PeriodSet(uint256 period);
 
     /**
      * @dev Event emitted when the submitter's reward basis point is set.
@@ -184,39 +142,12 @@ contract Rewards is AccessControl, EIP712 {
         address oracleAddress,
         uint16 rewardBasisPoints,
         address admin
-    ) EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION) {
-        _mustBeWithinPeriodRange(initialPeriod);
+    ) QuotaControl(initialQuota, initialPeriod, admin) EIP712(SIGNING_DOMAIN, SIGNATURE_VERSION) {
         _mustBeLessThanBasisPointsDivisor(rewardBasisPoints);
 
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
-
         nodl = token;
-        quota = initialQuota;
-        period = initialPeriod;
-        quotaRenewalTimestamp = block.timestamp + period;
         authorizedOracle = oracleAddress;
         batchSubmitterRewardBasisPoints = rewardBasisPoints;
-    }
-
-    /**
-     * @dev Sets the reward quota. Only accounts with the DEFAULT_ADMIN_ROLE can call this function.
-     * @param newQuota The new reward quota.
-     */
-    function setQuota(uint256 newQuota) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
-        quota = newQuota;
-        emit QuotaSet(newQuota);
-    }
-
-    /**
-     * @dev Sets the reward period. Only accounts with the DEFAULT_ADMIN_ROLE can call this function.
-     * @param newPeriod The new reward period.
-     */
-    function setPeriod(uint256 newPeriod) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
-        _mustBeWithinPeriodRange(newPeriod);
-        period = newPeriod;
-        emit PeriodSet(newPeriod);
     }
 
     /**
@@ -284,35 +215,6 @@ contract Rewards is AccessControl, EIP712 {
     }
 
     /**
-     * @notice This function resets the rewards claimed to 0 and updates the quota renewal timestamp based on the reward period.
-     * @notice The following operations are safe based on the constructor's requirements for longer than the age of the universe.
-     */
-    function _checkedResetClaimed() internal {
-        if (block.timestamp >= quotaRenewalTimestamp) {
-            claimed = 0;
-
-            // The following operations are safe based on the constructor's requirements for longer than the age of universe :)
-            uint256 timeAhead = block.timestamp - quotaRenewalTimestamp;
-            quotaRenewalTimestamp = block.timestamp + period - (timeAhead % period);
-        }
-    }
-
-    /**
-     * @dev Internal function to update the rewards claimed by a given amount.
-     * @param amount The amount of rewards to be added.
-     * @notice This function is used to update the rewards claimed by a user. It checks if the new rewards claimed
-     * exceeds the reward quota and reverts the transaction if it does. Otherwise, it updates the rewards claimed
-     * by adding the specified amount.
-     */
-    function _checkedUpdateClaimed(uint256 amount) internal {
-        (bool success, uint256 newClaimed) = claimed.tryAdd(amount);
-        if (!success || newClaimed > quota) {
-            revert QuotaExceeded();
-        }
-        claimed = newClaimed;
-    }
-
-    /**
      * @dev Internal check to ensure the basis points value is less than the divisor.
      * @param basisPoints The basis points value to be checked.
      */
@@ -376,21 +278,6 @@ contract Rewards is AccessControl, EIP712 {
             sum += batch.amounts[i];
         }
         return sum;
-    }
-
-    /**
-     * @dev Internal function to ensure the period is within the acceptable range.
-     * @param newPeriod The new period to be checked.
-     */
-    function _mustBeWithinPeriodRange(uint256 newPeriod) internal {
-        // This is to avoid the ongoing overhead of safe math operations
-        if (newPeriod == 0) {
-            revert ZeroPeriod();
-        }
-        // This is to prevent overflows while avoiding the ongoing overhead of safe math operations
-        if (newPeriod > MAX_PERIOD) {
-            revert TooLongPeriod();
-        }
     }
 
     /**

@@ -4,6 +4,7 @@ pragma solidity 0.8.23;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../src/NODL.sol";
+import "../src/QuotaControl.sol";
 import "../src/Rewards.sol";
 import "openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
 import "./__helpers__/AccessControlUtils.sol";
@@ -41,7 +42,7 @@ contract RewardsTest is Test {
         // Set the new quota
         vm.prank(alice);
         vm.expectEmit();
-        emit Rewards.QuotaSet(2000);
+        emit QuotaControl.QuotaSet(2000);
         rewards.setQuota(2000);
 
         // Check new quota
@@ -51,17 +52,17 @@ contract RewardsTest is Test {
     function test_setPeriod() public {
         assertEq(rewards.period(), RENEWAL_PERIOD);
         vm.expectEmit();
-        emit Rewards.PeriodSet(2 * RENEWAL_PERIOD);
+        emit QuotaControl.PeriodSet(2 * RENEWAL_PERIOD);
         rewards.setPeriod(2 * RENEWAL_PERIOD);
         assertEq(rewards.period(), 2 * RENEWAL_PERIOD);
         rewards.setPeriod(RENEWAL_PERIOD);
     }
 
     function test_setPeriodOutOfRange() public {
-        vm.expectRevert(Rewards.ZeroPeriod.selector);
+        vm.expectRevert(QuotaControl.ZeroPeriod.selector);
         rewards.setPeriod(0);
         uint256 tooLongPeriod = rewards.MAX_PERIOD() + 1;
-        vm.expectRevert(Rewards.TooLongPeriod.selector);
+        vm.expectRevert(QuotaControl.TooLongPeriod.selector);
         rewards.setPeriod(tooLongPeriod);
     }
 
@@ -99,7 +100,7 @@ contract RewardsTest is Test {
         bytes memory signature = createSignature(reward, oraclePrivateKey);
 
         // Expect the quota to be exceeded
-        vm.expectRevert(Rewards.QuotaExceeded.selector);
+        vm.expectRevert(QuotaControl.QuotaExceeded.selector);
         rewards.mintReward(reward, signature);
     }
 
@@ -201,7 +202,7 @@ contract RewardsTest is Test {
 
         bytes memory signature = createBatchSignature(rewardsBatch, oraclePrivateKey);
 
-        vm.expectRevert(Rewards.QuotaExceeded.selector);
+        vm.expectRevert(QuotaControl.QuotaExceeded.selector);
         rewards.mintBatchReward(rewardsBatch, signature);
     }
 
