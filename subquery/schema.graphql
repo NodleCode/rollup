@@ -286,3 +286,26 @@ type Reward @entity {
   status: Boolean @index
   signature: String @index
 }
+
+type AccountSnapshot @entity {
+  id: ID!
+  account: Account! @index
+  dayDate: String! @index
+  timestamp: BigInt! @index
+  balance: BigInt
+  transferCount: Int
+  transferAmount: BigInt
+  rewardCount: Int
+  rewardAmount: BigInt
+}
+
+type StatSnapshot @entity {
+  id: ID!
+  dayDate: Date @index
+  totalTransfers: Int!
+  totalTransferAmount: BigInt!
+  totalRewards: Int!
+  totalRewardAmount: BigInt!
+  newWallets: Int!
+}
+

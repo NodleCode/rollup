@@ -12,13 +12,14 @@ export async function handleNFTTransfer(event: TransferLog): Promise<void> {
   if (contract) {
     // logger.info("handleNFTTransfer");
     // logger.info(JSON.stringify(event.args));
-    const from = await fetchAccount(event.args[0]);
-    const to = await fetchAccount(event.args[1]);
+    const timestamp = event.block.timestamp * BigInt(1000);
+    const from = await fetchAccount(event.args[0], timestamp);
+    const to = await fetchAccount(event.args[1], timestamp);
     const tokenId = event.args[2];
 
     const transferTx = await fetchTransaction(
       event.transaction.hash,
-      event.block.timestamp * BigInt(1000),
+      timestamp,
       BigInt(event.block.number)
     );
 
@@ -37,15 +38,15 @@ export async function handleNFTTransfer(event: TransferLog): Promise<void> {
         return null;
       });
       logger.info("Token URI: " + tokenUri);
-      
+      logger.info("Contract ID: " + contract.id);
       if (tokenUri && nodleContracts.includes(contract.id)) {
-        const metadata = await fetchMetadata(tokenUri, [
+        const metadata = await fetchMetadata(String(tokenUri), [
           "nodle-community-nfts.myfilebase.com",
           "pinning.infura-ipfs.io",
           "nodle-web-wallet.infura-ipfs.io",
           "cloudflare-ipfs.com",
         ]);
-
+        logger.info("Metadata: " + JSON.stringify(metadata));
         if (metadata) {
           token.content = metadata.content || metadata.image || "";
           token.name = metadata.title || metadata.name || "";
@@ -79,8 +80,9 @@ export async function handleApproval(event: ApprovalLog): Promise<void> {
 
   const contract = await fetchContract(event.address);
   if (contract) {
-    const to = await fetchAccount(event.args[1]);
-    const from = await fetchAccount(event.args[0]);
+    const timestamp = event.block.timestamp * BigInt(1000);
+    const to = await fetchAccount(event.args[1], timestamp);
+    const from = await fetchAccount(event.args[0], timestamp);
     const tokenId = BigInt(event.args[2] as any);
 
     const token = await fetchToken(
@@ -99,7 +101,7 @@ export async function handleApproval(event: ApprovalLog): Promise<void> {
       });
       logger.info("Token URI: " + tokenUri);
       if (tokenUri && nodleContracts.includes(contract.id)) {
-        const metadata = await fetchMetadata(tokenUri, [
+        const metadata = await fetchMetadata(String(tokenUri), [
           "nodle-community-nfts.myfilebase.com",
           "pinning.infura-ipfs.io",
           "nodle-web-wallet.infura-ipfs.io",
@@ -117,7 +119,7 @@ export async function handleApproval(event: ApprovalLog): Promise<void> {
 
     token.ownerId = to.id;
     token.transactionHash = event.transaction.hash;
-    token.timestamp = event.block.timestamp * BigInt(1000);
+    token.timestamp = timestamp;
 
     return token.save();
   }

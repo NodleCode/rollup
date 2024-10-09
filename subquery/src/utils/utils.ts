@@ -44,7 +44,7 @@ export const fetchMetadata = async (
   cid: string,
   gateways: string[]
 ): Promise<any> => {
-  if (gateways.length === 0 || !isValidTokenUri(cid)) {
+  if (gateways.length === 0 || !isValidTokenUri(String(cid))) {
     return null;
   }
 

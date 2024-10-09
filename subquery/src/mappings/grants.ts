@@ -44,10 +44,10 @@ export async function handleGrantsVoteStarted(
 
   const contract = await fetchContract(event.address);
   if (contract) {
-    const proposalId = event.args.proposal.toString();
-    const recipient = await fetchAccount(event.args.user);
-    const initiator = await fetchAccount(event.args.oracle);
     const timestamp = event.block.timestamp * BigInt(1000);
+    const proposalId = event.args.proposal.toString();
+    const recipient = await fetchAccount(event.args.user, timestamp);
+    const initiator = await fetchAccount(event.args.oracle, timestamp);
     const hash = event.transaction.hash;
 
     const proposal = await fetchGrantProposal(proposalId);
@@ -73,8 +73,8 @@ export async function handleGrantsVoted(event: VotedLog): Promise<void> {
 
   const proposal = await fetchGrantProposal(proposalId);
   if (proposal) {
-    const voter = await fetchAccount(event.args.oracle);
     const timestamp = event.block.timestamp * BigInt(1000);
+    const voter = await fetchAccount(event.args.oracle, timestamp);
     const hash = event.transaction.hash;
 
     const vote = new ProposalVote(

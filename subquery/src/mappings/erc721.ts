@@ -70,8 +70,9 @@ export async function handleApprovalForAll(event: ApprovalForAllLog) {
 
   const contract = await fetchContract(event.address);
   if (contract != null) {
-    const owner = await fetchAccount(event.args.owner);
-    const operator = await fetchAccount(event.args.operator);
+    const timestamp = event.block.timestamp * BigInt(1000);
+    const owner = await fetchAccount(event.args.owner, timestamp);
+    const operator = await fetchAccount(event.args.operator, timestamp);
 
     const delegation = await fetchERC721Operator(contract, owner, operator);
 
@@ -95,9 +96,13 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
   );
 
   // Caller
-  const caller = await fetchAccount(String(tx.from).toLowerCase());
+  const timestamp = BigInt(tx.blockTimestamp) * BigInt(1000);
+  const caller = await fetchAccount(String(tx.from).toLowerCase(), timestamp);
 
-  const owner = await fetchAccount(String(await tx.args[0]).toLowerCase());
+  const owner = await fetchAccount(
+    String(await tx.args[0]).toLowerCase(),
+    timestamp
+  );
   const uri = await tx.args[1];
 
   const tokenId = getApprovalLog(tx.logs, await tx.args[0])![2].toBigInt();
@@ -110,7 +115,7 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
     caller.id
   );
 
-  token.timestamp = BigInt(tx.blockTimestamp) * BigInt(1000);
+  token.timestamp = timestamp;
 
   token.transactionHash = tx.hash;
 

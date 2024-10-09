@@ -112,7 +112,7 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 3001690, // This is the block that the contract was deployed on
+      startBlock: 39506626, // This is the block that the contract was deployed on
       options: {
         abi: "erc721-a",
         address: "0xd837cFb550b7402665499f136eeE7a37D608Eb18",
@@ -230,7 +230,8 @@ const project: EthereumProject = {
           },
         ],
       },
-    }, {
+    },
+    {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 44627456, // This is the block that the contract was deployed on
       options: {

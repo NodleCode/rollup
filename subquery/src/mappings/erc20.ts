@@ -2,6 +2,7 @@ import { fetchContract } from "../utils/erc20";
 import { ApprovalLog, TransferLog } from "../types/abi-interfaces/Erc20Abi";
 import { fetchAccount, fetchTransaction } from "../utils/utils";
 import { ERC20Approval, ERC20Transfer, Wallet } from "../types";
+import { handleSnapshot, handleStatSnapshot } from "../utils/snapshot";
 
 export async function handleERC20Transfer(event: TransferLog): Promise<void> {
   if (!event.args) {
@@ -17,12 +18,14 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
     const to = await fetchAccount(event.args.to, timestamp);
     const emmiter = await fetchAccount(event.transaction.from, timestamp);
     const value = event.args.value.toBigInt();
-    
+
     const hash = event.transaction.hash;
 
     // Create wallet
+    let newWallet = 0;
     const toWallet = await Wallet.get(to.id);
     if (!toWallet) {
+      newWallet = 1;
       const wallet = new Wallet(to.id, to.id, timestamp);
       wallet.save();
     }
@@ -47,10 +50,17 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
       value
     );
 
-    from.balance = (from.balance || BigInt(0)) - value;
+    from.balance =
+      (from.balance || BigInt(0)) - (value > 0 ? value : BigInt(0));
     to.balance = (to.balance || BigInt(0)) + value;
 
-    await Promise.all([from.save(), to.save()]);
+    await Promise.all([
+      from.save(),
+      to.save(),
+      handleSnapshot(event, from, value),
+      handleSnapshot(event, to, BigInt(0)),
+      handleStatSnapshot(timestamp, value, BigInt(0), newWallet),
+    ]);
 
     transferEvent.hash = hash;
     transferEvent.contractId = contract.id;
@@ -69,12 +79,13 @@ export async function handleERC20Approval(event: ApprovalLog): Promise<void> {
 
   const contract = await fetchContract(event.address);
   if (contract) {
-    const owner = await fetchAccount(event.args.owner);
-    const spender = await fetchAccount(event.args.spender);
-    const value = event.args.value.toBigInt();
     const timestamp = event.block.timestamp * BigInt(1000);
+    const owner = await fetchAccount(event.args.owner, timestamp);
+    const spender = await fetchAccount(event.args.spender, timestamp);
+    const value = event.args.value.toBigInt();
+
     const hash = event.transaction.hash;
-    const emmiter = await fetchAccount(event.transaction.from);
+    const emmiter = await fetchAccount(event.transaction.from, timestamp);
 
     const transfer = await fetchTransaction(
       hash,
