@@ -73,11 +73,6 @@ contract QuotaControl is AccessControl {
     event PeriodSet(uint256 period);
 
     /**
-     * @dev Emitted when a new reward period begins, resetting the claimed amount.
-     */
-    event NewPeriod();
-
-    /**
      * @dev Initializes the contract with an initial reward quota, reward period, and admin.
      * @param initialQuota The initial maximum amount of rewards distributable in each period.
      * @param initialPeriod The initial duration of the reward period in seconds.
@@ -130,8 +125,6 @@ contract QuotaControl is AccessControl {
             // Align the quota renewal timestamp to the next period start
             uint256 timeAhead = block.timestamp - quotaRenewalTimestamp;
             quotaRenewalTimestamp = block.timestamp + period - (timeAhead % period);
-
-            emit NewPeriod();
         }
     }
 

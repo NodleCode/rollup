@@ -91,8 +91,6 @@ contract QuotaControlTest is Test {
 
         vm.warp(nextRenewal + 1 seconds);
 
-        vm.expectEmit();
-        emit QuotaControl.NewPeriod();
         quotaControl.exposeCheckedResetClaimed();
         assertEq(quotaControl.claimed(), 0);
     }
