@@ -11,6 +11,8 @@ import {
   SafeMintTransaction,
 } from "../types/abi-interfaces/Erc721Abi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
+import { contractForSnapshot } from "../utils/const";
+import { TokenSnapshot } from "../types";
 
 const keysMapping = {
   application: "Application",
@@ -141,15 +143,21 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
       // new metadata from attributes
       if (metadata.attributes && metadata.attributes?.length > 0) {
         const objectAttributes = convertArrayToObject(metadata.attributes);
-        
+
         if (objectAttributes) {
           token.application = objectAttributes[keysMapping.application];
           token.channel = objectAttributes[keysMapping.channel];
           token.contentType = objectAttributes[keysMapping.contentType];
           token.duration = objectAttributes[keysMapping.duration] || 0;
-          token.captureDate = objectAttributes[keysMapping.captureDate] ? BigInt(objectAttributes[keysMapping.captureDate]) : BigInt(0);
-          token.longitude = objectAttributes[keysMapping.longitude] ? parseFloat(objectAttributes[keysMapping.longitude]) : 0;
-          token.latitude = objectAttributes[keysMapping.latitude] ? parseFloat(objectAttributes[keysMapping.latitude]) : 0;
+          token.captureDate = objectAttributes[keysMapping.captureDate]
+            ? BigInt(objectAttributes[keysMapping.captureDate])
+            : BigInt(0);
+          token.longitude = objectAttributes[keysMapping.longitude]
+            ? parseFloat(objectAttributes[keysMapping.longitude])
+            : 0;
+          token.latitude = objectAttributes[keysMapping.latitude]
+            ? parseFloat(objectAttributes[keysMapping.latitude])
+            : 0;
           token.locationPrecision =
             objectAttributes[keysMapping.locationPrecision];
         }
@@ -157,11 +165,19 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
     }
   }
 
-  return Promise.all([
-    contract.save(),
-    safeMintTx.save(),
-    caller.save(),
-    owner.save(),
-    token.save(),
-  ]);
+  const toSave = [contract, safeMintTx, caller, owner, token];
+
+  if (contractForSnapshot.includes(contract.id)) {
+    const snapshot = new TokenSnapshot(
+      token.id,
+      owner.id,
+      tx.blockNumber,
+      token.identifier,
+      token.id,
+      timestamp
+    );
+
+    toSave.push(snapshot);
+  }
+  return Promise.all(toSave.map((entity) => entity.save()));
 }

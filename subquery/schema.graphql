@@ -309,3 +309,12 @@ type StatSnapshot @entity {
   newWallets: Int!
 }
 
+type TokenSnapshot @entity {
+  id: ID!
+  owner: Account! @index
+  blockNumber: Int! @index
+  identifier: BigInt! @index
+  token: ERC721Token! @index
+  timestamp: BigInt! @index
+}
+

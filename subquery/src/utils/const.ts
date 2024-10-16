@@ -82,6 +82,10 @@ export const nodleContracts = [
   "0x999368030Ba79898E83EaAE0E49E89B7f6410940",
 ].map((address) => address.toLowerCase());
 
+export const contractForSnapshot = [
+  "0x95b3641d549f719eb5105f9550eca4a7a2f305de",
+].map((address) => address.toLowerCase());
+
 export const abi = [
   // Minimal ERC721 ABI with only the tokenURI method
   "function tokenURI(uint256 tokenId) view returns (string)",
