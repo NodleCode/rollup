@@ -227,7 +227,7 @@ const project: EthereumProject = {
         handlers: [
           {
             kind: EthereumHandlerKind.Event,
-            handler: "handleRewardTransfer",
+            handler: "handleNFTTransfer",
             filter: {
               topics: ["Transfer (address from, address to, uint256 tokenId)"],
             },
