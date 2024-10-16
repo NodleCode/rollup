@@ -121,7 +121,7 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
 
   token.uri = uri;
 
-  if (uri) {
+  if (false) {
     const metadata = await fetchMetadata(uri, [
       "nodle-community-nfts.myfilebase.com",
       "pinning.infura-ipfs.io",
