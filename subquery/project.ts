@@ -47,6 +47,42 @@ const project: EthereumProject = {
             file: "./abis/erc721.abi.json",
           },
         ],
+        [
+          "erc721-a",
+          {
+            file: "./abis/erc721-a.abi.json",
+          },
+        ],
+        [
+          "erc20",
+          {
+            file: "./abis/erc20.abi.json",
+          },
+        ],
+        [
+          "migration",
+          {
+            file: "./abis/migration.abi.json",
+          },
+        ],
+        [
+          "grants",
+          {
+            file: "./abis/grants.abi.json",
+          },
+        ],
+        [
+          "grantsMigration",
+          {
+            file: "./abis/grantsMigration.abi.json",
+          },
+        ],
+        [
+          "rewards",
+          {
+            file: "./abis/rewards.abi.json",
+          },
+        ],
       ]),
       mapping: {
         file: "./dist/index.js",
