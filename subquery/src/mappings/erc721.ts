@@ -12,7 +12,7 @@ import {
 } from "../types/abi-interfaces/Erc721Abi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
 import { contractForSnapshot } from "../utils/const";
-import { TokenSnapshot } from "../types";
+import { TokenSnapshot, TokenSnapshotV2 } from "../types";
 
 const keysMapping = {
   application: "Application",
@@ -166,6 +166,29 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
   }
 
   const toSave = [contract, safeMintTx, caller, owner, token];
+
+  if (contractForSnapshot.includes(contract.id)) {
+    let snapshot = await TokenSnapshotV2.get(owner.id);
+    if (!snapshot) {
+      snapshot = new TokenSnapshotV2(
+        owner.id,
+        owner.id,
+        token.identifier,
+        0,
+        timestamp,
+        tx.blockNumber,
+        token.id
+      );
+    }
+
+    snapshot.lastestBlockTimestamp = timestamp;
+    snapshot.latestBlockNumber = tx.blockNumber;
+    snapshot.latestIdentifier = token.identifier;
+    snapshot.latestTokenId = token.id;
+    snapshot.tokensMinted += 1;
+
+    toSave.push(snapshot);
+  }
 
   if (contractForSnapshot.includes(contract.id)) {
     const snapshot = new TokenSnapshot(
