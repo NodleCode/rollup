@@ -55,7 +55,7 @@ type ERC721Token @entity {
   approval: Account!
   uri: String
   timestamp: BigInt
-  content: String
+  content: String @index
   thumbnail: String
   channel: String
   name: String
@@ -318,3 +318,16 @@ type TokenSnapshot @entity {
   timestamp: BigInt! @index
 }
 
+type TokenSnapshotV2 @entity {
+  id: ID!
+  owner: Account! @index
+  latestIdentifier: BigInt @index
+  firstIdentifier: BigInt! @index
+  tokensMinted: Int!
+  fistBlockTimestamp: BigInt! @index
+  lastestBlockTimestamp: BigInt @index
+  latestBlockNumber: Int @index
+  firstBlockNumber: Int! @index
+  firstToken: ERC721Token! @index
+  latestToken: ERC721Token @index
+}
