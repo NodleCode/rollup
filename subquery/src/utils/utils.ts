@@ -53,7 +53,7 @@ export const fetchMetadata = async (
   const gateway = gateways[0];
   const url = cid.startsWith("https://")
     ? cid
-    : `https://${gateway}/ipfs/${strppedCid}`;
+    : `https://${gateway}/${strppedCid}`;
 
   try {
     const res = await fetch(url);
