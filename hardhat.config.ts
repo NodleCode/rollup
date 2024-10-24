@@ -38,7 +38,7 @@ const config: HardhatUserConfig = {
         },
     },
     zksolc: {
-        version: "1.5.3",
+        version: "1.4.1",
         settings: {
             // find all available options in the official documentation
             // https://era.zksync.io/docs/tools/hardhat/hardhat-zksync-solc.html#configuration
