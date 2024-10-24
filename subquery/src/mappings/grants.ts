@@ -131,7 +131,7 @@ export async function handleRenounced(event: RenouncedLog): Promise<void> {
 
   const action = new VestingScheduleRenounced(id, to, transaction.id);
 
-  const schedules = await VestingSchedule.getByCancelAuthorityId(from);
+  const schedules = await VestingSchedule.getByCancelAuthorityId(from, { limit: 100 });
 
   if (schedules && schedules.length > 0) {
     schedules.forEach((schedule) => {
@@ -200,7 +200,7 @@ export async function handleVestingSchedulesCanceled(
 
   const action = new VestingScheduleCanceled(id, to, transaction.id);
 
-  const schedules = await VestingSchedule.getByCancelAuthorityId(from);
+  const schedules = await VestingSchedule.getByCancelAuthorityId(from, { limit: 100 });
 
   if (schedules && schedules.length > 0) {
     schedules?.forEach((schedule) => {

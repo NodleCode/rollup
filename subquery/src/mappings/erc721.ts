@@ -88,6 +88,12 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
   assert(tx.args, "No tx.args");
   assert(tx.logs, "No tx.logs");
 
+  const receipt = await tx.receipt();
+
+  if (!receipt) {
+    // call failed, do nothing at the moment
+    return;
+  }
   // Call to the contract
   const contract = await fetchContract(String(tx.to).toLowerCase());
 
