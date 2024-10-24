@@ -1,9 +1,7 @@
 import { ethers } from "ethers";
 import fetch from "node-fetch";
-import { type } from "os";
 
-export const SEPOLIA_RPC_URL =
-  "https://wandering-distinguished-tree.zksync-mainnet.quiknode.pro/20c0bc25076ea895aa263c9296c6892eba46077c/";
+export const RPC_URL = process.env.RPC_URL || "https://mainnet.era.zksync.io";
 
 export async function checkERC20(address: string) {
   try {
@@ -51,7 +49,7 @@ export async function callContract(
 
   try {
     // Make the fetch call
-    const response = await fetch(SEPOLIA_RPC_URL, {
+    const response = await fetch(RPC_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
