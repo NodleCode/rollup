@@ -4,13 +4,16 @@
   "description": "SubQuery Project for Nodle Zk contracts",
   "main": "dist/index.js",
   "scripts": {
+    "mainnet-complete": "subql codegen -f mainnet-complete.ts",
+    "mainnet-click": "subql codegen -f mainnet-click.ts",
+    "testnet-complete": "subql codegen -f testnet-complete.ts",
+    "codegen": "npm run mainnet-complete && npm run mainnet-click && npm run testnet-complete",
     "build": "subql build && node enrich-dist.js",
-    "codegen": "subql codegen",
+    "test": "subql-node-ethereum test",
     "publish": "subql publish",
     "start:docker": "docker-compose pull && docker-compose up --remove-orphans",
-    "dev": "subql codegen && subql build && docker-compose pull && docker-compose up --remove-orphans",
-    "prepack": "rm -rf dist && npm run build",
-    "test": "subql build && subql-node-ethereum test"
+    "dev": "npm run codegen && npm run build && docker-compose pull && docker-compose up --remove-orphans",
+    "prepack": "rm -rf dist && npm run build"
   },
   "files": [
     "dist",
@@ -18,6 +21,7 @@
     "project.yaml"
   ],
   "dependencies": {
+    "@polkadot/util": "13.2.1",
     "@subql/common": "^5.1.4",
     "@subql/common-ethereum": "^4.5.4",
     "@subql/types-ethereum": "^4.0.0",
@@ -31,12 +35,8 @@
     "@subql/node-ethereum": "^5.1.6",
     "@subql/testing": "^2.2.2",
     "@subql/types": "^3.11.3",
-    "ethers": "^6.13.4",
+    "@typechain/ethers-v5": "^11.1.2",
+    "ethers": "^5.1.3",
     "typescript": "^5.6.3"
-  },
-  "exports": {
-    "mainnet-complete-entry": "./src/mainnet-complete-entry.ts",
-    "testnet-complete-entry": "./src/testnet-complete-entry.ts",
-    "mainnet-click-entry": "./src/mainnet-click-entry.ts"
   }
 }

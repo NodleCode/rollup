@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import fetch from "node-fetch";
+import { type } from "os";
 
 export const SEPOLIA_RPC_URL =
   "https://wandering-distinguished-tree.zksync-mainnet.quiknode.pro/20c0bc25076ea895aa263c9296c6892eba46077c/";
@@ -60,16 +61,28 @@ export async function callContract(
 
     const responseData = await response.json();
 
-    if (responseData.result) {
-      // Decode the result if needed
-      const decodedResult = iface.decodeFunctionResult(
-        methodName,
-        responseData.result
-      );
-      return decodedResult;
-    } else {
-      throw new Error(`RPC Error: ${responseData.error.message}`);
+    if (responseData !== null && typeof responseData === 'object') {
+      if ('result' in responseData && responseData.result !== null) {
+        if (ethers.utils.isBytesLike(responseData.result)) {
+          return iface.decodeFunctionResult(
+            methodName,
+            responseData.result
+          );
+        }
+        else {
+          return responseData.result;
+        }
+      }
+      if ('error' in responseData && responseData.error !== null) {
+        if (typeof responseData.error === 'object' && 'message' in responseData.error && responseData.error.message != null) {
+          throw new Error(`RPC Error: ${responseData.error.message}`);
+        }
+        else {
+          throw new Error(`RPC Error: ${responseData.error}`);
+        }
+      }
     }
+
   } catch (error: any) {
     throw new Error(`Fetch Error: ${error.message}`);
   }
