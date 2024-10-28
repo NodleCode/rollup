@@ -17,6 +17,12 @@ import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessContr
 abstract contract BasePaymaster is IPaymaster, AccessControl {
     bytes32 public constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
 
+    /**
+     * @notice Emitted when the paymaster withdraws funds to the specified address.
+     * @param amount The amount of funds withdrawn.
+     */
+    event Withdrawn(address to, uint256 amount);
+
     error AccessRestrictedToBootloader();
     error PaymasterFlowNotSupported();
     error NotEnoughETHInPaymasterToPayForTransaction();
@@ -85,6 +91,8 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
 
         (bool success,) = payable(to).call{value: amount}("");
         if (!success) revert FailedToWithdraw();
+
+        emit Withdrawn(to, amount);
     }
 
     receive() external payable {}

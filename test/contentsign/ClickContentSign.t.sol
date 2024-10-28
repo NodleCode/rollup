@@ -15,8 +15,7 @@ contract ClickContentSignTest is Test {
     address internal bob = vm.addr(2);
 
     function setUp() public {
-        vm.prank(alice);
-        paymaster = new WhitelistPaymaster(alice);
+        paymaster = new WhitelistPaymaster(alice, alice);
         nft = new ClickContentSign("Name", "Symbol", paymaster);
 
         address[] memory contracts = new address[](1);

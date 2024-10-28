@@ -13,8 +13,7 @@ contract NODLTest is Test {
     address internal bob = vm.addr(2);
 
     function setUp() public {
-        vm.prank(alice);
-        nodl = new NODL();
+        nodl = new NODL(alice);
     }
 
     function test_defaultACLs() public view {
