@@ -1,5 +1,5 @@
 import { ERC721Token } from "../types";
-import { fetchMetadata } from "../utils/utils";
+import { fetchMetadata } from "./utils";
 import { missingTokens } from "./missingTokens";
 
 const keysMapping = {

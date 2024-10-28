@@ -41,10 +41,8 @@ export async function handleNFTTransfer(event: TransferLog): Promise<void> {
       logger.info("Contract ID: " + contract.id);
       if (tokenUri && nodleContracts.includes(contract.id)) {
         const metadata = await fetchMetadata(String(tokenUri), [
-          "nodle-community-nfts.myfilebase.com",
-          "pinning.infura-ipfs.io",
-          "nodle-web-wallet.infura-ipfs.io",
-          "cloudflare-ipfs.com",
+          "nodle-community-nfts.myfilebase.com/ipfs",
+          "storage.googleapis.com/ipfs-backups",
         ]);
         logger.info("Metadata: " + JSON.stringify(metadata));
         if (metadata) {
