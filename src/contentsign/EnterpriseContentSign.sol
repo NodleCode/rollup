@@ -10,8 +10,8 @@ import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessContr
 contract EnterpriseContentSign is BaseContentSign, AccessControl {
     bytes32 public constant WHITELISTED_ROLE = keccak256("WHITELISTED_ROLE");
 
-    constructor(string memory name, string memory symbol) BaseContentSign(name, symbol) {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    constructor(string memory name, string memory symbol, address admin) BaseContentSign(name, symbol) {
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
 
     function supportsInterface(bytes4 interfaceId)

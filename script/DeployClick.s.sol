@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 pragma solidity 0.8.23;
 
 import {Script, console} from "forge-std/Script.sol";
@@ -21,7 +22,7 @@ contract DeployClick is Script {
     function run() public {
         vm.startBroadcast();
 
-        WhitelistPaymaster paymaster = new WhitelistPaymaster(withdrawer);
+        WhitelistPaymaster paymaster = new WhitelistPaymaster(whitelistAdmin, withdrawer);
         ClickContentSign nft = new ClickContentSign("ContentSign", "SIGNED", paymaster);
 
         address[] memory whitelist = new address[](1);

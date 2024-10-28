@@ -11,17 +11,26 @@ contract WhitelistPaymaster is BasePaymaster {
     mapping(address => bool) public isWhitelistedUser;
     mapping(address => bool) public isWhitelistedContract;
 
+    event WhitelistedContractsAdded(address[] contracts);
+    event WhitelistedContractsRemoved(address[] contracts);
+    event WhitelistedUsersAdded(address[] users);
+    event WhitelistedUsersRemoved(address[] users);
+
     error UserIsNotWhitelisted();
     error DestIsNotWhitelisted();
 
-    constructor(address withdrawer) BasePaymaster(msg.sender, withdrawer) {
-        _grantRole(WHITELIST_ADMIN_ROLE, msg.sender);
+    constructor(address admin, address withdrawer) BasePaymaster(admin, withdrawer) {
+        _grantRole(WHITELIST_ADMIN_ROLE, admin);
     }
 
     function addWhitelistedContracts(address[] calldata whitelistedContracts) external {
         _checkRole(WHITELIST_ADMIN_ROLE);
 
-        _setContractWhitelist(whitelistedContracts);
+        for (uint256 i = 0; i < whitelistedContracts.length; i++) {
+            isWhitelistedContract[whitelistedContracts[i]] = true;
+        }
+
+        emit WhitelistedContractsAdded(whitelistedContracts);
     }
 
     function removeWhitelistedContracts(address[] calldata whitelistedContracts) external {
@@ -30,6 +39,8 @@ contract WhitelistPaymaster is BasePaymaster {
         for (uint256 i = 0; i < whitelistedContracts.length; i++) {
             isWhitelistedContract[whitelistedContracts[i]] = false;
         }
+
+        emit WhitelistedContractsRemoved(whitelistedContracts);
     }
 
     function addWhitelistedUsers(address[] calldata users) external {
@@ -38,6 +49,8 @@ contract WhitelistPaymaster is BasePaymaster {
         for (uint256 i = 0; i < users.length; i++) {
             isWhitelistedUser[users[i]] = true;
         }
+
+        emit WhitelistedUsersAdded(users);
     }
 
     function removeWhitelistedUsers(address[] calldata users) external {
@@ -46,12 +59,8 @@ contract WhitelistPaymaster is BasePaymaster {
         for (uint256 i = 0; i < users.length; i++) {
             isWhitelistedUser[users[i]] = false;
         }
-    }
 
-    function _setContractWhitelist(address[] memory whitelistedContracts) internal {
-        for (uint256 i = 0; i < whitelistedContracts.length; i++) {
-            isWhitelistedContract[whitelistedContracts[i]] = true;
-        }
+        emit WhitelistedUsersRemoved(users);
     }
 
     function _validateAndPayGeneralFlow(address from, address to, uint256 /* requiredETH */ ) internal view override {

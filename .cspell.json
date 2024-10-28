@@ -1,0 +1,39 @@
+{
+    "version": "0.2",
+    "language": "en",
+    "files": [
+        "**/*.{sol,ts,md}"
+    ],
+    "ignorePaths": [
+        "node_modules",
+        "lib",
+        "out",
+        "cache",
+        "broadcast",
+        "artifacts-zk",
+        "deployments-zk",
+        "cache_hardhat-zk",
+        "zkout"
+    ],
+    "ignoreWords": [
+        "NODL",
+        "Nodle",
+        "depin",
+        "contentsign",
+        "matterlabs",
+        "zksync",
+        "zksolc",
+        "Parachain",
+        "subql",
+        "codegen",
+        "Datasource",
+        "ipfs",
+        "keccak",
+        "IERC",
+        "Mintable",
+        "BOOTLOADER",
+        "devcontainer",
+        "gasleft",
+        "chainid"
+    ]
+}
