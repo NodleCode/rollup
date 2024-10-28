@@ -11,7 +11,7 @@ import {
   SafeMintTransaction,
 } from "../types/abi-interfaces/Erc721Abi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
-import { contractForSnapshot } from "../utils/const";
+import { contractForSnapshot, nodleContracts } from "../utils/const";
 import { TokenSnapshot, TokenSnapshotV2 } from "../types";
 
 const keysMapping = {
@@ -129,7 +129,7 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
 
   token.uri = uri;
 
-  if (uri) {
+  if (nodleContracts.includes(contract.id)) {
     const metadata = await fetchMetadata(uri, [
       "nodle-community-nfts.myfilebase.com/ipfs",
       "storage.googleapis.com/ipfs-backups",
