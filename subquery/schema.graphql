@@ -325,7 +325,7 @@ type TokenSnapshotV2 @entity {
   firstIdentifier: BigInt! @index
   tokensMinted: Int!
   fistBlockTimestamp: BigInt! @index
-  lastestBlockTimestamp: BigInt @index
+  latestBlockTimestamp: BigInt @index
   latestBlockNumber: Int @index
   firstBlockNumber: Int! @index
   firstToken: ERC721Token! @index

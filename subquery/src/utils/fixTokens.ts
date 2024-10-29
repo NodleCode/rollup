@@ -8,7 +8,7 @@ const keysMapping = {
   contentType: "Content Type",
   duration: "Duration (sec)",
   captureDate: "Capture date",
-  longitude: "Longtitude",
+  longitude: "longitude",
   latitude: "Latitude",
   locationPrecision: "Location Precision",
 };

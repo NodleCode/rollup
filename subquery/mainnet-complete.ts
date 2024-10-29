@@ -37,14 +37,14 @@ const project: EthereumProject = {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 33999048, // This is the block that the contract was deployed on
       options: {
-        abi: "erc20",
+        abi: "NODL",
         address: "0xBD4372e44c5eE654dd838304006E1f0f69983154",
       },
       assets: new Map([
         [
-          "erc20",
+          "NODL",
           {
-            file: "./abis/erc20.abi.json",
+            file: "./abis/NODL.abi.json",
           },
         ],
       ]),
@@ -72,14 +72,14 @@ const project: EthereumProject = {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 33999048,
       options: {
-        abi: "migration",
+        abi: "NODLMigration",
         address: "0x5de7fe085ee66Fb48447e75AA8fb0598a080AEe0",
       },
       assets: new Map([
         [
-          "migration",
+          "NODLMigration",
           {
-            file: "./abis/migration.abi.json",
+            file: "./abis/NODLMigration.abi.json",
           },
         ],
       ]),
@@ -114,14 +114,14 @@ const project: EthereumProject = {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 39506626, // This is the block that the contract was deployed on
       options: {
-        abi: "erc721-a",
+        abi: "MigrationNFT",
         address: "0xd837cFb550b7402665499f136eeE7a37D608Eb18",
       },
       assets: new Map([
         [
-          "erc721-a",
+          "MigrationNFT",
           {
-            file: "./abis/erc721-a.abi.json",
+            file: "./abis/MigrationNFT.abi.json",
           },
         ],
       ]),
@@ -142,14 +142,14 @@ const project: EthereumProject = {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 42332281, // This is the block that the contract was deployed on
       options: {
-        abi: "grants",
+        abi: "Grants",
         address: "0xdAdF329E8b30D878b139074De163D3A591aAB394",
       },
       assets: new Map([
         [
-          "grants",
+          "Grants",
           {
-            file: "./abis/grants.abi.json",
+            file: "./abis/Grants.abi.json",
           },
         ],
       ]),
@@ -160,14 +160,14 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleClaimed",
             filter: {
-              topics: ["Claimed(address, uint256)"],
+              topics: ["Claimed(address, uint256, uint256, uint256)"],
             },
           },
           {
             kind: EthereumHandlerKind.Event,
             handler: "handleRenounced",
             filter: {
-              topics: ["Renounced(address, address)"],
+              topics: ["Renounced(address, address, uint256, uint256)"],
             },
           },
           {
@@ -183,7 +183,7 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleVestingSchedulesCanceled",
             filter: {
-              topics: ["VestingSchedulesCanceled(address, address)"],
+              topics: ["VestingSchedulesCanceled(address, address, uint256, uint256)"],
             },
           },
         ],
@@ -193,14 +193,14 @@ const project: EthereumProject = {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 42332281, // This is the block that the contract was deployed on
       options: {
-        abi: "grantsMigration",
+        abi: "GrantsMigration",
         address: "0xF81b3b954221BeDcf762cd18FEc1A22D25016B2E",
       },
       assets: new Map([
         [
-          "grantsMigration",
+          "GrantsMigration",
           {
-            file: "./abis/grantsMigration.abi.json",
+            file: "./abis/GrantsMigration.abi.json",
           },
         ],
       ]),
@@ -235,14 +235,14 @@ const project: EthereumProject = {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 44627456, // This is the block that the contract was deployed on
       options: {
-        abi: "rewards",
+        abi: "Rewards",
         address: "0xe629b208046f7a33de3a43931c9fe505a7ac3d36",
       },
       assets: new Map([
         [
-          "rewards",
+          "Rewards",
           {
-            file: "./abis/rewards.abi.json",
+            file: "./abis/Rewards.abi.json",
           },
         ],
       ]),

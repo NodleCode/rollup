@@ -1,7 +1,7 @@
 import assert from "assert";
 import { fetchContract, fetchToken } from "../utils/erc721";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
-import { ApprovalLog, TransferLog } from "../types/abi-interfaces/Erc721AAbi";
+import { ApprovalLog, TransferLog } from "../types/abi-interfaces/MigrationNFTAbi";
 import { ERC721Transfer } from "../types";
 import { abi, callContract, nodleContracts } from "../utils/const";
 
@@ -10,8 +10,6 @@ export async function handleNFTTransfer(event: TransferLog): Promise<void> {
 
   const contract = await fetchContract(event.address);
   if (contract) {
-    // logger.info("handleNFTTransfer");
-    // logger.info(JSON.stringify(event.args));
     const timestamp = event.block.timestamp * BigInt(1000);
     const from = await fetchAccount(event.args[0], timestamp);
     const to = await fetchAccount(event.args[1], timestamp);

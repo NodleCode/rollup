@@ -5,7 +5,7 @@ import {
   VoteStartedLog,
   VotedLog,
   WithdrawnLog,
-} from "../types/abi-interfaces/MigrationAbi";
+} from "../types/abi-interfaces/NODLMigrationAbi";
 import { fetchProposal, fetchContract } from "../utils/migration";
 
 export async function handleProposal(event: VoteStartedLog): Promise<void> {

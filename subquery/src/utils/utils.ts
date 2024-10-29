@@ -48,12 +48,12 @@ export const fetchMetadata = async (
     return null;
   }
 
-  const strppedCid = String(cid).replace("ipfs://", "");
+  const strippedCid = String(cid).replace("ipfs://", "");
 
   const gateway = gateways[0];
   const url = cid.startsWith("https://")
     ? cid
-    : `https://${gateway}/${strppedCid}`;
+    : `https://${gateway}/${strippedCid}`;
 
   try {
     const res = await fetch(url);

@@ -1,5 +1,5 @@
 import { fetchContract } from "../utils/erc20";
-import { ApprovalLog, TransferLog } from "../types/abi-interfaces/Erc20Abi";
+import { ApprovalLog, TransferLog } from "../types/abi-interfaces/NODLAbi";
 import { fetchAccount, fetchTransaction } from "../utils/utils";
 import { ERC20Approval, ERC20Transfer, Wallet } from "../types";
 import { handleSnapshot, handleStatSnapshot } from "../utils/snapshot";
@@ -16,7 +16,7 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
     const timestamp = event.block.timestamp * BigInt(1000);
     const from = await fetchAccount(event.args.from, timestamp);
     const to = await fetchAccount(event.args.to, timestamp);
-    const emmiter = await fetchAccount(event.transaction.from, timestamp);
+    const emitter = await fetchAccount(event.transaction.from, timestamp);
     const value = event.args.value.toBigInt();
 
     const hash = event.transaction.hash;
@@ -42,7 +42,7 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
         .concat(hash)
         .concat("/")
         .concat(`${event.logIndex}`),
-      emmiter.id,
+      emitter.id,
       transfer.id,
       timestamp,
       from.id,
@@ -64,7 +64,7 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
 
     transferEvent.hash = hash;
     transferEvent.contractId = contract.id;
-    transferEvent.emitterId = emmiter.id;
+    transferEvent.emitterId = emitter.id;
     //logger.info("Saving transferEvent");
     return transferEvent.save();
   }
@@ -85,7 +85,7 @@ export async function handleERC20Approval(event: ApprovalLog): Promise<void> {
     const value = event.args.value.toBigInt();
 
     const hash = event.transaction.hash;
-    const emmiter = await fetchAccount(event.transaction.from, timestamp);
+    const emitter = await fetchAccount(event.transaction.from, timestamp);
 
     const transfer = await fetchTransaction(
       hash,
@@ -95,7 +95,7 @@ export async function handleERC20Approval(event: ApprovalLog): Promise<void> {
 
     const approval = new ERC20Approval(
       contract.id.concat("/").concat(hash),
-      emmiter.id,
+      emitter.id,
       transfer.id,
       timestamp,
       owner.id,

@@ -1,7 +1,10 @@
-//Exports all handler functions
-export * from "./mappings/erc721";
-export * from "./mappings/erc721a";
-export * from "./mappings/migration";
-export * from "./mappings/erc20";
+export * from "./mappings/click-content-sign";
+export { handleApproval as handleMigrationNftApproval, handleNFTTransfer } from "./mappings/migration-nft";
+
+export * from "./mappings/nodl";
+export * from "./mappings/nodl-migration";
+
 export * from "./mappings/grants";
+export * from "./mappings/grants-migration";
+
 export * from "./mappings/rewards";

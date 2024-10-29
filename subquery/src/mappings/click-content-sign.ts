@@ -7,9 +7,10 @@ import {
 } from "../utils/erc721";
 import {
   TransferLog,
+  ApprovalLog,
   ApprovalForAllLog,
   SafeMintTransaction,
-} from "../types/abi-interfaces/Erc721Abi";
+} from "../types/abi-interfaces/ClickContentSignAbi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
 import { contractForSnapshot, nodleContracts } from "../utils/const";
 import { TokenSnapshot, TokenSnapshotV2 } from "../types";
@@ -20,7 +21,7 @@ const keysMapping = {
   contentType: "Content Type",
   duration: "Duration (sec)",
   captureDate: "Capture date",
-  longitude: "Longtitude",
+  longitude: "longitude",
   latitude: "Latitude",
   locationPrecision: "Location Precision",
 };
@@ -37,35 +38,13 @@ function convertArrayToObject(arr: any[]) {
 
 export async function handleTransfer(event: TransferLog): Promise<void> {
   assert(event.args, "No event.args");
-
-  const contract = await fetchContract(event.address);
-  /* if (contract) {
-    const from = await fetchAccount(event.args.from);
-    const to = await fetchAccount(event.args.to);
-
-    const tokenId = event.args.tokenId;
-
-    const token = await fetchToken(
-      `${contract.id}/${tokenId}`,
-      contract.id,
-      tokenId.toBigInt(),
-      from.id,
-      from.id
-    );
-
-    token.ownerId = to.id;
-
-    return token.save();
-  } */
+  // NOTE: Since we have tracked the safeMint call directly, we would not need to handle this event for now.
 }
 
-// This event is not being emitted by the contract, it is an issue?
-/* export function handleApproval(event: ApprovalLog): Promise<void> {
-  logger.info("handleApproval: " + JSON.stringify(event));
-  // const account = await fetchAccount();
-
-  return Promise.resolve();
-} */
+export async function handleApproval(event: ApprovalLog) {
+  assert(event.args, "No event.args");
+  // NOTE: If you are about to use this event, please first check if it's at all emitted.
+}
 
 export async function handleApprovalForAll(event: ApprovalForAllLog) {
   assert(event.args, "No event.args");
@@ -185,7 +164,7 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
       );
     }
 
-    snapshot.lastestBlockTimestamp = timestamp;
+    snapshot.latestBlockTimestamp = timestamp;
     snapshot.latestBlockNumber = tx.blockNumber;
     snapshot.latestIdentifier = token.identifier;
     snapshot.latestTokenId = token.id;

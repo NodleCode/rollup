@@ -1,5 +1,5 @@
 import { Account, AccountSnapshot, StatSnapshot } from "../types";
-import { TransferLog } from "../types/abi-interfaces/Erc20Abi";
+import { TransferLog } from "../types/abi-interfaces/NODLAbi";
 import { MintBatchRewardTransaction } from "../types/abi-interfaces/RewardsAbi";
 
 function getDayString(timestamp: bigint) {
@@ -25,7 +25,7 @@ export async function handleSnapshot(
     dayTimestamp,
     timestamp
   );
-  
+
   dailySnapshot.balance = account.balance;
 
   if (amount > BigInt(0)) {
@@ -73,7 +73,7 @@ export const handleStatSnapshot = async (timestamp: bigint, transferAmount: bigi
   if (transferAmount > BigInt(0)) {
     snapshot.totalTransfers++;
   }
-  if (rewardAmount > BigInt(0)) { 
+  if (rewardAmount > BigInt(0)) {
     snapshot.totalRewards++;
   }
   snapshot.newWallets += newWallets;

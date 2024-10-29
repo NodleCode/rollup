@@ -59,6 +59,21 @@
   },
   {
     "inputs": [],
+    "name": "AmountMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EmptySchedules",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidZeroForMinVotes",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "MaxOraclesExceeded",
     "type": "error"
   },
@@ -71,6 +86,11 @@
       }
     ],
     "name": "NotAnOracle",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotEnoughOracles",
     "type": "error"
   },
   {
@@ -104,6 +124,11 @@
       }
     ],
     "name": "ParametersChanged",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TooManySchedules",
     "type": "error"
   },
   {
@@ -190,6 +215,19 @@
   {
     "inputs": [],
     "name": "MAX_ORACLES",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_SCHEDULES",
     "outputs": [
       {
         "internalType": "uint8",
@@ -395,14 +433,14 @@
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      },
-      {
         "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "name": "voted",

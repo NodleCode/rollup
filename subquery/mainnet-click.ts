@@ -37,50 +37,50 @@ const project: EthereumProject = {
       kind: EthereumDatasourceKind.Runtime,
       startBlock: 31551522, // This is the block that the contract was deployed on
       options: {
-        abi: "erc721",
+        abi: "ClickContentSign",
         address: "0x95b3641d549f719eb5105f9550Eca4A7A2F305De",
       },
       assets: new Map([
         [
-          "erc721",
+          "ClickContentSign",
           {
-            file: "./abis/erc721.abi.json",
+            file: "./abis/ClickContentSign.abi.json",
           },
         ],
         [
-          "erc721-a",
+          "MigrationNFT",
           {
-            file: "./abis/erc721-a.abi.json",
+            file: "./abis/MigrationNFT.abi.json",
           },
         ],
         [
-          "erc20",
+          "NODL",
           {
-            file: "./abis/erc20.abi.json",
+            file: "./abis/NODL.abi.json",
           },
         ],
         [
-          "migration",
+          "NODLMigration",
           {
-            file: "./abis/migration.abi.json",
+            file: "./abis/NODLMigration.abi.json",
           },
         ],
         [
-          "grants",
+          "Grants",
           {
-            file: "./abis/grants.abi.json",
+            file: "./abis/Grants.abi.json",
           },
         ],
         [
-          "grantsMigration",
+          "GrantsMigration",
           {
-            file: "./abis/grantsMigration.abi.json",
+            file: "./abis/GrantsMigration.abi.json",
           },
         ],
         [
-          "rewards",
+          "Rewards",
           {
-            file: "./abis/rewards.abi.json",
+            file: "./abis/Rewards.abi.json",
           },
         ],
       ]),
