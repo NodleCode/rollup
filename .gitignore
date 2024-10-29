@@ -26,3 +26,6 @@ subquery/project.yaml
 artifacts-zk/
 cache-zk/
 deployments-zk/
+
+artifacts-zk-1.4.1/
+cache_hardhat-zk/
