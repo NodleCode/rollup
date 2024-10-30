@@ -47,17 +47,17 @@ type ERC721Contract @entity {
   operators: [ERC721Operator!]! @derivedFrom(field: "contract")
   transfers: [ERC721Transfer!]! @derivedFrom(field: "contract")
 }
-type ERC721Token @entity {
+type ERC721Token @entity @compositeIndexes(fields: [["owner", "contract"]]) {
   id: ID!
   contract: ERC721Contract!
   identifier: BigInt!
-  owner: Account!
+  owner: Account! @index
   approval: Account!
   uri: String
   timestamp: BigInt
   content: String @index
   thumbnail: String
-  channel: String
+  channel: String @index
   name: String
   contentType: String
   transactionHash: String
@@ -162,15 +162,17 @@ type ERC20Contract @entity {
   approvals: [ERC20Approval!]! @derivedFrom(field: "contract")
 }
 
-type ERC20Transfer implements Event @entity {
+type ERC20Transfer implements Event
+  @entity
+  @compositeIndexes(fields: [["from", "to"]]) {
   id: ID!
   emitter: Account!
   transaction: Transaction!
   timestamp: BigInt! @index
   contract: ERC20Contract
   hash: String @index
-  from: Account!
-  to: Account!
+  from: Account! @index
+  to: Account! @index
   value: BigInt!
 }
 
@@ -330,4 +332,18 @@ type TokenSnapshotV2 @entity {
   firstBlockNumber: Int! @index
   firstToken: ERC721Token! @index
   latestToken: ERC721Token @index
+}
+
+type ERC20TransferV2 implements Event
+  @entity
+  @compositeIndexes(fields: [["from", "to"]]) {
+  id: ID!
+  emitter: String!
+  transaction: String!
+  timestamp: BigInt! @index
+  contract: String
+  hash: String @index
+  from: String! @index
+  to: String! @index
+  value: BigInt!
 }

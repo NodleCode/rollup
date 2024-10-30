@@ -1,7 +1,7 @@
 import { fetchContract } from "../utils/erc20";
 import { ApprovalLog, TransferLog } from "../types/abi-interfaces/NODLAbi";
 import { fetchAccount, fetchTransaction } from "../utils/utils";
-import { ERC20Approval, ERC20Transfer, Wallet } from "../types";
+import { ERC20Approval, ERC20Transfer, ERC20TransferV2, Wallet } from "../types";
 import { handleSnapshot, handleStatSnapshot } from "../utils/snapshot";
 
 export async function handleERC20Transfer(event: TransferLog): Promise<void> {
@@ -50,11 +50,26 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
       value
     );
 
+    const lightTransfer = new ERC20TransferV2(
+      contract.id
+        .concat("/")
+        .concat(hash)
+        .concat("/")
+        .concat(`${event.logIndex}`),
+      emitter.id,
+      transfer.id,
+      timestamp,
+      from.id,
+      to.id,
+      value
+    );
+
     from.balance =
       (from.balance || BigInt(0)) - (value > 0 ? value : BigInt(0));
     to.balance = (to.balance || BigInt(0)) + value;
 
     await Promise.all([
+      lightTransfer.save(),
       from.save(),
       to.save(),
       handleSnapshot(event, from, value),
