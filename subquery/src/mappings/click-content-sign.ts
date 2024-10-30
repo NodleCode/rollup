@@ -5,15 +5,10 @@ import {
   fetchToken,
   getApprovalLog,
 } from "../utils/erc721";
-import {
-  TransferLog,
-  ApprovalLog,
-  ApprovalForAllLog,
-  SafeMintTransaction,
-} from "../types/abi-interfaces/ClickContentSignAbi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
 import { contractForSnapshot, nodleContracts } from "../utils/const";
-import { TokenSnapshot, TokenSnapshotV2 } from "../types";
+import { TokenSnapshot } from "../types";
+import { ApprovalForAllLog, SafeMintTransaction, TransferLog } from "../types/abi-interfaces/ClickContentSignAbi";
 
 const keysMapping = {
   application: "Application",
@@ -21,7 +16,7 @@ const keysMapping = {
   contentType: "Content Type",
   duration: "Duration (sec)",
   captureDate: "Capture date",
-  longitude: "longitude",
+  longitude: "Longtitude",
   latitude: "Latitude",
   locationPrecision: "Location Precision",
 };
@@ -38,13 +33,35 @@ function convertArrayToObject(arr: any[]) {
 
 export async function handleTransfer(event: TransferLog): Promise<void> {
   assert(event.args, "No event.args");
-  // NOTE: Since we have tracked the safeMint call directly, we would not need to handle this event for now.
+
+  const contract = await fetchContract(event.address);
+  /* if (contract) {
+    const from = await fetchAccount(event.args.from);
+    const to = await fetchAccount(event.args.to);
+
+    const tokenId = event.args.tokenId;
+
+    const token = await fetchToken(
+      `${contract.id}/${tokenId}`,
+      contract.id,
+      tokenId.toBigInt(),
+      from.id,
+      from.id
+    );
+
+    token.ownerId = to.id;
+
+    return token.save();
+  } */
 }
 
-export async function handleApproval(event: ApprovalLog) {
-  assert(event.args, "No event.args");
-  // NOTE: If you are about to use this event, please first check if it's at all emitted.
-}
+// This event is not being emitted by the contract, it is an issue?
+/* export function handleApproval(event: ApprovalLog): Promise<void> {
+  logger.info("handleApproval: " + JSON.stringify(event));
+  // const account = await fetchAccount();
+
+  return Promise.resolve();
+} */
 
 export async function handleApprovalForAll(event: ApprovalForAllLog) {
   assert(event.args, "No event.args");
@@ -67,12 +84,6 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
   assert(tx.args, "No tx.args");
   assert(tx.logs, "No tx.logs");
 
-  const receipt = await tx.receipt();
-
-  if (!receipt) {
-    // call failed, do nothing at the moment
-    return;
-  }
   // Call to the contract
   const contract = await fetchContract(String(tx.to).toLowerCase());
 
@@ -150,30 +161,7 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
 
   const toSave = [contract, safeMintTx, caller, owner, token];
 
-  if (contractForSnapshot.includes(contract.id)) {
-    let snapshot = await TokenSnapshotV2.get(owner.id);
-    if (!snapshot) {
-      snapshot = new TokenSnapshotV2(
-        owner.id,
-        owner.id,
-        token.identifier,
-        0,
-        timestamp,
-        tx.blockNumber,
-        token.id
-      );
-    }
-
-    snapshot.latestBlockTimestamp = timestamp;
-    snapshot.latestBlockNumber = tx.blockNumber;
-    snapshot.latestIdentifier = token.identifier;
-    snapshot.latestTokenId = token.id;
-    snapshot.tokensMinted += 1;
-
-    toSave.push(snapshot);
-  }
-
-  if (contractForSnapshot.includes(contract.id)) {
+  /* if (contractForSnapshot.includes(contract.id)) {
     const snapshot = new TokenSnapshot(
       token.id,
       owner.id,
@@ -184,6 +172,6 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
     );
 
     toSave.push(snapshot);
-  }
+  }*/
   return Promise.all(toSave.map((entity) => entity.save()));
 }
