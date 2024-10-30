@@ -75,7 +75,7 @@ export const fetchMetadata = async (
 
     const toMatch = ["Unexpected token I in JSON at position 0"];
 
-    if (err instanceof AbortError && err.name === "AbortError") {
+    if ((err as any)?.name === "AbortError") {
       logger.error("Request timed out");
     }
 
