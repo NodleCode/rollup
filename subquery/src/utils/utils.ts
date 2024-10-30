@@ -5,7 +5,7 @@ export async function fetchAccount(
   address: string,
   timestamp?: bigint
 ): Promise<Account> {
-  let account = await Account.get(address);
+  let account = await Account.get(String(address).toLowerCase());
 
   if (!account) {
     account = new Account(address);
