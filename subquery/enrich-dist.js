@@ -4,6 +4,10 @@ const filePath = './dist/index.js';
 const contentToAdd = `var base64chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
+    if (typeof URLSearchParams === "undefined") {
+      global.URLSearchParams = require("url").URLSearchParams;
+    }
+      
     var atob = function (input) {
     var str = String(input).replace(/=+$/, "");
     if (str.length % 4 == 1) {
