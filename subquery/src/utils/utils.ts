@@ -1,5 +1,6 @@
 import { Account, Transaction } from "../types";
 import fetch, { AbortError } from "node-fetch";
+import AbortController from "abort-controller";
 
 export async function fetchAccount(
   address: string,
