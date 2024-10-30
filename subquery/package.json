@@ -21,7 +21,6 @@
     "project.yaml"
   ],
   "dependencies": {
-    "@polkadot/util": "13.2.1",
     "@subql/common": "^5.1.4",
     "@subql/common-ethereum": "^4.5.4",
     "@subql/types-ethereum": "^4.0.0",
