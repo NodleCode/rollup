@@ -1,3 +1,4 @@
+require("dotenv").config();
 import {
   EthereumProject,
   EthereumDatasourceKind,
@@ -27,9 +28,7 @@ const project: EthereumProject = {
   },
   network: {
     chainId: "300", // zKsync sepolia testnet
-    endpoint: [
-      "https://shy-cosmopolitan-telescope.zksync-sepolia.quiknode.pro/7dca91c43e87ec74294608886badb962826e62a0/",
-    ],
+    endpoint: [process.env.ZKSYNC_TESTNET_RPC!],
   },
   dataSources: [
     {
@@ -232,7 +231,9 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleVestingSchedulesCanceled",
             filter: {
-              topics: ["VestingSchedulesCanceled(address, address, uint256, uint256)"],
+              topics: [
+                "VestingSchedulesCanceled(address, address, uint256, uint256)",
+              ],
             },
           },
         ],

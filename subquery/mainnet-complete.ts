@@ -1,3 +1,4 @@
+require("dotenv").config();
 import {
   EthereumProject,
   EthereumDatasourceKind,
@@ -28,6 +29,7 @@ const project: EthereumProject = {
   network: {
     chainId: "324", // zKsync mainnet
     endpoint: [
+      process.env.ZKSYNC_MAINNET_RPC!,
       "https://mainnet.era.zksync.io",
     ],
   },
@@ -182,7 +184,9 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleVestingSchedulesCanceled",
             filter: {
-              topics: ["VestingSchedulesCanceled(address, address, uint256, uint256)"],
+              topics: [
+                "VestingSchedulesCanceled(address, address, uint256, uint256)",
+              ],
             },
           },
         ],

@@ -11,7 +11,7 @@
     "build": "subql build && node enrich-dist.js",
     "test": "subql-node-ethereum test",
     "publish": "subql publish",
-    "start:docker": "docker-compose pull && docker-compose up --remove-orphans",
+    "start:docker": "export $(grep -v '^#' .env | xargs) && cp ${PROJECT_FILE} ./project.yaml && docker-compose pull && docker-compose up --remove-orphans",
     "dev": "npm run codegen && npm run build && docker-compose pull && docker-compose up --remove-orphans",
     "prepack": "rm -rf dist && npm run build"
   },
@@ -27,11 +27,12 @@
     "@subql/validator": "^2.2.0",
     "@types/node-fetch": "^2.6.11",
     "assert": "^2.1.0",
+    "dotenv": "^16.4.5",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@subql/cli": "^5.3.0",
-    "@subql/node-ethereum": "^5.1.6",
+    "@subql/node-ethereum": "^5.1.7",
     "@subql/testing": "^2.2.2",
     "@subql/types": "^3.11.3",
     "@typechain/ethers-v5": "^11.1.2",
