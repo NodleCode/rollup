@@ -1,7 +1,10 @@
 import { ethers } from "ethers";
 import fetch from "node-fetch";
 
-export const RPC_URL = process.env.RPC_URL || "https://mainnet.era.zksync.io";
+export const RPC_URL =
+  process.env.RPC_URL ||
+  process.env.ZKSYNC_MAINNET_RPC ||
+  "https://mainnet.era.zksync.io";
 
 export async function checkERC20(address: string) {
   try {

@@ -21,6 +21,8 @@ subquery/dist/
 subquery/.data/
 subquery/**/types/
 subquery/project.yaml
+subquery/mainnet*.yaml
+subquery/testnet*.yaml
 
 # ZKSync files
 artifacts-zk/
