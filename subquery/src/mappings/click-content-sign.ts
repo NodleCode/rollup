@@ -118,9 +118,9 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
   token.transactionHash = tx.hash;
 
   token.uri = uri;
-
+  
   if (nodleContracts.includes(contract.id)) {
-    const metadata = await fetchMetadata(uri, [
+    const metadata = await fetchMetadata(String(uri), [
       "nodle-community-nfts.myfilebase.com/ipfs",
       "storage.googleapis.com/ipfs-backups",
     ]);
@@ -157,6 +157,8 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
         }
       }
     }
+  } else {
+    logger.error("Contract not found in nodleContracts");
   }
 
   const toSave = [contract, safeMintTx, caller, owner, token];
@@ -173,5 +175,5 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
 
     toSave.push(snapshot);
   }*/
-  return Promise.all(toSave.map((entity) => entity.save()));
+  return Promise.all(toSave.map((entity) => entity?.save()));
 }

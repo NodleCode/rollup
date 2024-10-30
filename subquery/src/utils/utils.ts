@@ -56,10 +56,11 @@ export const fetchMetadata = async (
     : `https://${gateway}/${strippedCid}`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url)
     return await res.json();
   } catch (err) {
-    logger.error(err);
+    logger.error(`Error fetching metadata for CID: ${url}`);
+
     const toMatch = ["Unexpected token I in JSON at position 0"];
 
     if (err instanceof SyntaxError && toMatch.includes(err.message)) {

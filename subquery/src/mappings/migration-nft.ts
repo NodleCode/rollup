@@ -35,14 +35,14 @@ export async function handleNFTTransfer(event: TransferLog): Promise<void> {
       ]).catch((error) => {
         return null;
       });
-      logger.info("Token URI: " + tokenUri);
-      logger.info("Contract ID: " + contract.id);
+      logger.info("Token URI: " + String(tokenUri));
+      
       if (tokenUri && nodleContracts.includes(contract.id)) {
         const metadata = await fetchMetadata(String(tokenUri), [
           "nodle-community-nfts.myfilebase.com/ipfs",
           "storage.googleapis.com/ipfs-backups",
         ]);
-        logger.info("Metadata: " + JSON.stringify(metadata));
+        
         if (metadata) {
           token.content = metadata.content || metadata.image || "";
           token.name = metadata.title || metadata.name || "";
@@ -95,13 +95,11 @@ export async function handleApproval(event: ApprovalLog): Promise<void> {
       ]).catch((error) => {
         return null;
       });
-      logger.info("Token URI: " + tokenUri);
+      logger.info("Token URI: " + String(tokenUri));
       if (tokenUri && nodleContracts.includes(contract.id)) {
         const metadata = await fetchMetadata(String(tokenUri), [
-          "nodle-community-nfts.myfilebase.com",
-          "pinning.infura-ipfs.io",
-          "nodle-web-wallet.infura-ipfs.io",
-          "cloudflare-ipfs.com",
+          "nodle-community-nfts.myfilebase.com/ipfs",
+          "storage.googleapis.com/ipfs-backups",
         ]);
 
         if (metadata) {

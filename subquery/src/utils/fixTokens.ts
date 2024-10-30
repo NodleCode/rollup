@@ -40,9 +40,6 @@ const fixItems = async (): Promise<any> => {
         const metadata = await fetchMetadata(token.uri, [
           "nodle-community-nfts.myfilebase.com/ipfs",
           "storage.googleapis.com/ipfs-backups",
-          //  'pinning.infura-ipfs.io',
-          //  'nodle-web-wallet.infura-ipfs.io',
-          //  'cloudflare-ipfs.com',
         ]);
 
         if (metadata) {
