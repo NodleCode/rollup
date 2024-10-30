@@ -1,3 +1,4 @@
+require("dotenv").config();
 import {
   EthereumProject,
   EthereumDatasourceKind,
@@ -47,40 +48,53 @@ const project: EthereumProject = {
             file: "./abis/ClickContentSign.abi.json",
           },
         ],
-        [
-          "MigrationNFT",
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
           {
-            file: "./abis/MigrationNFT.abi.json",
+            kind: EthereumHandlerKind.Call,
+            handler: "handleSafeMint",
+            filter: {
+              function: "safeMint(address,string)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleApproval",
+            filter: {
+              topics: ["Approval(address,address,uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleApprovalForAll",
+            filter: {
+              topics: ["ApprovalForAll(address,address,bool)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleTransfer",
+            filter: {
+              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+            },
           },
         ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 32739526, // This is the block that the contract was deployed on
+      options: {
+        abi: "ClickContentSign",
+        address: "0xe980886e4072d32784187D547F9663eFef50f58F",
+      },
+      assets: new Map([
         [
-          "NODL",
+          "ClickContentSign",
           {
-            file: "./abis/NODL.abi.json",
-          },
-        ],
-        [
-          "NODLMigration",
-          {
-            file: "./abis/NODLMigration.abi.json",
-          },
-        ],
-        [
-          "Grants",
-          {
-            file: "./abis/Grants.abi.json",
-          },
-        ],
-        [
-          "GrantsMigration",
-          {
-            file: "./abis/GrantsMigration.abi.json",
-          },
-        ],
-        [
-          "Rewards",
-          {
-            file: "./abis/Rewards.abi.json",
+            file: "./abis/ClickContentSign.abi.json",
           },
         ],
       ]),
@@ -95,10 +109,143 @@ const project: EthereumProject = {
             },
           },
           {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleApprove",
+            filter: {
+              function: "approve(address,uint256)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleApproval",
+            filter: {
+              topics: ["Approval(address,address,uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleApprovalForAll",
+            filter: {
+              topics: ["ApprovalForAll(address,address,bool)"],
+            },
+          },
+          {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
-              topics: ["Transfer(address,address,uint256)"],
+              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 32739593, // This is the block that the contract was deployed on
+      options: {
+        abi: "ClickContentSign",
+        address: "0x6FE81f2fDE5775355962B7F3CC9b0E1c83970E15",
+      },
+      assets: new Map([
+        [
+          "ClickContentSign",
+          {
+            file: "./abis/ClickContentSign.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleSafeMint",
+            filter: {
+              function: "safeMint(address,string)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleApprove",
+            filter: {
+              function: "approve(address,uint256)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleApproval",
+            filter: {
+              topics: ["Approval(address,address,uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleApprovalForAll",
+            filter: {
+              topics: ["ApprovalForAll(address,address,bool)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleTransfer",
+            filter: {
+              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 33492696, // This is the block that the contract was deployed on
+      options: {
+        abi: "ClickContentSign",
+        address: "0x48e5c6f97b00Db0A4F74B1C1bc8ecd78452dDF6F",
+      },
+      assets: new Map([
+        [
+          "ClickContentSign",
+          {
+            file: "./abis/ClickContentSign.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleSafeMint",
+            filter: {
+              function: "safeMint(address,string)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleApprove",
+            filter: {
+              function: "approve(address,uint256)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleApproval",
+            filter: {
+              topics: ["Approval(address,address,uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleApprovalForAll",
+            filter: {
+              topics: ["ApprovalForAll(address,address,bool)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleTransfer",
+            filter: {
+              topics: ["Transfer(address from,address to,uint256 tokenId)"],
             },
           },
         ],
