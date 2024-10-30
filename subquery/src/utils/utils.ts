@@ -1,5 +1,5 @@
 import { Account, Transaction } from "../types";
-import fetch from "node-fetch";
+import fetch, { AbortError } from "node-fetch";
 
 export async function fetchAccount(
   address: string,
@@ -55,18 +55,35 @@ export const fetchMetadata = async (
     ? cid
     : `https://${gateway}/${strippedCid}`;
 
+  const timeout = 5000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   try {
-    const res = await fetch(url)
-    return await res.json();
+    const res = await fetch(url, { signal: controller.signal as any });
+
+    if (!res?.ok) {
+      throw new Error(`HTTP error! status: ${res?.status}`);
+    }
+
+    const data = await res.json();
+
+    return data;
   } catch (err) {
     logger.error(`Error fetching metadata for CID: ${url}`);
 
     const toMatch = ["Unexpected token I in JSON at position 0"];
+
+    if (err instanceof AbortError && err.name === "AbortError") {
+      logger.error("Request timed out");
+    }
 
     if (err instanceof SyntaxError && toMatch.includes(err.message)) {
       return null;
     }
 
     return fetchMetadata(cid, gateways.slice(1));
+  } finally {
+    clearTimeout(timeoutId);
   }
 };
