@@ -56,7 +56,9 @@ export const fetchMetadata = async (
     : `https://${gateway}/${strippedCid}`;
 
   try {
-    const res = await fetch(url)
+    const res = await fetch(url, {
+      timeout: 5000,
+    })
     return await res.json();
   } catch (err) {
     logger.error(`Error fetching metadata for CID: ${url}`);
