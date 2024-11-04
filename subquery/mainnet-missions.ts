@@ -45,7 +45,7 @@ const project: EthereumProject = {
         [
           "NODL",
           {
-            file: "./abis/erc20.abi.json",
+            file: "./abis/NODL.abi.json",
           },
         ],
       ]),
@@ -64,7 +64,7 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 31551522, // This is the block that the contract was deployed on
+      startBlock: 33999048, // This is the block that the contract was deployed on
       options: {
         abi: "erc721",
         address: "0x95b3641d549f719eb5105f9550Eca4A7A2F305De",
@@ -73,7 +73,7 @@ const project: EthereumProject = {
         [
           "erc721",
           {
-            file: "./abis/erc721.abi.json",
+            file: "./abis/ClickContentSign.abi.json",
           },
         ],
       ]),

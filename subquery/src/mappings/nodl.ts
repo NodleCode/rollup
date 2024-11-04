@@ -1,11 +1,14 @@
 import { fetchContract } from "../utils/erc20";
 import { ApprovalLog, TransferLog } from "../types/abi-interfaces/NODLAbi";
 import { fetchAccount, fetchTransaction } from "../utils/utils";
-import { ERC20Approval, ERC20Transfer, ERC20TransferV2, Wallet } from "../types";
-import { handleSnapshot, handleStatSnapshot } from "../utils/snapshot";
-import { Erc20Abi__factory } from "../types/contracts";
-import { RPC_URL } from "../utils/const";
-import { ethers } from "ethers";
+import {
+  ERC20Approval,
+  ERC20Transfer,
+  ERC20TransferV2,
+  Wallet,
+} from "../types";
+import { handleSnapshot } from "../utils/snapshot";
+import { abi, callContract } from "../utils/const";
 
 export async function handleERC20Transfer(event: TransferLog): Promise<void> {
   if (!event.args) {
@@ -67,35 +70,43 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
       value
     );
 
-    const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
-    const nodlContract = Erc20Abi__factory.connect(contract.id, provider);
-    const fromBalance = nodlContract.balanceOf(from.id, {
-      blockTag: event.blockNumber,
-    });
-    const toBalance = nodlContract.balanceOf(to.id, {
-      blockTag: event.blockNumber,
-    });
+    const blockNumber = "0x" + (event.block.number).toString(16);
+
+    const fromBalance = callContract(
+      contract.id,
+      abi,
+      "balanceOf",
+      [from.id],
+      blockNumber
+    );
+    const toBalance = callContract(
+      contract.id,
+      abi,
+      "balanceOf",
+      [to.id],
+      blockNumber
+    );
     const [fromBalanceValue, toBalanceValue] = await Promise.all([
       fromBalance,
       toBalance,
     ]);
-    from.balance = fromBalanceValue.toBigInt();
-    to.balance = toBalanceValue.toBigInt();
+    from.balance = BigInt(String(fromBalanceValue));
+    to.balance = BigInt(String(toBalanceValue));
 
     await Promise.all([
-      lightTransfer.save(),
+      // lightTransfer.save(),
       from.save(),
       to.save(),
       handleSnapshot(event, from, value),
       handleSnapshot(event, to, BigInt(0)),
-      handleStatSnapshot(timestamp, value, BigInt(0), newWallet),
+      // handleStatSnapshot(timestamp, value, BigInt(0), newWallet),
     ]);
 
     transferEvent.hash = hash;
     transferEvent.contractId = contract.id;
     transferEvent.emitterId = emitter.id;
     //logger.info("Saving transferEvent");
-    return transferEvent.save();
+    // return transferEvent.save();
   }
 }
 

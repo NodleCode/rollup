@@ -28,7 +28,8 @@ export async function callContract(
   contractAddress: string,
   abi: any[],
   methodName: string,
-  params: any[] = []
+  params: any[] = [],
+  block: string = "latest"
 ): Promise<any> {
   // Create an instance of the ethers.js Interface for encoding the data
   const iface = new ethers.utils.Interface(abi);
@@ -45,7 +46,7 @@ export async function callContract(
         to: contractAddress,
         data: data,
       },
-      "latest",
+      block,
     ],
     id: 1,
   };

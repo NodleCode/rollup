@@ -6,8 +6,9 @@
   "scripts": {
     "mainnet-complete": "subql codegen -f mainnet-complete.ts",
     "mainnet-click": "subql codegen -f mainnet-click.ts",
+    "mainnet-missions": "subql codegen -f mainnet-missions.ts",
     "testnet-complete": "subql codegen -f testnet-complete.ts",
-    "codegen": "npm run mainnet-complete && npm run mainnet-click && npm run testnet-complete",
+    "codegen": "npm run mainnet-missions && npm run mainnet-complete && npm run mainnet-click && npm run testnet-complete",
     "build": "subql build && node enrich-dist.js",
     "test": "subql-node-ethereum test",
     "publish": "subql publish",
