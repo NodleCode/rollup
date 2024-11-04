@@ -3,6 +3,9 @@ import { ApprovalLog, TransferLog } from "../types/abi-interfaces/NODLAbi";
 import { fetchAccount, fetchTransaction } from "../utils/utils";
 import { ERC20Approval, ERC20Transfer, ERC20TransferV2, Wallet } from "../types";
 import { handleSnapshot, handleStatSnapshot } from "../utils/snapshot";
+import { Erc20Abi__factory } from "../types/contracts";
+import { RPC_URL } from "../utils/const";
+import { ethers } from "ethers";
 
 export async function handleERC20Transfer(event: TransferLog): Promise<void> {
   if (!event.args) {
@@ -64,9 +67,20 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
       value
     );
 
-    from.balance =
-      (from.balance || BigInt(0)) - (value > 0 ? value : BigInt(0));
-    to.balance = (to.balance || BigInt(0)) + value;
+    const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+    const nodlContract = Erc20Abi__factory.connect(contract.id, provider);
+    const fromBalance = nodlContract.balanceOf(from.id, {
+      blockTag: event.blockNumber,
+    });
+    const toBalance = nodlContract.balanceOf(to.id, {
+      blockTag: event.blockNumber,
+    });
+    const [fromBalanceValue, toBalanceValue] = await Promise.all([
+      fromBalance,
+      toBalance,
+    ]);
+    from.balance = fromBalanceValue.toBigInt();
+    to.balance = toBalanceValue.toBigInt();
 
     await Promise.all([
       lightTransfer.save(),
