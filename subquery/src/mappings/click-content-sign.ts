@@ -5,10 +5,14 @@ import {
   fetchToken,
   getApprovalLog,
 } from "../utils/erc721";
+import {
+  TransferLog,
+  ApprovalForAllLog,
+  SafeMintTransaction,
+} from "../types/abi-interfaces/ClickContentSignAbi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
-import { contractForSnapshot, nodleContracts } from "../utils/const";
-import { TokenSnapshot } from "../types";
-import { ApprovalForAllLog, SafeMintTransaction, TransferLog } from "../types/abi-interfaces/ClickContentSignAbi";
+import { contractForSnapshot } from "../utils/const";
+import { TokenSnapshot, TokenSnapshotV2 } from "../types";
 
 const keysMapping = {
   application: "Application",
@@ -118,11 +122,13 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
   token.transactionHash = tx.hash;
 
   token.uri = uri;
-  
-  if (nodleContracts.includes(contract.id)) {
-    const metadata = await fetchMetadata(String(uri), [
-      "nodle-community-nfts.myfilebase.com/ipfs",
-      "storage.googleapis.com/ipfs-backups",
+
+  if (false) {
+    const metadata = await fetchMetadata(uri, [
+      "nodle-community-nfts.myfilebase.com",
+      "pinning.infura-ipfs.io",
+      "nodle-web-wallet.infura-ipfs.io",
+      "cloudflare-ipfs.com",
     ]);
 
     if (metadata) {
@@ -157,13 +163,34 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
         }
       }
     }
-  } else {
-    logger.error("Contract not found in nodleContracts");
   }
 
   const toSave = [contract, safeMintTx, caller, owner, token];
 
-  /* if (contractForSnapshot.includes(contract.id)) {
+  if (contractForSnapshot.includes(contract.id)) {
+    let snapshot = await TokenSnapshotV2.get(owner.id);
+    if (!snapshot) {
+      snapshot = new TokenSnapshotV2(
+        owner.id,
+        owner.id,
+        token.identifier,
+        0,
+        timestamp,
+        tx.blockNumber,
+        token.id
+      );
+    }
+
+    snapshot.latestBlockTimestamp = timestamp;
+    snapshot.latestBlockNumber = tx.blockNumber;
+    snapshot.latestIdentifier = token.identifier;
+    snapshot.latestTokenId = token.id;
+    snapshot.tokensMinted += 1;
+
+    toSave.push(snapshot);
+  }
+
+  if (contractForSnapshot.includes(contract.id)) {
     const snapshot = new TokenSnapshot(
       token.id,
       owner.id,
@@ -174,6 +201,6 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
     );
 
     toSave.push(snapshot);
-  }*/
-  return Promise.all(toSave.map((entity) => entity?.save()));
+  }
+  return Promise.all(toSave.map((entity) => entity.save()));
 }
