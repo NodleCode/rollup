@@ -15,7 +15,6 @@ const config: HardhatUserConfig = {
             ethNetwork: "sepolia",
             zksync: true,
             verifyURL: "https://explorer.sepolia.era.zksync.dev/contract_verification",
-            deployPaths: ["script"],
         },
         zkSyncMainnet: {
             url: "https://mainnet.era.zksync.io",
