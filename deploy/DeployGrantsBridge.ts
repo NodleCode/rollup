@@ -12,7 +12,7 @@ dotenv.config();
 
 module.exports = async function (hre: HardhatRuntimeEnvironment) {
     const nodlAddress = process.env.N_TOKEN_ADDR!;
-    const minVotes = 3;
+    const minVotes = 2;
     const minDelay = 86400;
     const oracles = process.env.N_RELAYERS!.split(",");
 
