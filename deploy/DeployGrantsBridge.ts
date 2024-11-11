@@ -15,21 +15,25 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
     const minVotes = 2;
     const minDelay = 86400;
     const oracles = process.env.N_RELAYERS!.split(",");
+    let grantsAddress = process.env.N_GRANTS_ADDR || "";
 
     const rpcUrl = hre.network.config.url!;
     const provider = new Provider(rpcUrl);
     const wallet = new Wallet(process.env.DEPLOYER_PRIVATE_KEY!, provider);
     const deployer = new Deployer(hre, wallet);
 
-    const grants = await deployContract(deployer, "Grants", [
-        nodlAddress,
-        "1000000000000000000000",
-        100,
-    ]);
+    if (grantsAddress == "") {
+        const grants = await deployContract(deployer, "Grants", [
+            nodlAddress,
+            "1000000000000000000000",
+            100,
+        ]);
+        grantsAddress = await grants.getAddress();
+    }
     const grantsMigration = await deployContract(deployer, "GrantsMigration", [
         oracles,
         nodlAddress,
-        await grants.getAddress(),
+        grantsAddress,
         minVotes,
         minDelay,
     ]);
