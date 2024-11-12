@@ -4,6 +4,9 @@
 [submodule "lib/openzeppelin-contracts"]
 	path = lib/openzeppelin-contracts
 	url = https://github.com/openzeppelin/openzeppelin-contracts
-[submodule "lib/zksync-contracts"]
-	path = lib/zksync-contracts
-	url = https://github.com/NodleCode/zksync-contracts
+[submodule "lib/zksync-storage-proofs"]
+	path = lib/zksync-storage-proofs
+	url = https://github.com/getclave/zksync-storage-proofs
+[submodule "lib/era-contracts"]
+	path = lib/era-contracts
+	url = https://github.com/matter-labs/era-contracts
