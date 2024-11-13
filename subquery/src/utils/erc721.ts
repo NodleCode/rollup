@@ -2,12 +2,19 @@ import { EthereumLog, EthereumResult } from "@subql/types-ethereum";
 import { Account, ERC721Contract, ERC721Operator, ERC721Token } from "../types";
 import assert from "assert";
 
-export const fetchContract = async (address: string): Promise<ERC721Contract> => {
-  const contract = await ERC721Contract.get(address);
+export const fetchContract = async (
+  address: string
+): Promise<ERC721Contract> => {
+  // rewrite to lowercase
+  const lowercaseAddress = address?.toLowerCase();
+
+  const contract = await ERC721Contract.get(lowercaseAddress);
 
   if (!contract) {
-    logger.error(`Contract not found for address: ${address}`);
-    const newContract = new ERC721Contract(address, address);
+    logger.error(
+      `Contract not found for lowercaseAddress: ${lowercaseAddress}`
+    );
+    const newContract = new ERC721Contract(lowercaseAddress, lowercaseAddress);
     newContract.save();
 
     return newContract;
@@ -67,7 +74,13 @@ export const fetchERC721Operator = async (
 
   if (!op) {
     logger.error(`Operator not found for id: ${id}`);
-    const newOp = new ERC721Operator(id, contract.id, owner.id, operator.id, false);
+    const newOp = new ERC721Operator(
+      id,
+      contract.id,
+      owner.id,
+      operator.id,
+      false
+    );
     newOp.save();
 
     return newOp;
