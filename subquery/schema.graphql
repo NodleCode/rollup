@@ -251,6 +251,8 @@ type VestingSchedule @entity {
 type VestingScheduleCanceled @entity {
   id: ID!
   beneficiary: Account! @index
+  start: BigInt
+  end: BigInt
   cancelAuthority: Account @index
   affectedVestingSchedules: [String!]
   transaction: Transaction!
@@ -259,6 +261,8 @@ type VestingScheduleCanceled @entity {
 type VestingScheduleRenounced @entity {
   id: ID!
   beneficiary: Account! @index
+  start: BigInt
+  end: BigInt
   cancelAuthority: Account @index
   affectedVestingSchedules: [String!]
   transaction: Transaction!
@@ -267,6 +271,8 @@ type VestingScheduleRenounced @entity {
 type VestingScheduleClaimed @entity {
   id: ID!
   beneficiary: Account! @index
+  start: BigInt
+  end: BigInt
   amount: BigInt
   transaction: Transaction!
 }
