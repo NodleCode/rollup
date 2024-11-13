@@ -11,7 +11,7 @@ import {
   SafeMintTransaction,
 } from "../types/abi-interfaces/ClickContentSignAbi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
-import { contractForSnapshot } from "../utils/const";
+import { contractForSnapshot, nodleContracts } from "../utils/const";
 import { TokenSnapshot, TokenSnapshotV2 } from "../types";
 
 const keysMapping = {
@@ -123,7 +123,7 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
 
   token.uri = uri;
 
-  if (false) {
+  if (nodleContracts.includes(contract.id)) {
     const metadata = await fetchMetadata(uri, [
       "nodle-community-nfts.myfilebase.com",
       "pinning.infura-ipfs.io",
