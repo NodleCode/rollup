@@ -9,7 +9,7 @@ services:
       - 5432:5432
     volumes:
       - .data/postgres:/var/lib/postgresql/data
-      - ../../postgresql.conf:/usr/share/postgresql/postgresql.conf
+      - ./docker/pg.conf:/usr/share/postgresql/postgresql.conf
     command: ["postgres", "-c", "config_file=/usr/share/postgresql/postgresql.conf"]
     environment:
       POSTGRES_PASSWORD: postgres
