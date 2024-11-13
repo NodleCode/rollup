@@ -20,7 +20,7 @@ const keysMapping = {
   contentType: "Content Type",
   duration: "Duration (sec)",
   captureDate: "Capture date",
-  longitude: "Longtitude",
+  longitude: "Longitude",
   latitude: "Latitude",
   locationPrecision: "Location Precision",
 };
