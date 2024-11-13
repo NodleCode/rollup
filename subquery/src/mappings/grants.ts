@@ -82,7 +82,6 @@ export async function handleVestingScheduleAdded(
   const id = event.transactionHash + "-" + event.logIndex.toString();
   const to = event.args.to.toString();
   const schedule = event.args.schedule;
-  logger.info("schedule: " + JSON.stringify(schedule) + " to: " + to);
   const transaction = await fetchTransaction(
     event.transactionHash,
     event.block.timestamp,

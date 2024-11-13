@@ -85,8 +85,9 @@ export async function handleApprovalForAll(event: ApprovalForAllLog) {
 }
 
 export async function handleSafeMint(tx: SafeMintTransaction) {
-  assert(tx.args, "No tx.args");
-  assert(tx.logs, "No tx.logs");
+  if (!tx.args || !tx.logs) {
+    throw new Error("No tx.args or tx.logs");
+  }
 
   // Call to the contract
   const contract = await fetchContract(String(tx.to).toLowerCase());
@@ -125,10 +126,8 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
 
   if (nodleContracts.includes(contract.id)) {
     const metadata = await fetchMetadata(uri, [
-      "nodle-community-nfts.myfilebase.com",
-      "pinning.infura-ipfs.io",
-      "nodle-web-wallet.infura-ipfs.io",
-      "cloudflare-ipfs.com",
+      "nodle-community-nfts.myfilebase.com/ipfs",
+      "storage.googleapis.com/ipfs-backups",
     ]);
 
     if (metadata) {

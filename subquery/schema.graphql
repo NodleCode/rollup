@@ -47,17 +47,17 @@ type ERC721Contract @entity {
   operators: [ERC721Operator!]! @derivedFrom(field: "contract")
   transfers: [ERC721Transfer!]! @derivedFrom(field: "contract")
 }
-type ERC721Token @entity {
+type ERC721Token @entity @compositeIndexes(fields: [["owner", "contract"]]) {
   id: ID!
   contract: ERC721Contract!
   identifier: BigInt!
-  owner: Account!
+  owner: Account! @index
   approval: Account!
   uri: String
   timestamp: BigInt
-  content: String
+  content: String @index
   thumbnail: String
-  channel: String
+  channel: String @index
   name: String
   contentType: String
   transactionHash: String
@@ -162,7 +162,9 @@ type ERC20Contract @entity {
   approvals: [ERC20Approval!]! @derivedFrom(field: "contract")
 }
 
-type ERC20Transfer implements Event @entity {
+type ERC20Transfer implements Event
+  @entity
+  @compositeIndexes(fields: [["from", "to"]]) {
   id: ID!
   emitter: Account!
   transaction: Transaction!
@@ -249,8 +251,6 @@ type VestingSchedule @entity {
 type VestingScheduleCanceled @entity {
   id: ID!
   beneficiary: Account! @index
-  start: BigInt
-  end: BigInt
   cancelAuthority: Account @index
   affectedVestingSchedules: [String!]
   transaction: Transaction!
@@ -259,8 +259,6 @@ type VestingScheduleCanceled @entity {
 type VestingScheduleRenounced @entity {
   id: ID!
   beneficiary: Account! @index
-  start: BigInt
-  end: BigInt
   cancelAuthority: Account @index
   affectedVestingSchedules: [String!]
   transaction: Transaction!
@@ -269,8 +267,6 @@ type VestingScheduleRenounced @entity {
 type VestingScheduleClaimed @entity {
   id: ID!
   beneficiary: Account! @index
-  start: BigInt
-  end: BigInt
   amount: BigInt
   transaction: Transaction!
 }
@@ -285,7 +281,7 @@ type Reward @entity {
   id: ID!
   sender: Account! @index
   beneficiary: Account! @index
-  amount: BigInt
+  amount: BigInt @index
   transaction: Transaction!
   BatchMetadata: BatchMetadata
   sequence: BigInt
@@ -322,4 +318,32 @@ type TokenSnapshot @entity {
   identifier: BigInt! @index
   token: ERC721Token! @index
   timestamp: BigInt! @index
+}
+
+type TokenSnapshotV2 @entity {
+  id: ID!
+  owner: Account! @index
+  latestIdentifier: BigInt @index
+  firstIdentifier: BigInt! @index
+  tokensMinted: Int!
+  fistBlockTimestamp: BigInt! @index
+  latestBlockTimestamp: BigInt @index
+  latestBlockNumber: Int
+  firstBlockNumber: Int!
+  firstToken: ERC721Token!
+  latestToken: ERC721Token
+}
+
+type ERC20TransferV2 implements Event
+  @entity
+  @compositeIndexes(fields: [["from", "to"]]) {
+  id: ID!
+  emitter: String!
+  transaction: String!
+  timestamp: BigInt! @index
+  contract: String
+  hash: String @index
+  from: String! @index
+  to: String! @index
+  value: BigInt!
 }

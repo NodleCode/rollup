@@ -54,7 +54,7 @@ services:
       retries: 10
 
   graphql-engine:
-    image: subquerynetwork/subql-query:v2.13.3
+    image: subquerynetwork/subql-query:latest
     ports:
       - 3000:3000
     depends_on:

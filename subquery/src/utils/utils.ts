@@ -26,7 +26,6 @@ export const fetchTransaction = async (
   const tx = await Transaction.get(txHash);
 
   if (!tx) {
-    logger.error(`Transaction not found for hash: ${txHash}`);
     const newTx = new Transaction(txHash, timestamp, blocknumber);
     newTx.save();
 

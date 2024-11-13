@@ -54,13 +54,6 @@ const project: EthereumProject = {
         handlers: [
           {
             kind: EthereumHandlerKind.Event,
-            handler: "handleERC20Approval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
             handler: "handleERC20Transfer",
             filter: {
               topics: ["Transfer(address,address,uint256)"],
@@ -133,7 +126,7 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleNFTTransfer",
             filter: {
-              topics: ["Transfer (address from, address to, uint256 tokenId)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],
@@ -296,23 +289,9 @@ const project: EthereumProject = {
           },
           {
             kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
-              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],
@@ -344,31 +323,10 @@ const project: EthereumProject = {
             },
           },
           {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleApprove",
-            filter: {
-              function: "approve(address,uint256)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
-          },
-          {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
-              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],
@@ -400,31 +358,10 @@ const project: EthereumProject = {
             },
           },
           {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleApprove",
-            filter: {
-              function: "approve(address,uint256)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
-          },
-          {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
-              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],
@@ -456,31 +393,10 @@ const project: EthereumProject = {
             },
           },
           {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleApprove",
-            filter: {
-              function: "approve(address,uint256)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
-          },
-          {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
-              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],

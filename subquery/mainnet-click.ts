@@ -77,7 +77,7 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
-              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],
@@ -133,7 +133,7 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
-              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],
@@ -189,7 +189,7 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
-              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],
@@ -245,7 +245,7 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
-              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],
