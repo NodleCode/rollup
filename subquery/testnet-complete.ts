@@ -28,7 +28,10 @@ const project: EthereumProject = {
   },
   network: {
     chainId: "300", // zKsync sepolia testnet
-    endpoint: [process.env.ZKSYNC_TESTNET_RPC!],
+    endpoint: [
+      process.env.ZKSYNC_TESTNET_RPC!,
+      "https://sepolia.era.zksync.dev",
+    ],
   },
   dataSources: [
     {
