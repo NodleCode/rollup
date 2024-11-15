@@ -239,6 +239,7 @@ type VestingSchedule @entity {
   period: BigInt
   periodCount: Int
   perPeriodAmount: BigInt
+  total: BigInt
   transaction: Transaction!
   cancelled: Boolean
   cancelTransaction: Transaction

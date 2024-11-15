@@ -98,11 +98,13 @@ export async function handleVestingScheduleAdded(
   );
 
   const vestingSchedule = new VestingSchedule(id, to, transaction.id);
-
+  const total =
+    BigInt(schedule.periodCount) * schedule.perPeriodAmount.toBigInt();
   vestingSchedule.start = schedule.start.toBigInt();
   vestingSchedule.period = schedule.period.toBigInt();
   vestingSchedule.periodCount = schedule.periodCount;
   vestingSchedule.perPeriodAmount = schedule.perPeriodAmount.toBigInt();
+  vestingSchedule.total = total;
 
   vestingSchedule.cancelAuthorityId = schedule.cancelAuthority?.toString();
 
