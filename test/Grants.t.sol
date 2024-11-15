@@ -201,16 +201,18 @@ contract GrantsTest is Test {
     }
 
     function test_claimRemovesFullyVestedSchedules() public {
-        uint256 start = block.timestamp + 1 days;
         vm.startPrank(alice);
         token.approve(address(grants), 600);
-        grants.addVestingSchedule(bob, start, 2 days, 3, 100, alice);
-        grants.addVestingSchedule(bob, start + 10 days, 3 days, 2, 100, alice);
+        grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 3, 100, alice);
+        grants.addVestingSchedule(bob, block.timestamp + 11 days, 3 days, 2, 100, alice);
         vm.stopPrank();
 
         assertEq(grants.getGrantsCount(bob), 2);
 
-        vm.warp(start + 8 days);
+        // From this point forward new block.timestamp = block.timestamp + 9 days
+        // This means what was going to happen 11 days after the old block.timestamp
+        // will now happen 2 days after the new block.timestamp
+        vm.warp(block.timestamp + 9 days);
 
         vm.startPrank(bob);
         grants.claim(0, 0);
@@ -218,7 +220,7 @@ contract GrantsTest is Test {
 
         assertEq(grants.getGrantsCount(bob), 1);
 
-        checkP0Schedule(bob, 0, alice, start + 10 days, 3 days, 2, 100);
+        checkP0Schedule(bob, 0, alice, block.timestamp + 2 days, 3 days, 2, 100);
         emit log("Test Claim Removes Fully Vested Schedules Passed!");
     }
 
@@ -638,7 +640,7 @@ contract GrantsTest is Test {
         uint256 expectedPeriod,
         uint32 expectedPeriodCount,
         uint256 expectedPerPeriodAmount
-    ) internal {
+    ) internal view {
         (address cancelAuthority, uint256 start, uint256 period, uint32 periodCount, uint256 perPeriodAmount) =
             grants.vestingSchedules(beneficiary, 0, index);
         assertEq(cancelAuthority, expectedCancelAuthority);
