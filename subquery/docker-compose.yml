@@ -11,6 +11,7 @@ services:
       - .data/postgres:/var/lib/postgresql/data
     environment:
       POSTGRES_PASSWORD: postgres
+    shm_size: '1gb'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -18,7 +19,7 @@ services:
       retries: 5
 
   subquery-node:
-    image: subquerynetwork/subql-node-ethereum:v3.11.0
+    image: subquerynetwork/subql-node-ethereum:latest
     depends_on:
       "postgres":
         condition: service_healthy
@@ -35,10 +36,14 @@ services:
       - ${SUB_COMMAND:-} # set SUB_COMMAND env variable to "test" to run tests
       - -f=/app
       - --db-schema=app
-      - --workers=1
+      - --workers=4
       - --batch-size=30
       - --unfinalized-blocks=false
       - --unsafe
+      - --block-confirmations=0
+      - --timeout=3600
+      - --allow-schema-migration
+      - --proof-of-index=false
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://subquery-node:3000/ready"]
@@ -62,7 +67,9 @@ services:
       DB_DATABASE: postgres
       DB_HOST: postgres
       DB_PORT: 5432
+      # NODE_ENV: production
     command:
       - --name=app
+      #- --log-level=silent
       - --playground
       - --indexer=http://subquery-node:3000

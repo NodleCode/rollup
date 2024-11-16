@@ -13,6 +13,11 @@ type Account @entity {
   ERC721operatorOperator: [ERC721Operator!]! @derivedFrom(field: "operator")
   ERC721transferFromEvent: [ERC721Transfer!]! @derivedFrom(field: "from")
   ERC721transferToEvent: [ERC721Transfer!]! @derivedFrom(field: "to")
+  ERC20transferFromEvent: [ERC20Transfer!]! @derivedFrom(field: "from")
+  ERC20transferToEvent: [ERC20Transfer!]! @derivedFrom(field: "to")
+  ERC20approvalOwnerEvent: [ERC20Approval!]! @derivedFrom(field: "owner")
+  ERC20approvalSpenderEvent: [ERC20Approval!]! @derivedFrom(field: "spender")
+  Proposals: [Proposal!]! @derivedFrom(field: "recipient")
   asAccessControl: AccessControl
   membership: [AccessControlRoleMember!]! @derivedFrom(field: "account")
   roleGranted: [RoleGranted!]! @derivedFrom(field: "account")
@@ -20,31 +25,51 @@ type Account @entity {
   roleRevoked: [RoleRevoked!]! @derivedFrom(field: "account")
   roleRevokedSender: [RoleRevoked!]! @derivedFrom(field: "sender")
   events: [Event!]! @derivedFrom(field: "emitter")
+  vestingSchedules: [VestingSchedule!]! @derivedFrom(field: "beneficiary")
+  timestamp: BigInt @index
+  balance: BigInt @index
 }
+
+type Wallet @entity {
+  id: ID!
+  asAccount: Account!
+  timestamp: BigInt!
+}
+
 type ERC721Contract @entity {
   id: ID!
   asAccount: Account!
   supportsMetadata: Boolean
+  isValid: Boolean
   name: String
   symbol: String
   tokens: [ERC721Token!]! @derivedFrom(field: "contract")
   operators: [ERC721Operator!]! @derivedFrom(field: "contract")
   transfers: [ERC721Transfer!]! @derivedFrom(field: "contract")
 }
-type ERC721Token @entity {
+type ERC721Token @entity @compositeIndexes(fields: [["owner", "contract"]]) {
   id: ID!
   contract: ERC721Contract!
   identifier: BigInt!
-  owner: Account!
+  owner: Account! @index
   approval: Account!
   uri: String
   timestamp: BigInt
-  content: String
-  channel: String
+  content: String @index
+  thumbnail: String
+  channel: String @index
   name: String
+  contentType: String
   transactionHash: String
   description: String
   transfers: [ERC721Transfer!]! @derivedFrom(field: "token")
+  application: String
+  duration: Int
+  captureDate: BigInt @index
+  longitude: Float @index
+  latitude: Float @index
+  locationPrecision: String
+  contentHash: String
 }
 type ERC721Operator @entity {
   id: ID!
@@ -121,4 +146,204 @@ type Transaction @entity {
   timestamp: BigInt!
   blockNumber: BigInt!
   events: [Event!]! @derivedFrom(field: "transaction")
+}
+
+# ERC20
+
+type ERC20Contract @entity {
+  id: ID!
+  asAccount: Account!
+  isValid: Boolean
+  name: String
+  symbol: String
+  decimals: BigInt
+  totalSupply: BigInt
+  transfers: [ERC20Transfer!]! @derivedFrom(field: "contract")
+  approvals: [ERC20Approval!]! @derivedFrom(field: "contract")
+}
+
+type ERC20Transfer implements Event
+  @entity
+  @compositeIndexes(fields: [["from", "to"]]) {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt! @index
+  contract: ERC20Contract
+  hash: String @index
+  from: Account! @index
+  to: Account! @index
+  value: BigInt!
+}
+
+type ERC20Approval implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt!
+  contract: ERC20Contract
+  owner: Account!
+  spender: Account!
+  value: BigInt!
+  hash: String @index
+}
+
+# Migration
+
+type ProposalContract @entity {
+  id: ID!
+  asAccount: Account!
+  proposals: [Proposal!]! @derivedFrom(field: "contract")
+  grants: [ProposalGrant!]! @derivedFrom(field: "contract")
+}
+
+type ProposalGrant @entity {
+  id: ID!
+  contract: ProposalContract
+  proposal: String @index
+  recipient: Account
+  initiator: Account
+  amount: BigInt
+  timestamp: BigInt @index
+  hash: String @index
+  granted: Boolean
+  votes: [ProposalVote!]! @derivedFrom(field: "proposal")
+}
+
+type Proposal @entity {
+  id: ID!
+  contract: ProposalContract
+  proposal: String @index
+  amount: BigInt
+  recipient: Account
+  initiator: Account
+  withdrawn: Boolean
+  votes: [ProposalVote!]! @derivedFrom(field: "proposal")
+  hash: String @index
+  timestamp: BigInt @index
+}
+
+type ProposalVote @entity {
+  id: ID!
+  proposal: Proposal!
+  voter: Account!
+  timestamp: BigInt! @index
+  hash: String @index
+}
+
+type VestingSchedule @entity {
+  id: ID!
+  beneficiary: Account! @index
+  cancelAuthority: Account @index
+  start: BigInt
+  period: BigInt
+  periodCount: Int
+  perPeriodAmount: BigInt
+  transaction: Transaction!
+  cancelled: Boolean
+  cancelTransaction: Transaction
+  cancelTimestamp: BigInt
+  renounced: Boolean
+  renounceTransaction: Transaction
+  renounceTimestamp: BigInt
+}
+
+type VestingScheduleCanceled @entity {
+  id: ID!
+  beneficiary: Account! @index
+  cancelAuthority: Account @index
+  affectedVestingSchedules: [String!]
+  transaction: Transaction!
+}
+
+type VestingScheduleRenounced @entity {
+  id: ID!
+  beneficiary: Account! @index
+  cancelAuthority: Account @index
+  affectedVestingSchedules: [String!]
+  transaction: Transaction!
+}
+
+type VestingScheduleClaimed @entity {
+  id: ID!
+  beneficiary: Account! @index
+  amount: BigInt
+  transaction: Transaction!
+}
+
+type BatchMetadata @entity {
+  id: ID!
+  batchSum: String @index
+  digest: String @index
+}
+
+type Reward @entity {
+  id: ID!
+  sender: Account! @index
+  beneficiary: Account! @index
+  amount: BigInt @index
+  transaction: Transaction!
+  BatchMetadata: BatchMetadata
+  sequence: BigInt @index
+  status: Boolean @index
+  signature: String @index
+}
+
+type AccountSnapshot @entity {
+  id: ID!
+  account: Account! @index
+  dayDate: String! @index
+  timestamp: BigInt! @index
+  balance: BigInt
+  transferCount: Int
+  transferAmount: BigInt
+  rewardCount: Int
+  rewardAmount: BigInt
+}
+
+type StatSnapshot @entity {
+  id: ID!
+  dayDate: Date @index
+  totalTransfers: Int!
+  totalTransferAmount: BigInt!
+  totalRewards: Int!
+  totalRewardAmount: BigInt!
+  newWallets: Int!
+}
+
+type TokenSnapshot @entity {
+  id: ID!
+  owner: Account! @index
+  blockNumber: Int! @index
+  identifier: BigInt! @index
+  token: ERC721Token! @index
+  timestamp: BigInt! @index
+}
+
+type TokenSnapshotV2 @entity {
+  id: ID!
+  owner: Account! @index
+  latestIdentifier: BigInt @index
+  firstIdentifier: BigInt! @index
+  tokensMinted: Int!
+  fistBlockTimestamp: BigInt! @index
+  latestBlockTimestamp: BigInt @index
+  latestBlockNumber: Int @index
+  firstBlockNumber: Int! @index
+  firstToken: ERC721Token! @index
+  latestToken: ERC721Token @index
+}
+
+type ERC20TransferV2 implements Event
+  @entity
+  @compositeIndexes(fields: [["from", "to"]]) {
+  id: ID!
+  emitter: String!
+  transaction: String!
+  timestamp: BigInt! @index
+  contract: String
+  hash: String @index
+  from: String! @index
+  to: String! @index
+  value: BigInt!
 }
