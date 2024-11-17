@@ -10,7 +10,7 @@ contract DeployL1Ens is Script {
 
     function run() external {
         string memory smtDefault = "";
-        string memory smtAddress = vm.envOr("SPARSE_MERKLE_TREE_ADDR", spvDefault);
+        string memory smtAddress = vm.envOr("SPARSE_MERKLE_TREE_ADDR", smtDefault);
         string memory deployerPrivateKey = vm.envString("DEPLOYER_PRIVATE_KEY");
 
         vm.startBroadcast(vm.parseUint(deployerPrivateKey));
