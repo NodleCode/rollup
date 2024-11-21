@@ -14,7 +14,7 @@ interface IClickNameService {
      * @param to address   - Owner of the registered address
      * @param name string - Name to be registered
      */
-    function register(address to, string memory name) external returns (uint256);
+    function register(address to, string memory name) external;
 
     /**
      * @notice Register an ENS subdomain with a specified expiration duration
@@ -22,5 +22,5 @@ interface IClickNameService {
      * @param name string - Name to be registered
      * @param duration uint256 - Expiry duration
      */
-    function registerWithExpiry(address to, string memory name, uint256 duration) external returns (uint256);
+    function registerWithExpiry(address to, string memory name, uint256 duration) external;
 }

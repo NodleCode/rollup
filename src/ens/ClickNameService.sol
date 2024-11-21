@@ -18,6 +18,11 @@ import {IClickNameService} from "./IClickNameService.sol";
 contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     using Strings for uint256;
 
+    struct NameOwner {
+        address owner;
+        string name;
+    }
+
     // Role to be authorized as default minter
     bytes32 public constant REGISTERER_ROLE = keccak256("REGISTERER_ROLE");
     // Defualt expiration duration
@@ -44,11 +49,9 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     /**
      * @notice Register multiple names at once
      */
-    function batchRegister(address[] memory to, string[] memory name) external isAuthorized {
-        require(to.length == name.length, "Mismatched length.");
-
-        for (uint256 i = 0; i < to.length; i++) {
-            register(to[i], name[i]);
+    function batchRegister(NameOwner[] memory nameOwners) external isAuthorized {
+        for (uint256 i = 0; i < nameOwners.length; i++) {
+            register(nameOwners[i].owner, nameOwners[i].name);
         }
     }
 
@@ -61,37 +64,38 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     }
 
     /// @inheritdoc IClickNameService
-    function register(address to, string memory name) public isAuthorized returns (uint256) {
+    function register(address to, string memory name) public isAuthorized {
         uint256 tokenId = _register(to, name);
         uint256 expireTimestamp = block.timestamp + expiryDuration;
         expires[tokenId] = expireTimestamp;
         emit NameRegistered(name, to, expireTimestamp);
-        return tokenId;
     }
 
     /// @inheritdoc IClickNameService
     function registerWithExpiry(address to, string memory name, uint256 duration)
         public
         isAuthorized
-        returns (uint256)
     {
         uint256 tokenId = _register(to, name);
         uint256 expireTimestamp = block.timestamp + duration;
         expires[tokenId] = expireTimestamp;
         emit NameRegistered(name, to, expireTimestamp);
-        return tokenId;
     }
 
     function _register(address to, string memory name) private returns (uint256) {
         require(bytes(name).length != 0, "Name cannot be empty.");
         require(_isAlphanumeric(name), "Name must be alphanumeric.");
 
-        uint256 newTokenId = uint256(keccak256(abi.encodePacked(name)));
-        require(_ownerOf(newTokenId) == address(0), "Name already exists.");
+        uint256 tokenId = uint256(keccak256(abi.encodePacked(name)));
+        address owner = _ownerOf(tokenId);
+        if (owner == address(0)) {
+            _safeMint(to, tokenId);
+        } else {
+            require(expires[tokenId] < block.timestamp, "Name already exists and is not expired.");
+            _safeTransfer(owner, to, tokenId);
+        }
 
-        _safeMint(to, newTokenId);
-
-        return newTokenId;
+        return tokenId;
     }
 
     /**
