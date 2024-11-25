@@ -7,6 +7,11 @@ import {
     StorageProofVerifier,
     IZkSyncDiamond
 } from "lib/zksync-storage-proofs/packages/zksync-storage-contracts/src/StorageProofVerifier.sol";
+import {ClickResolver} from "../src/ens/ClickResolver.sol";
+
+interface IResolverSetter {
+    function setResolver(bytes32 node, address resolver) external;
+}
 
 /// This contract is used to deploy the all the L1 contracts that Nodle needs to allow clk.eth subdomains to be created and resoved on L2
 contract DeployL1Ens is Script {
@@ -35,6 +40,29 @@ contract DeployL1Ens is Script {
         } else {
             console.log("Using StorageProofVerifier at", spvAddress);
         }
+
+        address clickResolverAddress = vm.envOr("CLICK_RESOLVER_ADDR", address(0));
+
+        if (clickResolverAddress != address(0)) {
+            console.log("Deploying ClickResolver...");
+            ClickResolver l1Resolver = new ClickResolver(
+                vm.envString("CNS_OFFCHAIN_RESOLVER_URL"),
+                vm.envAddress("CLK_OWNER_ADDR"),
+                vm.envAddress("CNS_ADDR"),
+                StorageProofVerifier(spvAddress)
+            );
+            clickResolverAddress = address(l1Resolver);
+            console.log("Deployed ClickResolver at", clickResolverAddress);
+        }
+
+        string memory label = vm.envString("CNS_DOMAIN");
+        bytes32 labelHash = keccak256(abi.encodePacked(label));
+
+        bytes32 ETH_NODE = 0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae;
+        bytes32 node = keccak256(abi.encodePacked(ETH_NODE, labelHash));
+
+        IResolverSetter resolverSetter = IResolverSetter(vm.envAddress("NAME_WRAPPER_ADDR"));
+        resolverSetter.setResolver(node, clickResolverAddress);
 
         vm.stopBroadcast();
     }
