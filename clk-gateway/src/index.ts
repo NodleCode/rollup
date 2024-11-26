@@ -1,6 +1,12 @@
 import express, { Request, Response } from "express";
 import { Provider as L2Provider } from "zksync-ethers";
-import { JsonRpcProvider as L1Provider, Contract } from "ethers";
+import {
+  JsonRpcProvider as L1Provider,
+  Contract,
+  keccak256,
+  toBigInt,
+  toUtf8Bytes,
+} from "ethers";
 import {
   BatchMetadata,
   CommitBatchInfo,
@@ -12,6 +18,7 @@ import {
 import {
   ZKSYNC_DIAMOND_INTERFACE,
   STORAGE_VERIFIER_INTERFACE,
+  CLICK_NAME_SERVICE_INTERFACE,
 } from "./interfaces";
 
 import dotenv from "dotenv";
@@ -30,6 +37,12 @@ const diamondContract = new Contract(
   diamondAddress,
   ZKSYNC_DIAMOND_INTERFACE,
   l1Provider
+);
+const clickNameServiceAddress = "0x2c1B65dA72d5Cf19b41dE6eDcCFB7DD83d1B529E";
+const clickNameServiceContract = new Contract(
+  clickNameServiceAddress,
+  CLICK_NAME_SERVICE_INTERFACE,
+  l2Provider
 );
 const SAFE_BATCH_QUERY_OFFSET = 150;
 
@@ -133,7 +146,8 @@ async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
   return storedBatchInfo;
 }
 
-// Health check endpoint
+// committedL1Batch endpoint which returns the L1 batch info for a pretty recently committed batch.
+// SAFE_BATCH_QUERY_OFFSET is used to ensure that the batch is already committed and proved.
 app.get("/committedL1Batch", async (req: Request, res: Response) => {
   try {
     const l1BatchNumber = await l2Provider.getL1BatchNumber();
@@ -151,6 +165,29 @@ app.get("/committedL1Batch", async (req: Request, res: Response) => {
     res.status(200).send({
       batchNumber: batchInfo.batchNumber.toString(),
       batchHash: batchInfo.batchHash,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).send({ error: errorMessage });
+  }
+});
+
+app.get("/expiry", async (req: Request, res: Response) => {
+  try {
+    const { name } = req.query;
+
+    // TODO: add thorough sanity check for name
+    if (!name || typeof name !== "string") {
+      throw new Error("Name is required and must be a string");
+    }
+
+    const nameHash = keccak256(toUtf8Bytes(name));
+    const key = toBigInt(nameHash);
+
+    const value = await clickNameServiceContract.expires(nameHash);
+
+    res.status(200).send({
+      expires: value.toString(),
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

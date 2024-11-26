@@ -28,3 +28,7 @@ export const STORAGE_VERIFIER_INTERFACE = new Interface([
           uint64 index ) proof
     ) view returns (bool)`,
 ]);
+
+export const CLICK_NAME_SERVICE_INTERFACE = new Interface([
+  "function expires(uint256 key) public view returns (uint256)",
+]);
