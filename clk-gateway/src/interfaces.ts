@@ -1,6 +1,6 @@
-import { Interface } from "ethers";
+import { Interface, toBigInt } from "ethers";
 
-/** Interface of the Diamond Contract */
+// L1 Contract
 export const ZKSYNC_DIAMOND_INTERFACE = new Interface([
   `function commitBatchesSharedBridge(
         uint256 _chainId,
@@ -12,6 +12,7 @@ export const ZKSYNC_DIAMOND_INTERFACE = new Interface([
   `event BlockCommit(uint256 indexed batchNumber, bytes32 indexed batchHash, bytes32 indexed commitment)`,
 ]);
 
+// L1 Contract
 export const STORAGE_VERIFIER_INTERFACE = new Interface([
   `function verify(
         ( (uint64 batchNumber,
@@ -29,6 +30,16 @@ export const STORAGE_VERIFIER_INTERFACE = new Interface([
     ) view returns (bool)`,
 ]);
 
+// L1 Contract
+export const CLICK_RESOLVER_INTERFACE = new Interface([
+  "function resolve(bytes calldata _name, bytes calldata _data) external view returns (bytes memory)",
+  "error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData)",
+]);
+
+// L2 Contract
 export const CLICK_NAME_SERVICE_INTERFACE = new Interface([
   "function expires(uint256 key) public view returns (uint256)",
 ]);
+
+// The storage slot of ERC721._owners within the ClickNameService contract
+export const CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT = toBigInt(2);

@@ -6,19 +6,15 @@ import {
   keccak256,
   toBigInt,
   toUtf8Bytes,
+  AbiCoder,
+  getAddress,
 } from "ethers";
-import {
-  BatchMetadata,
-  CommitBatchInfo,
-  RpcProof,
-  StorageProof,
-  StorageProofBatch,
-  StoredBatchInfo as BatchInfo,
-} from "./types";
+import { CommitBatchInfo, StoredBatchInfo as BatchInfo } from "./types";
 import {
   ZKSYNC_DIAMOND_INTERFACE,
-  STORAGE_VERIFIER_INTERFACE,
   CLICK_NAME_SERVICE_INTERFACE,
+  CLICK_RESOLVER_INTERFACE,
+  CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT,
 } from "./interfaces";
 
 import dotenv from "dotenv";
@@ -36,6 +32,12 @@ const diamondAddress = "0x9A6DE0f62Aa270A8bCB1e2610078650D539B1Ef9";
 const diamondContract = new Contract(
   diamondAddress,
   ZKSYNC_DIAMOND_INTERFACE,
+  l1Provider
+);
+const clickResolverAddress = "0x828fda6f7b9252e6e7141a24b914c09503f9fd18";
+const clickResolverContract = new Contract(
+  clickResolverAddress,
+  CLICK_RESOLVER_INTERFACE,
   l1Provider
 );
 const clickNameServiceAddress = "0x2c1B65dA72d5Cf19b41dE6eDcCFB7DD83d1B529E";
@@ -146,9 +148,10 @@ async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
   return storedBatchInfo;
 }
 
-// committedL1Batch endpoint which returns the L1 batch info for a pretty recently committed batch.
-// SAFE_BATCH_QUERY_OFFSET is used to ensure that the batch is already committed and proved.
-app.get("/committedL1Batch", async (req: Request, res: Response) => {
+// Health endpoint to check the status of L1 and L2 connections.
+// This endpoint verifies that the batch number used for L1 APIs is committed to L1 as expected.
+// The service intentionally stays behind the latest batch number by SAFE_BATCH_QUERY_OFFSET to ensure the batch is already committed and proved.
+app.get("/health", async (req: Request, res: Response) => {
   try {
     const l1BatchNumber = await l2Provider.getL1BatchNumber();
 
@@ -165,6 +168,7 @@ app.get("/committedL1Batch", async (req: Request, res: Response) => {
     res.status(200).send({
       batchNumber: batchInfo.batchNumber.toString(),
       batchHash: batchInfo.batchHash,
+      status: "ok",
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -172,7 +176,7 @@ app.get("/committedL1Batch", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/expiry", async (req: Request, res: Response) => {
+app.get("/expiryL2", async (req: Request, res: Response) => {
   try {
     const { name } = req.query;
 
@@ -184,10 +188,48 @@ app.get("/expiry", async (req: Request, res: Response) => {
     const nameHash = keccak256(toUtf8Bytes(name));
     const key = toBigInt(nameHash);
 
-    const value = await clickNameServiceContract.expires(nameHash);
+    const epoch = await clickNameServiceContract.expires(nameHash);
+    const expires = new Date(Number(epoch) * 1000).toISOString();
 
     res.status(200).send({
-      expires: value.toString(),
+      expires,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).send({ error: errorMessage });
+  }
+});
+
+app.get("/ownerL2", async (req: Request, res: Response) => {
+  try {
+    const { name } = req.query;
+
+    // TODO: add thorough sanity check for name
+    if (!name || typeof name !== "string") {
+      throw new Error("Name is required and must be a string");
+    }
+
+    const token = toBigInt(keccak256(toUtf8Bytes(name)));
+
+    const key = keccak256(
+      AbiCoder.defaultAbiCoder().encode(
+        ["uint256", "uint256"],
+        [token, CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT]
+      )
+    );
+
+    const l1BatchNumber = await l2Provider.getL1BatchNumber();
+
+    const proof = await l2Provider.getProof(
+      clickNameServiceAddress,
+      [key],
+      l1BatchNumber
+    );
+    const rawOwner = proof.storageProof[0].value;
+    const owner = getAddress("0x" + rawOwner.slice(26));
+
+    res.status(200).send({
+      owner,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
