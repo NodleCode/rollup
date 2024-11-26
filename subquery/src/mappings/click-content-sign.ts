@@ -85,6 +85,13 @@ export async function handleApprovalForAll(event: ApprovalForAllLog) {
 }
 
 export async function handleSafeMint(tx: SafeMintTransaction) {
+  const receipt = await tx.receipt();
+
+  if (!receipt.status) {
+    // skip failed transactions
+    return;
+  }
+
   if (!tx.args || !tx.logs) {
     throw new Error("No tx.args or tx.logs");
   }
