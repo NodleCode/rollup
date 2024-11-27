@@ -200,7 +200,27 @@ app.get("/expiryL2", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/ownerL2", async (req: Request, res: Response) => {
+app.get("/resolveL2", async (req: Request, res: Response) => {
+  try {
+    const { name } = req.query;
+
+    // TODO: add thorough sanity check for name
+    if (!name || typeof name !== "string") {
+      throw new Error("Name is required and must be a string");
+    }
+
+    const owner = await clickNameServiceContract.resolve(name);
+
+    res.status(200).send({
+      owner,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).send({ error: errorMessage });
+  }
+});
+
+app.get("/storageProvedOwnerL2", async (req: Request, res: Response) => {
   try {
     const { name } = req.query;
 
