@@ -43,9 +43,7 @@ jobs:
 
       - name: Build first stage
         run: |-
-          docker build \
-            -f ./clk-gateway/Dockerfile \
-            .
+          docker build ./clk-gateway
 
       - name: Publish images
         run: |-
