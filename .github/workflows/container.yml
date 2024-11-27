@@ -41,10 +41,14 @@ jobs:
         run: |-
           gcloud auth configure-docker us-west1-docker.pkg.dev
 
-      - name: Build first stage
+      - name: Build and Tag Images
         run: |-
-          docker build ./clk-gateway
+          docker build \
+            -t us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway:latest \
+            -t us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway:${{ github.sha }} \
+            ./clk-gateway
 
-      - name: Publish images
+      - name: Publish Images
         run: |-
-          docker push --all-tags us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway
+          docker push us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway:latest
+          docker push us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway:${{ github.sha }}
