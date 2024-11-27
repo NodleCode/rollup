@@ -25,32 +25,28 @@ app.use(express.json());
 
 const port = process.env.PORT || 8080;
 const privateKey = process.env.REGISTRAR_PRIVATE_KEY!;
-const l2Provider = new L2Provider(
-  "https://shy-cosmopolitan-telescope.zksync-sepolia.quiknode.pro/7dca91c43e87ec74294608886badb962826e62a0"
-);
+const l2Provider = new L2Provider(process.env.L2_RPC_URL!);
 const l2Wallet = new Wallet(privateKey, l2Provider);
-const l1Provider = new L1Provider(
-  "https://little-divine-needle.ethereum-sepolia.quiknode.pro/538abebc9495df79d5f5684483f9f479d9d6ec4f"
-);
-const diamondAddress = "0x9A6DE0f62Aa270A8bCB1e2610078650D539B1Ef9";
+const l1Provider = new L1Provider(process.env.L1_RPC_URL!);
+const diamondAddress = process.env.DIAMOND_PROXY_ADDR!;
 const diamondContract = new Contract(
   diamondAddress,
   ZKSYNC_DIAMOND_INTERFACE,
   l1Provider
 );
-const clickResolverAddress = "0x828fda6f7b9252e6e7141a24b914c09503f9fd18";
+const clickResolverAddress = process.env.CLICK_RESOLVER_ADDR!;
 const clickResolverContract = new Contract(
   clickResolverAddress,
   CLICK_RESOLVER_INTERFACE,
   l1Provider
 );
-const clickNameServiceAddress = "0x2c1B65dA72d5Cf19b41dE6eDcCFB7DD83d1B529E";
+const clickNameServiceAddress = process.env.CNS_ADDR!;
 const clickNameServiceContract = new Contract(
   clickNameServiceAddress,
   CLICK_NAME_SERVICE_INTERFACE,
   l2Wallet
 );
-const SAFE_BATCH_QUERY_OFFSET = 150;
+const batchQueryOffset = Number(process.env.SAFE_BATCH_QUERY_OFFSET!);
 
 /** Parses the transaction where batch is committed and returns commit info */
 async function parseCommitTransaction(
@@ -159,7 +155,7 @@ app.get("/health", async (req: Request, res: Response) => {
   try {
     const l1BatchNumber = await l2Provider.getL1BatchNumber();
 
-    const batchNumber = l1BatchNumber - SAFE_BATCH_QUERY_OFFSET;
+    const batchNumber = l1BatchNumber - batchQueryOffset;
 
     const batchDetails = await l2Provider.getL1BatchDetails(batchNumber);
 
