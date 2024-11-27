@@ -39,6 +39,7 @@ export const CLICK_RESOLVER_INTERFACE = new Interface([
 // L2 Contract
 export const CLICK_NAME_SERVICE_INTERFACE = new Interface([
   "function expires(uint256 key) public view returns (uint256)",
+  "function register(address to, string memory name)",
 ]);
 
 // The storage slot of ERC721._owners within the ClickNameService contract

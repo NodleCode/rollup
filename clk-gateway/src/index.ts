@@ -1,13 +1,13 @@
 import express, { Request, Response } from "express";
-import { Provider as L2Provider } from "zksync-ethers";
+import { Provider as L2Provider, Wallet } from "zksync-ethers";
 import {
   JsonRpcProvider as L1Provider,
-  Contract,
   keccak256,
   toBigInt,
   toUtf8Bytes,
   AbiCoder,
   getAddress,
+  Contract,
 } from "ethers";
 import { CommitBatchInfo, StoredBatchInfo as BatchInfo } from "./types";
 import {
@@ -21,10 +21,14 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
+app.use(express.json());
+
 const port = process.env.PORT || 8080;
+const privateKey = process.env.REGISTRAR_PRIVATE_KEY!;
 const l2Provider = new L2Provider(
   "https://shy-cosmopolitan-telescope.zksync-sepolia.quiknode.pro/7dca91c43e87ec74294608886badb962826e62a0"
 );
+const l2Wallet = new Wallet(privateKey, l2Provider);
 const l1Provider = new L1Provider(
   "https://little-divine-needle.ethereum-sepolia.quiknode.pro/538abebc9495df79d5f5684483f9f479d9d6ec4f"
 );
@@ -44,7 +48,7 @@ const clickNameServiceAddress = "0x2c1B65dA72d5Cf19b41dE6eDcCFB7DD83d1B529E";
 const clickNameServiceContract = new Contract(
   clickNameServiceAddress,
   CLICK_NAME_SERVICE_INTERFACE,
-  l2Provider
+  l2Wallet
 );
 const SAFE_BATCH_QUERY_OFFSET = 150;
 
@@ -234,6 +238,39 @@ app.get("/ownerL2", async (req: Request, res: Response) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     res.status(500).send({ error: errorMessage });
+  }
+});
+
+app.post("/registerL2", async (req: Request, res: Response) => {
+  try {
+    const { name, owner } = req.body;
+
+    // TODO: add thorough sanity check for name
+    if (!name || typeof name !== "string") {
+      throw new Error("Name is required and must be a string");
+    }
+
+    const ownerAddress = getAddress(owner);
+
+    const response = await clickNameServiceContract.register(
+      ownerAddress,
+      name
+    );
+    const receipt = await response.wait();
+
+    if (receipt.status !== 1) {
+      throw new Error("Transaction failed");
+    }
+
+    res.status(200).send({
+      txHash: receipt.hash,
+    });
+  } catch (error) {
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? error.message
+        : String(error);
+    res.status(500).send({ error: message });
   }
 });
 
