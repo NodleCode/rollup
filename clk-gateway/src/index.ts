@@ -16,8 +16,9 @@ import {
   CLICK_RESOLVER_INTERFACE,
   CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT,
 } from "./interfaces";
-
+import { isValidSubdomain } from "./validators";
 import dotenv from "dotenv";
+
 dotenv.config();
 
 const app = express();
@@ -180,9 +181,10 @@ app.get("/expiryL2", async (req: Request, res: Response) => {
   try {
     const { name } = req.query;
 
-    // TODO: add thorough sanity check for name
-    if (!name || typeof name !== "string") {
-      throw new Error("Name is required and must be a string");
+    if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
+      throw new Error(
+        "Name is required and must be a string and must adhere to DNS subdomain requirements"
+      );
     }
 
     const nameHash = keccak256(toUtf8Bytes(name));
@@ -204,9 +206,10 @@ app.get("/resolveL2", async (req: Request, res: Response) => {
   try {
     const { name } = req.query;
 
-    // TODO: add thorough sanity check for name
-    if (!name || typeof name !== "string") {
-      throw new Error("Name is required and must be a string");
+    if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
+      throw new Error(
+        "Name is required and must be a string and must adhere to DNS subdomain requirements"
+      );
     }
 
     const owner = await clickNameServiceContract.resolve(name);
@@ -224,9 +227,10 @@ app.get("/storageProvedOwnerL2", async (req: Request, res: Response) => {
   try {
     const { name } = req.query;
 
-    // TODO: add thorough sanity check for name
-    if (!name || typeof name !== "string") {
-      throw new Error("Name is required and must be a string");
+    if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
+      throw new Error(
+        "Name is required and must be a string and must adhere to DNS subdomain requirements"
+      );
     }
 
     const token = toBigInt(keccak256(toUtf8Bytes(name)));
@@ -261,9 +265,10 @@ app.post("/registerL2", async (req: Request, res: Response) => {
   try {
     const { name, owner } = req.body;
 
-    // TODO: add thorough sanity check for name
-    if (!name || typeof name !== "string") {
-      throw new Error("Name is required and must be a string");
+    if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
+      throw new Error(
+        "Name is required and must be a string and must adhere to DNS subdomain requirements"
+      );
     }
 
     const ownerAddress = getAddress(owner);
