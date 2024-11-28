@@ -7,7 +7,7 @@ import {
     StorageProofVerifier,
     IZkSyncDiamond
 } from "lib/zksync-storage-proofs/packages/zksync-storage-contracts/src/StorageProofVerifier.sol";
-import {ClickResolver} from "../src/ens/ClickResolver.sol";
+import {ClickResolver} from "../src/nameservice/ClickResolver.sol";
 
 interface IResolverSetter {
     function setResolver(bytes32 node, address resolver) external;
