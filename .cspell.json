@@ -47,6 +47,7 @@
     "inheritdoc",
     "ENSIP",
     "MULTICHAIN",
-    "CCIP"
+    "CCIP",
+    "namesevice"
   ]
 }
