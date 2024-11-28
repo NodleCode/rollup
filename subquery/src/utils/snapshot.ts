@@ -1,4 +1,9 @@
-import { Account, AccountSnapshot, StatSnapshot, UsersLevelsStats } from "../types";
+import {
+  Account,
+  AccountSnapshot,
+  StatSnapshot,
+  UsersLevelsStats,
+} from "../types";
 import { TransferLog } from "../types/abi-interfaces/NODLAbi";
 import { MintBatchRewardTransaction } from "../types/abi-interfaces/RewardsAbi";
 
@@ -30,34 +35,38 @@ export async function handleLevel(
   // To be into the next level, the balance must be greater than the level point
   const securedBalance = balance > BigInt(0) ? balance : BigInt(0);
   const securedPrevBalance = prevBalance > BigInt(0) ? prevBalance : BigInt(0);
-  
+
   const level = findCurrentLevelIndex(securedBalance);
   const prevLevel = findCurrentLevelIndex(securedPrevBalance);
 
-  if (level === prevLevel) {
-    return;
-  }
   const toSave = [];
-  const levelId = String(level + 1);
-  let levelStats = await UsersLevelsStats.get(levelId);
-  if (!levelStats) {
-    levelStats = new UsersLevelsStats(
-      levelId,
-      Number(levelId),
-      0,
-      BigInt(0),
-      timestamp,
-      timestamp
-    );
+  if (level > -1) {
+    const levelId = String(level + 1);
+    let levelStats = await UsersLevelsStats.get(levelId);
+    if (!levelStats) {
+      levelStats = new UsersLevelsStats(
+        levelId,
+        Number(levelId),
+        0,
+        BigInt(0),
+        timestamp,
+        timestamp
+      );
+    }
+
+    levelStats.members = levelStats.members + 1;
+    let totalBalanceAccumulated = levelStats.total + securedBalance;
+
+    if (prevLevel === level) {
+      totalBalanceAccumulated -= securedPrevBalance;
+    }
+
+    levelStats.total = totalBalanceAccumulated;
+    levelStats.updatedAt = timestamp;
+    toSave.push(levelStats);
   }
 
-  levelStats.members++;
-  const totalBalanceAccumulated = levelStats.total + securedBalance;
-  levelStats.total = totalBalanceAccumulated;
-  levelStats.updatedAt = timestamp;
-  toSave.push(levelStats);
-
-  if (prevLevel > -1) {
+  if (prevLevel > -1 && prevLevel !== level) {
     const prevLevelId = String(prevLevel + 1);
     let prevLevelStats = await UsersLevelsStats.get(prevLevelId);
     if (!prevLevelStats) {
@@ -76,7 +85,7 @@ export async function handleLevel(
     prevLevelStats.updatedAt = timestamp;
     toSave.push(prevLevelStats);
   }
-  
+
   Promise.all(toSave.map((s) => s.save()));
 }
 
