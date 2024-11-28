@@ -64,7 +64,7 @@ export async function handleLevel(
     levelStats.members = totalMembers;
     levelStats.total = totalBalanceAccumulated;
     levelStats.updatedAt = timestamp;
-    toSave.push(levelStats);
+    await levelStats.save();
   }
 
   if (prevLevel > -1 && prevLevel !== level) {
@@ -85,9 +85,8 @@ export async function handleLevel(
     prevLevelStats.total = prevLevelStats.total - securedPrevBalance;
     prevLevelStats.updatedAt = timestamp;
     toSave.push(prevLevelStats);
+    await prevLevelStats.save();
   }
-
-  Promise.all(toSave.map((s) => s.save()));
 }
 
 export async function handleSnapshot(
