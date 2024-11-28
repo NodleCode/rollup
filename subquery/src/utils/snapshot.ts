@@ -13,14 +13,23 @@ const levelsTrackPoints = [
   100, 1000, 5000, 10000, 25000, 50000, 100000, 500000, 1000000, 5000000,
 ];
 
+const findCurrentLevelIndex = (balance: bigint) => {
+  for (let i = levelsTrackPoints.length - 1; i >= 0; i--) {
+    if (balance >= BigInt(levelsTrackPoints[i])) {
+      return i;
+    }
+  }
+  return -1;
+};
+
 export async function handleLevel(
   balance: bigint,
   prevBalance: bigint,
   timestamp: bigint
 ) {
   // To be into the next level, the balance must be greater than the level point
-  const level = levelsTrackPoints.findIndex((point) => balance >= BigInt(point));
-  const prevLevel = levelsTrackPoints.findIndex((point) => prevBalance >= BigInt(point));
+  const level = findCurrentLevelIndex(balance);
+  const prevLevel = findCurrentLevelIndex(prevBalance);
 
   if (level === prevLevel) {
     return;
