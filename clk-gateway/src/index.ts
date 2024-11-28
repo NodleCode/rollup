@@ -18,6 +18,8 @@ import {
 } from "./interfaces";
 import { isValidSubdomain } from "./validators";
 import dotenv from "dotenv";
+import admin from "firebase-admin";
+import { initializeApp } from "firebase-admin/app";
 
 dotenv.config();
 
@@ -48,6 +50,11 @@ const clickNameServiceContract = new Contract(
   l2Wallet
 );
 const batchQueryOffset = Number(process.env.SAFE_BATCH_QUERY_OFFSET!);
+const serviceAccountKey = process.env.SERVICE_ACCOUNT_KEY!;
+const serviceAccount = JSON.parse(serviceAccountKey);
+const firebaseApp = initializeApp({
+  credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+});
 
 /** Parses the transaction where batch is committed and returns commit info */
 async function parseCommitTransaction(
@@ -182,9 +189,11 @@ app.get("/expiryL2", async (req: Request, res: Response) => {
     const { name } = req.query;
 
     if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
-      throw new Error(
-        "Name is required and must be a string and must adhere to DNS subdomain requirements"
-      );
+      res.status(400).json({
+        error:
+          "Name is required and must be a string adhering to DNS subdomain requirements",
+      });
+      return;
     }
 
     const nameHash = keccak256(toUtf8Bytes(name));
@@ -207,9 +216,11 @@ app.get("/resolveL2", async (req: Request, res: Response) => {
     const { name } = req.query;
 
     if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
-      throw new Error(
-        "Name is required and must be a string and must adhere to DNS subdomain requirements"
-      );
+      res.status(400).json({
+        error:
+          "Name is required and must be a string adhering to DNS subdomain requirements",
+      });
+      return;
     }
 
     const owner = await clickNameServiceContract.resolve(name);
@@ -228,9 +239,11 @@ app.get("/storageProvedOwnerL2", async (req: Request, res: Response) => {
     const { name } = req.query;
 
     if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
-      throw new Error(
-        "Name is required and must be a string and must adhere to DNS subdomain requirements"
-      );
+      res.status(400).json({
+        error:
+          "Name is required and must be a string adhering to DNS subdomain requirements",
+      });
+      return;
     }
 
     const token = toBigInt(keccak256(toUtf8Bytes(name)));
@@ -265,10 +278,28 @@ app.post("/registerL2", async (req: Request, res: Response) => {
   try {
     const { name, owner } = req.body;
 
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).json({ error: "Authorization header is missing" });
+      return;
+    }
+    const idToken = authHeader.split("Bearer ")[1];
+    if (!idToken) {
+      res.status(401).json({ error: "Bearer token is missing" });
+      return;
+    }
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    if (!decodedToken.email_verified) {
+      res.status(403).json({ error: "Email not verified" });
+      return;
+    }
+
     if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
-      throw new Error(
-        "Name is required and must be a string and must adhere to DNS subdomain requirements"
-      );
+      res.status(400).json({
+        error:
+          "Name is required and must be a string adhering to DNS subdomain requirements",
+      });
+      return;
     }
 
     const ownerAddress = getAddress(owner);
