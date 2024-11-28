@@ -26,7 +26,7 @@ type Account @entity {
   roleRevokedSender: [RoleRevoked!]! @derivedFrom(field: "sender")
   events: [Event!]! @derivedFrom(field: "emitter")
   vestingSchedules: [VestingSchedule!]! @derivedFrom(field: "beneficiary")
-  timestamp: BigInt @index
+  timestamp: BigInt
   balance: BigInt @index
 }
 
@@ -47,7 +47,7 @@ type ERC721Contract @entity {
   operators: [ERC721Operator!]! @derivedFrom(field: "contract")
   transfers: [ERC721Transfer!]! @derivedFrom(field: "contract")
 }
-type ERC721Token @entity @compositeIndexes(fields: [["owner", "contract"]]) {
+type ERC721Token @entity {
   id: ID!
   contract: ERC721Contract!
   identifier: BigInt!
@@ -162,9 +162,7 @@ type ERC20Contract @entity {
   approvals: [ERC20Approval!]! @derivedFrom(field: "contract")
 }
 
-type ERC20Transfer implements Event
-  @entity
-  @compositeIndexes(fields: [["from", "to"]]) {
+type ERC20Transfer implements Event @entity {
   id: ID!
   emitter: Account!
   transaction: Transaction!
@@ -354,3 +352,13 @@ type ERC20TransferV2 implements Event
   to: String! @index
   value: BigInt!
 }
+
+type UsersLevelsStats @entity {
+  id: ID!
+  level: Int! @index
+  members: Int! @index
+  total: BigInt! @index
+  updatedAt: BigInt! @index
+  createdAt: BigInt! @index
+}
+

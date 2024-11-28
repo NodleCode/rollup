@@ -1,4 +1,4 @@
-import { Account, AccountSnapshot, StatSnapshot } from "../types";
+import { Account, AccountSnapshot, StatSnapshot, UsersLevelsStats } from "../types";
 import { TransferLog } from "../types/abi-interfaces/NODLAbi";
 import { MintBatchRewardTransaction } from "../types/abi-interfaces/RewardsAbi";
 
@@ -7,6 +7,65 @@ function getDayString(timestamp: bigint) {
 
   // dd-mm-yyyy
   return `${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}`;
+}
+
+const levelsTrackPoints = [
+  100, 1000, 5000, 10000, 25000, 50000, 100000, 500000, 1000000, 5000000,
+];
+
+export async function handleLevel(
+  balance: bigint,
+  prevBalance: bigint,
+  timestamp: bigint
+) {
+  // To be into the next level, the balance must be greater than the level point
+  const level = levelsTrackPoints.findIndex((point) => balance >= BigInt(point));
+  const prevLevel = levelsTrackPoints.findIndex((point) => prevBalance >= BigInt(point));
+
+  if (level === prevLevel) {
+    return;
+  }
+  const toSave = [];
+  const levelId = String(level + 1);
+  let levelStats = await UsersLevelsStats.get(levelId);
+  if (!levelStats) {
+    levelStats = new UsersLevelsStats(
+      levelId,
+      Number(levelId),
+      0,
+      BigInt(0),
+      timestamp,
+      timestamp
+    );
+  }
+
+  levelStats.members++;
+  const totalBalanceAccumulated = levelStats.total + balance;
+  levelStats.total = totalBalanceAccumulated;
+  levelStats.updatedAt = timestamp;
+  toSave.push(levelStats);
+
+  if (prevLevel > -1) {
+    const prevLevelId = String(prevLevel + 1);
+    let prevLevelStats = await UsersLevelsStats.get(prevLevelId);
+    if (!prevLevelStats) {
+      prevLevelStats = new UsersLevelsStats(
+        prevLevelId,
+        Number(prevLevelId),
+        0,
+        BigInt(0),
+        timestamp,
+        timestamp
+      );
+    }
+
+    prevLevelStats.members--;
+    prevLevelStats.total -= prevBalance;
+    prevLevelStats.updatedAt = timestamp;
+    toSave.push(prevLevelStats);
+  }
+  
+  Promise.all(toSave.map((s) => s.save()));
 }
 
 export async function handleSnapshot(
@@ -26,7 +85,7 @@ export async function handleSnapshot(
     timestamp
   );
 
-  dailySnapshot.balance = account.balance;
+  dailySnapshot.balance = account.balance || BigInt(0);
 
   if (amount > BigInt(0)) {
     dailySnapshot.transferCount = 1;
@@ -59,7 +118,12 @@ export async function handleSnapshotMintBatchReward(
   dailySnapshot.save();
 }
 
-export const handleStatSnapshot = async (timestamp: bigint, transferAmount: bigint, rewardAmount: bigint, newWallets: number) => {
+export const handleStatSnapshot = async (
+  timestamp: bigint,
+  transferAmount: bigint,
+  rewardAmount: bigint,
+  newWallets: number
+) => {
   const dayDate = getDayString(timestamp);
   let snapshot = await StatSnapshot.get(dayDate);
 
