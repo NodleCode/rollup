@@ -68,8 +68,8 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
       (from.balance || BigInt(0)) - (value > 0 ? value : BigInt(0));
     const toNewBalance = (to.balance || BigInt(0)) + value;
 
-    await handleLevel(from.balance || BigInt(0), fromNewBalance, timestamp)
-    await handleLevel(to.balance || BigInt(0), toNewBalance, timestamp)
+    await handleLevel(fromNewBalance, from.balance || BigInt(0), timestamp);
+    await handleLevel(toNewBalance, to.balance || BigInt(0), timestamp);
     
     from.balance = fromNewBalance < 0 ? BigInt(0) : fromNewBalance;
     to.balance = toNewBalance; 
