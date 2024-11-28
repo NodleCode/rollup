@@ -28,8 +28,11 @@ export async function handleLevel(
   timestamp: bigint
 ) {
   // To be into the next level, the balance must be greater than the level point
-  const level = findCurrentLevelIndex(balance);
-  const prevLevel = findCurrentLevelIndex(prevBalance);
+  const securedBalance = balance > BigInt(0) ? balance : BigInt(0);
+  const securedPrevBalance = prevBalance > BigInt(0) ? prevBalance : BigInt(0);
+  
+  const level = findCurrentLevelIndex(securedBalance);
+  const prevLevel = findCurrentLevelIndex(securedPrevBalance);
 
   if (level === prevLevel) {
     return;
@@ -49,7 +52,7 @@ export async function handleLevel(
   }
 
   levelStats.members++;
-  const totalBalanceAccumulated = levelStats.total + balance;
+  const totalBalanceAccumulated = levelStats.total + securedBalance;
   levelStats.total = totalBalanceAccumulated;
   levelStats.updatedAt = timestamp;
   toSave.push(levelStats);
@@ -68,8 +71,8 @@ export async function handleLevel(
       );
     }
 
-    prevLevelStats.members--;
-    prevLevelStats.total -= prevBalance;
+    prevLevelStats.members = Math.max(0, prevLevelStats.members - 1);
+    prevLevelStats.total = prevLevelStats.total - securedPrevBalance;
     prevLevelStats.updatedAt = timestamp;
     toSave.push(prevLevelStats);
   }
