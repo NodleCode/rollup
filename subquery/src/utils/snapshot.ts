@@ -54,13 +54,14 @@ export async function handleLevel(
       );
     }
 
-    levelStats.members = levelStats.members + 1;
     let totalBalanceAccumulated = levelStats.total + securedBalance;
-
+    let totalMembers = levelStats.members + 1;
     if (prevLevel === level) {
-      totalBalanceAccumulated -= securedPrevBalance;
+      totalBalanceAccumulated = totalBalanceAccumulated - securedPrevBalance;
+      totalMembers = totalMembers - 1;
     }
 
+    levelStats.members = totalMembers;
     levelStats.total = totalBalanceAccumulated;
     levelStats.updatedAt = timestamp;
     toSave.push(levelStats);
