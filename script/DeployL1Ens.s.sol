@@ -13,7 +13,7 @@ interface IResolverSetter {
     function setResolver(bytes32 node, address resolver) external;
 }
 
-/// This contract is used to deploy the all the L1 contracts that Nodle needs to allow clk.eth subdomains to be created and resoved on L2
+/// This contract is used to deploy the all the L1 contracts that Nodle needs to allow clk.eth subdomains to be created and resolved on L2
 contract DeployL1Ens is Script {
     function run() external {
         string memory deployerPrivateKey = vm.envString("DEPLOYER_PRIVATE_KEY");

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
 /**
- * @title ClickResolver for reolving ens subdomains based on names resigetered on L2
+ * @title ClickResolver for resolving ens subdomains based on names registered on L2
  * @dev This contract is based on ClaveResolver that can be found in this repository:
  * https://github.com/getclave/zksync-storage-proofs
  */
@@ -125,22 +125,22 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
     {
         uint256 length = name.length;
 
-        uint8 firstlen = uint8(name[0]);
-        string memory first = string(name[1:1 + firstlen]);
+        uint8 firstLen = uint8(name[0]);
+        string memory first = string(name[1:1 + firstLen]);
 
         // If there's only one segment, it's a top level domain
         // {top_length}.{top}.{0x00}
-        if (length == firstlen + 2) return ("", "", first);
+        if (length == firstLen + 2) return ("", "", first);
 
-        uint8 secondlen = uint8(name[firstlen + 1]);
-        string memory second = string(name[firstlen + 2:firstlen + 2 + secondlen]);
+        uint8 secondLen = uint8(name[firstLen + 1]);
+        string memory second = string(name[firstLen + 2:firstLen + 2 + secondLen]);
 
         // If there's only two segments, it's a domain
         // {dom_length}.{dom}.{top_length}.{top}.{0x00}
-        if (length == firstlen + secondlen + 3) return ("", first, second);
+        if (length == firstLen + secondLen + 3) return ("", first, second);
 
-        uint8 thirdlen = uint8(name[firstlen + secondlen + 2]);
-        string memory third = string(name[firstlen + secondlen + 3:firstlen + secondlen + 3 + thirdlen]);
+        uint8 thirdLen = uint8(name[firstLen + secondLen + 2]);
+        string memory third = string(name[firstLen + secondLen + 3:firstLen + secondLen + 3 + thirdLen]);
 
         return (first, second, third);
     }

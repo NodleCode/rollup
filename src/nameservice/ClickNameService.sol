@@ -25,7 +25,7 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
 
     // Role to be authorized as default minter
     bytes32 public constant REGISTERER_ROLE = keccak256("REGISTERER_ROLE");
-    // Defualt expiration duration
+    // Default expiration duration
     uint256 public expiryDuration = 365 days;
 
     // token id to expires timestamp
