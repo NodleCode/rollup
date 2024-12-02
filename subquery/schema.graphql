@@ -202,7 +202,7 @@ type ProposalGrant @entity {
   recipient: Account
   initiator: Account
   amount: BigInt
-  timestamp: BigInt @index
+  timestamp: BigInt
   hash: String @index
   granted: Boolean
   votes: [ProposalVote!]! @derivedFrom(field: "proposal")
@@ -218,7 +218,7 @@ type Proposal @entity {
   withdrawn: Boolean
   votes: [ProposalVote!]! @derivedFrom(field: "proposal")
   hash: String @index
-  timestamp: BigInt @index
+  timestamp: BigInt
 }
 
 type ProposalVote @entity {
@@ -232,7 +232,7 @@ type ProposalVote @entity {
 type VestingSchedule @entity {
   id: ID!
   beneficiary: Account! @index
-  cancelAuthority: Account @index
+  cancelAuthority: Account
   start: BigInt
   period: BigInt
   periodCount: Int
@@ -252,7 +252,7 @@ type VestingScheduleCanceled @entity {
   beneficiary: Account! @index
   start: BigInt
   end: BigInt
-  cancelAuthority: Account @index
+  cancelAuthority: Account
   affectedVestingSchedules: [String!]
   transaction: Transaction!
 }
@@ -262,7 +262,7 @@ type VestingScheduleRenounced @entity {
   beneficiary: Account! @index
   start: BigInt
   end: BigInt
-  cancelAuthority: Account @index
+  cancelAuthority: Account
   affectedVestingSchedules: [String!]
   transaction: Transaction!
 }
@@ -286,7 +286,7 @@ type Reward @entity {
   id: ID!
   sender: Account! @index
   beneficiary: Account! @index
-  amount: BigInt @index
+  amount: BigInt
   transaction: Transaction!
   BatchMetadata: BatchMetadata
   sequence: BigInt
@@ -319,20 +319,20 @@ type StatSnapshot @entity {
 type TokenSnapshot @entity {
   id: ID!
   owner: Account! @index
-  blockNumber: Int! @index
+  blockNumber: Int!
   identifier: BigInt! @index
-  token: ERC721Token! @index
-  timestamp: BigInt! @index
+  token: ERC721Token!
+  timestamp: BigInt!
 }
 
 type TokenSnapshotV2 @entity {
   id: ID!
   owner: Account! @index
-  latestIdentifier: BigInt @index
-  firstIdentifier: BigInt! @index
+  latestIdentifier: BigInt
+  firstIdentifier: BigInt!
   tokensMinted: Int!
-  fistBlockTimestamp: BigInt! @index
-  latestBlockTimestamp: BigInt @index
+  fistBlockTimestamp: BigInt!
+  latestBlockTimestamp: BigInt
   latestBlockNumber: Int
   firstBlockNumber: Int!
   firstToken: ERC721Token!
@@ -347,7 +347,7 @@ type ERC20TransferV2 implements Event
   transaction: String!
   timestamp: BigInt! @index
   contract: String
-  hash: String @index
+  hash: String
   from: String! @index
   to: String! @index
   value: BigInt!
@@ -358,7 +358,7 @@ type UsersLevelsStats @entity {
   level: Int! @index
   members: Int! @index
   total: BigInt! @index
-  updatedAt: BigInt! @index
-  createdAt: BigInt! @index
+  updatedAt: BigInt!
+  createdAt: BigInt!
 }
 

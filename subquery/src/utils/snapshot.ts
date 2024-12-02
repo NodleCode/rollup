@@ -16,7 +16,9 @@ function getDayString(timestamp: bigint) {
 
 const levelsTrackPoints = [
   100, 1000, 5000, 10000, 25000, 50000, 100000, 500000, 1000000, 5000000,
-];
+].map((v) => {
+  return BigInt(v) * BigInt(10) ** BigInt(18);
+});
 
 const findCurrentLevelIndex = (balance: bigint) => {
   for (let i = levelsTrackPoints.length - 1; i >= 0; i--) {
