@@ -33,6 +33,7 @@ export const STORAGE_VERIFIER_INTERFACE = new Interface([
 // L1 Contract
 export const CLICK_RESOLVER_INTERFACE = new Interface([
   "function resolve(bytes calldata _name, bytes calldata _data) external view returns (bytes memory)",
+  "function resolveWithProof(bytes memory _response, bytes memory _extraData) external view returns (bytes memory)",
   "error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData)",
 ]);
 
@@ -45,3 +46,6 @@ export const CLICK_NAME_SERVICE_INTERFACE = new Interface([
 
 // The storage slot of ERC721._owners within the ClickNameService contract
 export const CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT = toBigInt(2);
+
+export const STORAGE_PROOF_TYPE =
+  "((uint64 batchNumber, uint64 indexRepeatedStorageChanges, uint256 numberOfLayer1Txs, bytes32 priorityOperationsHash, bytes32 l2LogsTreeRoot, uint256 timestamp, bytes32 commitment) metadata, address account, uint256 key, bytes32 value, bytes32[] path, uint64 index)";

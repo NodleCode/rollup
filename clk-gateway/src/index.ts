@@ -9,17 +9,23 @@ import {
   getAddress,
   Contract,
 } from "ethers";
-import { CommitBatchInfo, StoredBatchInfo as BatchInfo } from "./types";
+import {
+  CommitBatchInfo,
+  StoredBatchInfo as BatchInfo,
+  StorageProof,
+} from "./types";
 import {
   ZKSYNC_DIAMOND_INTERFACE,
   CLICK_NAME_SERVICE_INTERFACE,
   CLICK_RESOLVER_INTERFACE,
   CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT,
+  STORAGE_PROOF_TYPE,
 } from "./interfaces";
 import { isValidSubdomain } from "./validators";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
 import { initializeApp } from "firebase-admin/app";
+import path from "path";
 
 dotenv.config();
 
@@ -263,6 +269,89 @@ app.get("/storageProvedOwnerL2", async (req: Request, res: Response) => {
       l1BatchNumber
     );
     const rawOwner = proof.storageProof[0].value;
+    const owner = getAddress("0x" + rawOwner.slice(26));
+
+    res.status(200).send({
+      owner,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).send({ error: errorMessage });
+  }
+});
+
+app.get("/resolveWithProofL1", async (req: Request, res: Response) => {
+  try {
+    const { name } = req.query;
+
+    if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
+      res.status(400).json({
+        error:
+          "Name is required and must be a string adhering to DNS subdomain requirements",
+      });
+      return;
+    }
+
+    const token = toBigInt(keccak256(toUtf8Bytes(name)));
+
+    const key = keccak256(
+      AbiCoder.defaultAbiCoder().encode(
+        ["uint256", "uint256"],
+        [token, CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT]
+      )
+    );
+
+    const l1BatchNumber = await l2Provider.getL1BatchNumber();
+    const batchNumber = l1BatchNumber - batchQueryOffset;
+
+    const proof = await l2Provider.getProof(
+      clickNameServiceAddress,
+      [key],
+      batchNumber
+    );
+
+    const batchDetails = await l2Provider.getL1BatchDetails(batchNumber);
+    if (batchDetails.commitTxHash == undefined) {
+      throw new Error(`Batch ${batchNumber} is not committed`);
+    }
+
+    const batchInfo = await getBatchInfo(batchNumber);
+    const storageProof: StorageProof = {
+      account: proof.address,
+      key: proof.storageProof[0].key,
+      path: proof.storageProof[0].proof,
+      value: proof.storageProof[0].value,
+      index: proof.storageProof[0].index,
+      metadata: {
+        batchNumber: batchInfo.batchNumber,
+        indexRepeatedStorageChanges: batchInfo.indexRepeatedStorageChanges,
+        numberOfLayer1Txs: batchInfo.numberOfLayer1Txs,
+        priorityOperationsHash: batchInfo.priorityOperationsHash,
+        l2LogsTreeRoot: batchInfo.l2LogsTreeRoot,
+        timestamp: batchInfo.timestamp,
+        commitment: batchInfo.commitment,
+      },
+    };
+
+    const fallbackValue = "0x" + "00".repeat(32);
+    const response = AbiCoder.defaultAbiCoder().encode(
+      [STORAGE_PROOF_TYPE, "bytes32"],
+      [storageProof, fallbackValue]
+    );
+    const extraData = AbiCoder.defaultAbiCoder().encode(
+      ["address", "uint256"],
+      [proof.address, proof.storageProof[0].key]
+    );
+    const rawOwner = await clickResolverContract.resolveWithProof(
+      response,
+      extraData
+    );
+    if (rawOwner === fallbackValue) {
+      res
+        .status(404)
+        .send({ error: "Owner not found or not yet proved to L1" });
+      return;
+    }
     const owner = getAddress("0x" + rawOwner.slice(26));
 
     res.status(200).send({

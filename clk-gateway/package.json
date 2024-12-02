@@ -19,7 +19,8 @@
     "jest": "^29.7.0",
     "nodemon": "^3.1.7",
     "prettier": "^3.3.3",
-    "ts-jest": "^29.2.5"
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2"
   },
   "scripts": {
     "fmt": "prettier --write src/**/*.ts",
