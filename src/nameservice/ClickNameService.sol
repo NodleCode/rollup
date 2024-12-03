@@ -33,6 +33,32 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
 
     event NameRegistered(string indexed name, address indexed owner, uint256 expires);
 
+    /// @notice Thrown when attempting to resolve a name that has expired
+    /// @param oldOwner The address of the previous owner of the name
+    /// @param expiredAt The timestamp when the name expired
+    error NameExpired(address oldOwner, uint256 expiredAt);
+
+    /// @notice Thrown when attempting to register a name that is not alphanumeric
+    error NameMustBeAlphanumeric();
+
+    /// @notice Thrown when attempting to register a name that is empty
+    error NameCannotBeEmpty();
+
+    /// @notice Thrown when attempting to change attributes of a name that is not found in the registry
+    error NameNotFound();
+
+    /// @notice Thrown when attempting to register a name that already exists
+    /// @param owner The address of the current owner of the name
+    /// @param expiresAt The timestamp when the name expires
+    error NamAlreadyExists(address owner, uint256 expiresAt);
+
+    /// @notice Thrown when attempting to remove a name that has not yet expired
+    /// @param expiresAt The timestamp when the name expires
+    error NameNotExpired(uint256 expiresAt);
+
+    /// @notice Thrown when an unauthorized address attempts to perform a permissioned action
+    error NotAuthorized();
+
     constructor(address admin, address registrar) ERC721("ClickNameService", "CLK") {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(REGISTERER_ROLE, registrar);
@@ -42,7 +68,9 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     function resolve(string memory name) external view returns (address) {
         uint256 tokenId = uint256(keccak256(abi.encodePacked(name)));
         address owner = ownerOf(tokenId);
-        require(expires[tokenId] > block.timestamp, "Name expired.");
+        if (expires[tokenId] <= block.timestamp) {
+            revert NameExpired(owner, expires[tokenId]);
+        }
         return owner;
     }
 
@@ -80,15 +108,21 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     }
 
     function _register(address to, string memory name) private returns (uint256) {
-        require(bytes(name).length != 0, "Name cannot be empty.");
-        require(_isAlphanumeric(name), "Name must be alphanumeric.");
+        if (bytes(name).length == 0) {
+            revert NameCannotBeEmpty();
+        }
+        if (!_isAlphanumeric(name)) {
+            revert NameMustBeAlphanumeric();
+        }
 
         uint256 tokenId = uint256(keccak256(abi.encodePacked(name)));
         address owner = _ownerOf(tokenId);
         if (owner == address(0)) {
             _safeMint(to, tokenId);
         } else {
-            require(expires[tokenId] < block.timestamp, "Name already exists and is not expired.");
+            if (expires[tokenId] > block.timestamp) {
+                revert NamAlreadyExists(owner, expires[tokenId]);
+            }
             _safeTransfer(owner, to, tokenId);
         }
 
@@ -118,7 +152,9 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
      */
     function removeExpired(string memory name) public {
         uint256 tokenId = uint256(keccak256(abi.encodePacked(name)));
-        require(expires[tokenId] < block.timestamp, "Name not expired.");
+        if (expires[tokenId] > block.timestamp) {
+            revert NameNotExpired(expires[tokenId]);
+        }
         delete expires[tokenId];
         _burn(tokenId);
     }
@@ -128,7 +164,9 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
      * @dev Only authorized accounts can extend expiry
      */
     function extendExpiry(uint256 tokenId, uint256 duration) public isAuthorized {
-        require(_ownerOf(tokenId) != address(0), "Name not found.");
+        if (_ownerOf(tokenId) == address(0)) {
+            revert NameNotFound();
+        }
         if (expires[tokenId] > block.timestamp) {
             expires[tokenId] += duration;
         } else {
@@ -148,7 +186,9 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
 
     // Modifier to check if caller is authorized for mints and registries
     modifier isAuthorized() {
-        require(hasRole(REGISTERER_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "[]  Not authorized.");
+        if (!hasRole(REGISTERER_ROLE, msg.sender) && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
+            revert NotAuthorized();
+        }
         _;
     }
 }
