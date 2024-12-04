@@ -1,4 +1,5 @@
 import express, { Request, Response } from "express";
+import { query, body, matchedData, validationResult } from "express-validator";
 import { Provider as L2Provider, Wallet } from "zksync-ethers";
 import {
   JsonRpcProvider as L1Provider,
@@ -10,6 +11,7 @@ import {
   Contract,
   isHexString,
   ZeroAddress,
+  isAddress,
 } from "ethers";
 import {
   CommitBatchInfo,
@@ -23,11 +25,10 @@ import {
   CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT,
   STORAGE_PROOF_TYPE,
 } from "./interfaces";
-import { isValidSubdomain } from "./validators";
+import { toLengthPrefixedBytes } from "./helpers";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
 import { initializeApp } from "firebase-admin/app";
-import path from "path";
 
 dotenv.config();
 
@@ -43,19 +44,19 @@ const diamondAddress = process.env.DIAMOND_PROXY_ADDR!;
 const diamondContract = new Contract(
   diamondAddress,
   ZKSYNC_DIAMOND_INTERFACE,
-  l1Provider
+  l1Provider,
 );
 const clickResolverAddress = process.env.CLICK_RESOLVER_ADDR!;
 const clickResolverContract = new Contract(
   clickResolverAddress,
   CLICK_RESOLVER_INTERFACE,
-  l1Provider
+  l1Provider,
 );
 const clickNameServiceAddress = process.env.CNS_ADDR!;
 const clickNameServiceContract = new Contract(
   clickNameServiceAddress,
   CLICK_NAME_SERVICE_INTERFACE,
-  l2Wallet
+  l2Wallet,
 );
 const batchQueryOffset = Number(process.env.SAFE_BATCH_QUERY_OFFSET!);
 const serviceAccountKey = process.env.SERVICE_ACCOUNT_KEY!;
@@ -63,16 +64,18 @@ const serviceAccount = JSON.parse(serviceAccountKey);
 const firebaseApp = initializeApp({
   credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
 });
+const domain = process.env.CNS_DOMAIN!;
+const tld = process.env.CNS_TLD!;
 
 /** Parses the transaction where batch is committed and returns commit info */
 async function parseCommitTransaction(
   txHash: string,
-  batchNumber: number
+  batchNumber: number,
 ): Promise<{ commitBatchInfo: CommitBatchInfo; commitment: string }> {
   const transactionData = await l1Provider.getTransaction(txHash);
   const [, , newBatch] = ZKSYNC_DIAMOND_INTERFACE.decodeFunctionData(
     "commitBatchesSharedBridge",
-    transactionData!.data
+    transactionData!.data,
   );
 
   // Find the batch with matching number
@@ -104,12 +107,12 @@ async function parseCommitTransaction(
   // Parse event logs of the transaction to find commitment
   const blockCommitFilter = ZKSYNC_DIAMOND_INTERFACE.encodeFilterTopics(
     "BlockCommit",
-    [batchNumber]
+    [batchNumber],
   );
   const commitLog = receipt.logs.find(
     (log) =>
       log.address === diamondAddress &&
-      blockCommitFilter.every((topic, i) => topic === log.topics[i])
+      blockCommitFilter.every((topic, i) => topic === log.topics[i]),
   );
   if (commitLog == undefined) {
     throw new Error(`Commit log for batch ${batchNumber} not found`);
@@ -117,7 +120,7 @@ async function parseCommitTransaction(
   const { commitment } = ZKSYNC_DIAMOND_INTERFACE.decodeEventLog(
     "BlockCommit",
     commitLog.data,
-    commitLog.topics
+    commitLog.topics,
   );
 
   return { commitBatchInfo, commitment };
@@ -147,7 +150,7 @@ async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
   // Parse commit calldata from commit transaction
   const { commitBatchInfo, commitment } = await parseCommitTransaction(
     commitTxHash,
-    batchNumber
+    batchNumber,
   );
   const l2LogsTreeRoot = await getL2LogsRootHash(batchNumber);
 
@@ -192,234 +195,280 @@ app.get("/health", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/expiryL2", async (req: Request, res: Response) => {
-  try {
-    const { name } = req.query;
+app.get(
+  "/expiryL2",
+  query("name").isString().withMessage("Name is required and must be a string"),
+  async (req: Request, res: Response) => {
+    try {
+      const result = validationResult(req);
+      if (!result.isEmpty()) {
+        res.status(400).json(result.array());
+        return;
+      }
+      const name = matchedData(req).name;
 
-    if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
-      res.status(400).json({
-        error:
-          "Name is required and must be a string adhering to DNS subdomain requirements",
+      const nameHash = keccak256(toUtf8Bytes(name));
+      const key = toBigInt(nameHash);
+
+      const epoch = await clickNameServiceContract.expires(nameHash);
+      const expires = new Date(Number(epoch) * 1000).toISOString();
+
+      res.status(200).send({
+        expires,
       });
-      return;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      res.status(500).send({ error: errorMessage });
     }
+  },
+);
 
-    const nameHash = keccak256(toUtf8Bytes(name));
-    const key = toBigInt(nameHash);
+app.get(
+  "/resolveL2",
+  query("name").isString().withMessage("Name is required and must be a string"),
+  async (req: Request, res: Response) => {
+    try {
+      const result = validationResult(req);
+      if (!result.isEmpty()) {
+        res.status(400).json(result.array());
+        return;
+      }
+      const name = matchedData(req).name;
 
-    const epoch = await clickNameServiceContract.expires(nameHash);
-    const expires = new Date(Number(epoch) * 1000).toISOString();
+      const owner = await clickNameServiceContract.resolve(name);
 
-    res.status(200).send({
-      expires,
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    res.status(500).send({ error: errorMessage });
-  }
-});
-
-app.get("/resolveL2", async (req: Request, res: Response) => {
-  try {
-    const { name } = req.query;
-
-    if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
-      res.status(400).json({
-        error:
-          "Name is required and must be a string adhering to DNS subdomain requirements",
+      res.status(200).send({
+        owner,
       });
-      return;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      res.status(500).send({ error: errorMessage });
     }
+  },
+);
 
-    const owner = await clickNameServiceContract.resolve(name);
+app.get(
+  "/resolveL1",
+  query("name")
+    .isFQDN()
+    .withMessage("Name must be a fully qualified domain name")
+    .custom((name) => {
+      const [sub, domain, tld] = name.split(".");
+      if (domain !== process.env.CNS_DOMAIN! || tld !== process.env.CNS_TLD!) {
+        return false;
+      }
+      return true;
+    })
+    .withMessage("Invalid domain or tld"),
+  async (req: Request, res: Response) => {
+    try {
+      const result = validationResult(req);
+      if (!result.isEmpty()) {
+        res.status(400).json(result.array());
+        return;
+      }
 
-    res.status(200).send({
-      owner,
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    res.status(500).send({ error: errorMessage });
-  }
-});
+      const name = matchedData(req).name;
+      const parts = name.split(".");
+      const [sub, domain, tld] = parts;
 
-app.get("/storageProvedOwnerL2", async (req: Request, res: Response) => {
-  try {
-    const { name } = req.query;
+      const encodedFqdn = toLengthPrefixedBytes(sub, domain, tld);
 
-    if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
-      res.status(400).json({
-        error:
-          "Name is required and must be a string adhering to DNS subdomain requirements",
+      const owner = await clickNameServiceContract.resolve(encodedFqdn);
+
+      res.status(200).send({
+        owner,
       });
-      return;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      res.status(500).send({ error: errorMessage });
     }
+  },
+);
 
-    const token = toBigInt(keccak256(toUtf8Bytes(name)));
+app.post(
+  "/resolveWithProofL1",
+  [
+    body("proof")
+      .isString()
+      .custom((proof) => {
+        return isHexString(proof);
+      })
+      .withMessage("Proof must be a hex string"),
+    body("key")
+      .isString()
+      .custom((key) => {
+        return isHexString(key, 32);
+      })
+      .withMessage("Key must be a 32 bytes hex string"),
+  ],
+  async (req: Request, res: Response) => {
+    try {
+      const result = validationResult(req);
+      if (!result.isEmpty()) {
+        res.status(400).json(result.array());
+        return;
+      }
+      const data = matchedData(req);
 
-    const key = keccak256(
-      AbiCoder.defaultAbiCoder().encode(
-        ["uint256", "uint256"],
-        [token, CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT]
-      )
-    );
+      const rawOwner = await clickResolverContract.resolveWithProof(
+        data.proof,
+        data.key,
+      );
+      const owner = getAddress("0x" + rawOwner.slice(26));
+      if (owner === ZeroAddress) {
+        res
+          .status(404)
+          .send({ error: "Owner not found or not yet proved to L1" });
+        return;
+      }
 
-    const l1BatchNumber = await l2Provider.getL1BatchNumber();
-
-    const proof = await l2Provider.getProof(
-      clickNameServiceAddress,
-      [key],
-      l1BatchNumber
-    );
-    const rawOwner = proof.storageProof[0].value;
-    const owner = getAddress("0x" + rawOwner.slice(26));
-
-    res.status(200).send({
-      owner,
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    res.status(500).send({ error: errorMessage });
-  }
-});
-
-app.post("/resolveWithProofL1", async (req: Request, res: Response) => {
-  try {
-    const { proof, key } = req.body;
-
-    if (!proof || !isHexString(proof) || !key || !isHexString(key, 32)) {
-      res.status(400).json({
-        error:
-          "Both proof and key are required and must be hex strings adhering to the requirements",
+      res.status(200).send({
+        owner,
       });
-      return;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      res.status(500).send({ error: errorMessage });
     }
+  },
+);
 
-    const rawOwner = await clickResolverContract.resolveWithProof(proof, key);
-    const owner = getAddress("0x" + rawOwner.slice(26));
-    if (owner === ZeroAddress) {
-      res
-        .status(404)
-        .send({ error: "Owner not found or not yet proved to L1" });
-      return;
-    }
+app.get(
+  "/storageProof",
+  query("key")
+    .isString()
+    .custom((key) => {
+      return isHexString(key, 32);
+    })
+    .withMessage("Key must be a 32 bytes hex string"),
+  async (req: Request, res: Response) => {
+    try {
+      const result = validationResult(req);
+      if (!result.isEmpty()) {
+        res.status(400).json(result.array());
+        return;
+      }
+      const key = matchedData(req).key;
 
-    res.status(200).send({
-      owner,
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    res.status(500).send({ error: errorMessage });
-  }
-});
+      const l1BatchNumber = await l2Provider.getL1BatchNumber();
+      const batchNumber = l1BatchNumber - batchQueryOffset;
 
-app.get("/storageProof", async (req: Request, res: Response) => {
-  try {
-    const { key } = req.query;
-    // check if key is a vaild 32 bytes hex string using ethers utils
-    if (!key || !isHexString(key, 32)) {
-      res.status(400).json({
-        error: "Key is required and must be a 32 bytes hex string",
+      const proof = await l2Provider.getProof(
+        clickNameServiceAddress,
+        [key],
+        batchNumber,
+      );
+
+      const batchDetails = await l2Provider.getL1BatchDetails(batchNumber);
+      if (batchDetails.commitTxHash == undefined) {
+        throw new Error(`Batch ${batchNumber} is not committed`);
+      }
+
+      const batchInfo = await getBatchInfo(batchNumber);
+      const storageProof: StorageProof = {
+        account: proof.address,
+        key: proof.storageProof[0].key,
+        path: proof.storageProof[0].proof,
+        value: proof.storageProof[0].value,
+        index: proof.storageProof[0].index,
+        metadata: {
+          batchNumber: batchInfo.batchNumber,
+          indexRepeatedStorageChanges: batchInfo.indexRepeatedStorageChanges,
+          numberOfLayer1Txs: batchInfo.numberOfLayer1Txs,
+          priorityOperationsHash: batchInfo.priorityOperationsHash,
+          l2LogsTreeRoot: batchInfo.l2LogsTreeRoot,
+          timestamp: batchInfo.timestamp,
+          commitment: batchInfo.commitment,
+        },
+      };
+
+      const data = AbiCoder.defaultAbiCoder().encode(
+        [STORAGE_PROOF_TYPE],
+        [storageProof],
+      );
+
+      res.status(200).send({
+        data,
       });
-      return;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      res.status(500).send({ error: errorMessage });
     }
+  },
+);
 
-    const l1BatchNumber = await l2Provider.getL1BatchNumber();
-    const batchNumber = l1BatchNumber - batchQueryOffset;
+app.post(
+  "/registerL2",
+  [
+    body("name")
+      .isFQDN()
+      .withMessage("Name must be a fully qualified domain name")
+      .custom((name) => {
+        const [sub, domain, tld] = name.split(".");
+        if (domain !== process.env.CNS_DOMAIN || tld !== process.env.CNS_TLD!) {
+          return false;
+        }
+        return true;
+      })
+      .withMessage("Invalid domain or tld"),
+    body("owner")
+      .isString()
+      .custom((owner) => {
+        isAddress(owner);
+      })
+      .withMessage("Owner must be a valid Ethereum address"),
+  ],
+  async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        res.status(401).json({ error: "Authorization header is missing" });
+        return;
+      }
+      const idToken = authHeader.split("Bearer ")[1];
+      if (!idToken) {
+        res.status(401).json({ error: "Bearer token is missing" });
+        return;
+      }
+      const decodedToken = await admin.auth().verifyIdToken(idToken);
+      if (!decodedToken.email_verified) {
+        res.status(403).json({ error: "Email not verified" });
+        return;
+      }
 
-    const proof = await l2Provider.getProof(
-      clickNameServiceAddress,
-      [key],
-      batchNumber
-    );
+      const result = validationResult(req);
+      if (!result.isEmpty()) {
+        res.status(400).json(result.array());
+        return;
+      }
 
-    const batchDetails = await l2Provider.getL1BatchDetails(batchNumber);
-    if (batchDetails.commitTxHash == undefined) {
-      throw new Error(`Batch ${batchNumber} is not committed`);
-    }
+      const data = matchedData(req);
+      const sub = data.name.split(".")[0];
+      const owner = getAddress(data.owner);
 
-    const batchInfo = await getBatchInfo(batchNumber);
-    const storageProof: StorageProof = {
-      account: proof.address,
-      key: proof.storageProof[0].key,
-      path: proof.storageProof[0].proof,
-      value: proof.storageProof[0].value,
-      index: proof.storageProof[0].index,
-      metadata: {
-        batchNumber: batchInfo.batchNumber,
-        indexRepeatedStorageChanges: batchInfo.indexRepeatedStorageChanges,
-        numberOfLayer1Txs: batchInfo.numberOfLayer1Txs,
-        priorityOperationsHash: batchInfo.priorityOperationsHash,
-        l2LogsTreeRoot: batchInfo.l2LogsTreeRoot,
-        timestamp: batchInfo.timestamp,
-        commitment: batchInfo.commitment,
-      },
-    };
+      const response = await clickNameServiceContract.register(owner, sub);
+      const receipt = await response.wait();
+      if (receipt.status !== 1) {
+        throw new Error("Transaction failed");
+      }
 
-    const data = AbiCoder.defaultAbiCoder().encode(
-      [STORAGE_PROOF_TYPE],
-      [storageProof]
-    );
-
-    res.status(200).send({
-      data,
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    res.status(500).send({ error: errorMessage });
-  }
-});
-
-app.post("/registerL2", async (req: Request, res: Response) => {
-  try {
-    const { name, owner } = req.body;
-
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      res.status(401).json({ error: "Authorization header is missing" });
-      return;
-    }
-    const idToken = authHeader.split("Bearer ")[1];
-    if (!idToken) {
-      res.status(401).json({ error: "Bearer token is missing" });
-      return;
-    }
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    if (!decodedToken.email_verified) {
-      res.status(403).json({ error: "Email not verified" });
-      return;
-    }
-
-    if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
-      res.status(400).json({
-        error:
-          "Name is required and must be a string adhering to DNS subdomain requirements",
+      res.status(200).send({
+        txHash: receipt.hash,
       });
-      return;
+    } catch (error) {
+      const message =
+        error && typeof error === "object" && "message" in error
+          ? error.message
+          : String(error);
+      res.status(500).send({ error: message });
     }
-
-    const ownerAddress = getAddress(owner);
-
-    const response = await clickNameServiceContract.register(
-      ownerAddress,
-      name
-    );
-    const receipt = await response.wait();
-
-    if (receipt.status !== 1) {
-      throw new Error("Transaction failed");
-    }
-
-    res.status(200).send({
-      txHash: receipt.hash,
-    });
-  } catch (error) {
-    const message =
-      error && typeof error === "object" && "message" in error
-        ? error.message
-        : String(error);
-    res.status(500).send({ error: message });
-  }
-});
+  },
+);
 
 // Start server
 app.listen(port, () => {
