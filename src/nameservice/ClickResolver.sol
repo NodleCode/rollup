@@ -104,9 +104,9 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
 
     /// @notice Calculates the key for the given subdomain name in the L2 registry
     /// @dev Names are stored in the registry, in a mapping with slot `mappingSlot`
-    function getStorageKey(string memory subDomain) public view returns (uint256) {
+    function getStorageKey(string memory subDomain) public view returns (bytes32) {
         uint256 tokenId = uint256(keccak256(abi.encodePacked(subDomain)));
-        return uint256(keccak256(abi.encode(tokenId, mappingSlot)));
+        return keccak256(abi.encode(tokenId, mappingSlot));
     }
 
     /// @notice Resolves a name based on its subdomain part regardless of the given domain and top level
@@ -127,7 +127,7 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
         string[] memory urls = new string[](1);
         urls[0] = url;
 
-        uint256 key = getStorageKey(sub);
+        bytes32 key = getStorageKey(sub);
 
         bytes4 functionSelector = bytes4(_data[:4]);
         if (functionSelector == ADDR_SELECTOR) {

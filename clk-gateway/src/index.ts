@@ -8,6 +8,8 @@ import {
   AbiCoder,
   getAddress,
   Contract,
+  isHexString,
+  ZeroAddress,
 } from "ethers";
 import {
   CommitBatchInfo,
@@ -280,26 +282,46 @@ app.get("/storageProvedOwnerL2", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/resolveWithProofL1", async (req: Request, res: Response) => {
+app.post("/resolveWithProofL1", async (req: Request, res: Response) => {
   try {
-    const { name } = req.query;
+    const { proof, key } = req.body;
 
-    if (!name || typeof name !== "string" || !isValidSubdomain(name)) {
+    if (!proof || !isHexString(proof) || !key || !isHexString(key, 32)) {
       res.status(400).json({
         error:
-          "Name is required and must be a string adhering to DNS subdomain requirements",
+          "Both proof and key are required and must be hex strings adhering to the requirements",
       });
       return;
     }
 
-    const token = toBigInt(keccak256(toUtf8Bytes(name)));
+    const rawOwner = await clickResolverContract.resolveWithProof(proof, key);
+    const owner = getAddress("0x" + rawOwner.slice(26));
+    if (owner === ZeroAddress) {
+      res
+        .status(404)
+        .send({ error: "Owner not found or not yet proved to L1" });
+      return;
+    }
 
-    const key = keccak256(
-      AbiCoder.defaultAbiCoder().encode(
-        ["uint256", "uint256"],
-        [token, CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT]
-      )
-    );
+    res.status(200).send({
+      owner,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).send({ error: errorMessage });
+  }
+});
+
+app.get("/storageProof", async (req: Request, res: Response) => {
+  try {
+    const { key } = req.query;
+    // check if key is a vaild 32 bytes hex string using ethers utils
+    if (!key || !isHexString(key, 32)) {
+      res.status(400).json({
+        error: "Key is required and must be a 32 bytes hex string",
+      });
+      return;
+    }
 
     const l1BatchNumber = await l2Provider.getL1BatchNumber();
     const batchNumber = l1BatchNumber - batchQueryOffset;
@@ -333,29 +355,13 @@ app.get("/resolveWithProofL1", async (req: Request, res: Response) => {
       },
     };
 
-    const fallbackValue = "0x" + "00".repeat(32);
-    const response = AbiCoder.defaultAbiCoder().encode(
-      [STORAGE_PROOF_TYPE, "bytes32"],
-      [storageProof, fallbackValue]
+    const data = AbiCoder.defaultAbiCoder().encode(
+      [STORAGE_PROOF_TYPE],
+      [storageProof]
     );
-    const extraData = AbiCoder.defaultAbiCoder().encode(
-      ["address", "uint256"],
-      [proof.address, proof.storageProof[0].key]
-    );
-    const rawOwner = await clickResolverContract.resolveWithProof(
-      response,
-      extraData
-    );
-    if (rawOwner === fallbackValue) {
-      res
-        .status(404)
-        .send({ error: "Owner not found or not yet proved to L1" });
-      return;
-    }
-    const owner = getAddress("0x" + rawOwner.slice(26));
 
     res.status(200).send({
-      owner,
+      data,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
