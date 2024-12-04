@@ -19,7 +19,7 @@ contract EnterpriseContentSignTest is Test {
         vm.stopPrank();
     }
 
-    function sets_adminRole() public {
+    function sets_adminRole() public view {
         assertEq(nft.hasRole(nft.DEFAULT_ADMIN_ROLE(), alice), true);
     }
 
