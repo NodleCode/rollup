@@ -8,6 +8,7 @@
                 "ignoreConstructors": true
             }
         ],
-        "constructor-syntax": "error"
+        "constructor-syntax": "error",
+        "immutable-vars-naming": "off"
     }
 }
