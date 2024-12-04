@@ -23,15 +23,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-      
-      - name: Install cSpell
-        run: npm install -g cspell
+
+      - name: Install dependencies
+        run: yarn
 
       - name: Spell Check
-        run: cspell --config .cspell.json
+        run: yarn spellcheck
 
       - name: Lint
-        run: forge fmt --check
+        run: yarn lint
         
       - name: Run tests
         run: forge test --zksync
