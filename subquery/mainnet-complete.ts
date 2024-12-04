@@ -144,7 +144,7 @@ const project: EthereumProject = {
       startBlock: 42332281, // This is the block that the contract was deployed on
       options: {
         abi: "Grants",
-        address: "0xdAdF329E8b30D878b139074De163D3A591aAB394",
+        address: "0x5855c486d2381ba41762876f18684951d5902829",
       },
       assets: new Map([
         [
@@ -197,7 +197,7 @@ const project: EthereumProject = {
       startBlock: 42332281, // This is the block that the contract was deployed on
       options: {
         abi: "GrantsMigration",
-        address: "0xF81b3b954221BeDcf762cd18FEc1A22D25016B2E",
+        address: "0x1A89C10456A78a41B55c3aEAcfc865E079bE5690",
       },
       assets: new Map([
         [

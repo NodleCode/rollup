@@ -35,7 +35,6 @@ export async function handleNFTTransfer(event: TransferLog): Promise<void> {
       ]).catch((error) => {
         return null;
       });
-      logger.info("Token URI: " + String(tokenUri));
       
       if (tokenUri && nodleContracts.includes(contract.id)) {
         const metadata = await fetchMetadata(String(tokenUri), [
@@ -95,7 +94,6 @@ export async function handleApproval(event: ApprovalLog): Promise<void> {
       ]).catch((error) => {
         return null;
       });
-      logger.info("Token URI: " + String(tokenUri));
       if (tokenUri && nodleContracts.includes(contract.id)) {
         const metadata = await fetchMetadata(String(tokenUri), [
           "nodle-community-nfts.myfilebase.com/ipfs",

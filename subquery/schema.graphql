@@ -65,9 +65,9 @@ type ERC721Token @entity @compositeIndexes(fields: [["owner", "contract"]]) {
   transfers: [ERC721Transfer!]! @derivedFrom(field: "token")
   application: String
   duration: Int
-  captureDate: BigInt @index
-  longitude: Float @index
-  latitude: Float @index
+  captureDate: BigInt
+  longitude: Float
+  latitude: Float
   locationPrecision: String
   contentHash: String
 }
@@ -239,6 +239,7 @@ type VestingSchedule @entity {
   period: BigInt
   periodCount: Int
   perPeriodAmount: BigInt
+  total: BigInt
   transaction: Transaction!
   cancelled: Boolean
   cancelTransaction: Transaction
@@ -251,6 +252,8 @@ type VestingSchedule @entity {
 type VestingScheduleCanceled @entity {
   id: ID!
   beneficiary: Account! @index
+  start: BigInt
+  end: BigInt
   cancelAuthority: Account @index
   affectedVestingSchedules: [String!]
   transaction: Transaction!
@@ -259,6 +262,8 @@ type VestingScheduleCanceled @entity {
 type VestingScheduleRenounced @entity {
   id: ID!
   beneficiary: Account! @index
+  start: BigInt
+  end: BigInt
   cancelAuthority: Account @index
   affectedVestingSchedules: [String!]
   transaction: Transaction!
@@ -267,6 +272,8 @@ type VestingScheduleRenounced @entity {
 type VestingScheduleClaimed @entity {
   id: ID!
   beneficiary: Account! @index
+  start: BigInt
+  end: BigInt
   amount: BigInt
   transaction: Transaction!
 }
@@ -284,9 +291,9 @@ type Reward @entity {
   amount: BigInt @index
   transaction: Transaction!
   BatchMetadata: BatchMetadata
-  sequence: BigInt @index
-  status: Boolean @index
-  signature: String @index
+  sequence: BigInt
+  status: Boolean
+  signature: String
 }
 
 type AccountSnapshot @entity {
@@ -328,10 +335,10 @@ type TokenSnapshotV2 @entity {
   tokensMinted: Int!
   fistBlockTimestamp: BigInt! @index
   latestBlockTimestamp: BigInt @index
-  latestBlockNumber: Int @index
-  firstBlockNumber: Int! @index
-  firstToken: ERC721Token! @index
-  latestToken: ERC721Token @index
+  latestBlockNumber: Int
+  firstBlockNumber: Int!
+  firstToken: ERC721Token!
+  latestToken: ERC721Token
 }
 
 type ERC20TransferV2 implements Event
