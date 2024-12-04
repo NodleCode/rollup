@@ -10,6 +10,3 @@
 [submodule "lib/era-contracts"]
 	path = lib/era-contracts
 	url = https://github.com/matter-labs/era-contracts
-[submodule "lib/clave-contracts"]
-	path = lib/clave-contracts
-	url = git@github.com:getclave/clave-contracts.git
