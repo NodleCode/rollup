@@ -43,7 +43,7 @@ jobs:
 
       - name: Build and Tag Images
         run: |-
-          docker build \
+          docker build --no-cache \
             -t us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway:latest \
             -t us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway:${{ github.sha }} \
             ./clk-gateway
