@@ -121,13 +121,12 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
             return abi.encodePacked(domainOwner);
         }
 
-        bytes memory callData = abi.encode(sub);
-
         // Fill URLs
         string[] memory urls = new string[](1);
         urls[0] = url;
 
         bytes32 key = getStorageKey(sub);
+        bytes memory callData = abi.encode(key);
 
         bytes4 functionSelector = bytes4(_data[:4]);
         if (functionSelector == ADDR_SELECTOR) {
@@ -136,7 +135,7 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
                 urls,
                 callData,
                 ClickResolver.resolveWithProof.selector,
-                abi.encode(key)
+                callData
             );
         } else if (functionSelector == ADDR_MULTICHAIN_SELECTOR) {
             (, uint256 coinType) = abi.decode(_data[4:], (bytes32, uint256));
@@ -149,7 +148,7 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
                 urls,
                 callData,
                 ClickResolver.resolveWithProof.selector,
-                abi.encode(key)
+                callData
             );
         } else {
             revert UnsupportedSelector(functionSelector);
