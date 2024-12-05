@@ -69,8 +69,8 @@ const serviceAccount = JSON.parse(serviceAccountKey);
 const firebaseApp = initializeApp({
   credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
 });
-const domain = process.env.CNS_DOMAIN!;
-const tld = process.env.CNS_TLD!;
+const cnsDomain = process.env.CNS_DOMAIN!;
+const cnsTld = process.env.CNS_TLD!;
 
 /** Parses the transaction where batch is committed and returns commit info */
 async function parseCommitTransaction(
@@ -261,7 +261,7 @@ app.get(
     .withMessage("Name must be a fully qualified domain name")
     .custom((name) => {
       const [sub, domain, tld] = name.split(".");
-      if (domain !== process.env.CNS_DOMAIN! || tld !== process.env.CNS_TLD!) {
+      if (domain !== cnsDomain || tld !== cnsTld) {
         return false;
       }
       return true;
@@ -435,7 +435,7 @@ app.post(
       .withMessage("Name must be a fully qualified domain name")
       .custom((name) => {
         const [sub, domain, tld] = name.split(".");
-        if (domain !== process.env.CNS_DOMAIN || tld !== process.env.CNS_TLD!) {
+        if (domain !== cnsDomain || tld !== cnsTld) {
           return false;
         }
         return true;
