@@ -254,7 +254,7 @@ app.get(
   },
 );
 
-app.get(
+app.post(
   "/resolveL1",
   body("name")
     .isFQDN()
