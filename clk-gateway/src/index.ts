@@ -24,8 +24,13 @@ import {
   CLICK_RESOLVER_INTERFACE,
   CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT,
   STORAGE_PROOF_TYPE,
+  CLICK_RESOLVER_ADDRESS_SELECTOR,
 } from "./interfaces";
-import { toLengthPrefixedBytes } from "./helpers";
+import {
+  toLengthPrefixedBytes,
+  isParsableError,
+  isOffchainLookupError,
+} from "./helpers";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
 import { initializeApp } from "firebase-admin/app";
@@ -199,14 +204,14 @@ app.get(
   "/expiryL2",
   query("name").isString().withMessage("Name is required and must be a string"),
   async (req: Request, res: Response) => {
-    try {
-      const result = validationResult(req);
-      if (!result.isEmpty()) {
-        res.status(400).json(result.array());
-        return;
-      }
-      const name = matchedData(req).name;
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      res.status(400).json(result.array());
+      return;
+    }
+    const name = matchedData(req).name;
 
+    try {
       const nameHash = keccak256(toUtf8Bytes(name));
       const key = toBigInt(nameHash);
 
@@ -228,14 +233,14 @@ app.get(
   "/resolveL2",
   query("name").isString().withMessage("Name is required and must be a string"),
   async (req: Request, res: Response) => {
-    try {
-      const result = validationResult(req);
-      if (!result.isEmpty()) {
-        res.status(400).json(result.array());
-        return;
-      }
-      const name = matchedData(req).name;
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      res.status(400).json(result.array());
+      return;
+    }
+    const name = matchedData(req).name;
 
+    try {
       const owner = await clickNameServiceContract.resolve(name);
 
       res.status(200).send({
@@ -251,7 +256,7 @@ app.get(
 
 app.get(
   "/resolveL1",
-  query("name")
+  body("name")
     .isFQDN()
     .withMessage("Name must be a fully qualified domain name")
     .custom((name) => {
@@ -263,25 +268,45 @@ app.get(
     })
     .withMessage("Invalid domain or tld"),
   async (req: Request, res: Response) => {
-    try {
-      const result = validationResult(req);
-      if (!result.isEmpty()) {
-        res.status(400).json(result.array());
-        return;
-      }
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      res.status(400).json(result.array());
+      return;
+    }
+    const name = matchedData(req).name;
 
-      const name = matchedData(req).name;
+    try {
       const parts = name.split(".");
       const [sub, domain, tld] = parts;
 
       const encodedFqdn = toLengthPrefixedBytes(sub, domain, tld);
 
-      const owner = await clickNameServiceContract.resolve(encodedFqdn);
+      const owner = await clickResolverContract.resolve(
+        encodedFqdn,
+        CLICK_RESOLVER_ADDRESS_SELECTOR,
+      );
 
       res.status(200).send({
         owner,
       });
     } catch (error) {
+      if (isParsableError(error)) {
+        const decodedError = CLICK_RESOLVER_INTERFACE.parseError(error.data);
+        if (isOffchainLookupError(decodedError)) {
+          const { sender, urls, callData, callbackFunction, extraData } =
+            decodedError.args;
+          res.status(200).send({
+            OffchainLookup: {
+              sender,
+              urls,
+              callData,
+              callbackFunction,
+              extraData,
+            },
+          });
+          return;
+        }
+      }
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       res.status(500).send({ error: errorMessage });
@@ -306,14 +331,14 @@ app.post(
       .withMessage("Key must be a 32 bytes hex string"),
   ],
   async (req: Request, res: Response) => {
-    try {
-      const result = validationResult(req);
-      if (!result.isEmpty()) {
-        res.status(400).json(result.array());
-        return;
-      }
-      const data = matchedData(req);
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      res.status(400).json(result.array());
+      return;
+    }
+    const data = matchedData(req);
 
+    try {
       const rawOwner = await clickResolverContract.resolveWithProof(
         data.proof,
         data.key,
@@ -346,14 +371,14 @@ app.get(
     })
     .withMessage("Key must be a 32 bytes hex string"),
   async (req: Request, res: Response) => {
-    try {
-      const result = validationResult(req);
-      if (!result.isEmpty()) {
-        res.status(400).json(result.array());
-        return;
-      }
-      const key = matchedData(req).key;
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      res.status(400).json(result.array());
+      return;
+    }
+    const key = matchedData(req).key;
 
+    try {
       const l1BatchNumber = await l2Provider.getL1BatchNumber();
       const batchNumber = l1BatchNumber - batchQueryOffset;
 
@@ -419,35 +444,35 @@ app.post(
     body("owner")
       .isString()
       .custom((owner) => {
-        isAddress(owner);
+        return isAddress(owner);
       })
       .withMessage("Owner must be a valid Ethereum address"),
   ],
   async (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).json({ error: "Authorization header is missing" });
+      return;
+    }
+    const idToken = authHeader.split("Bearer ")[1];
+    if (!idToken) {
+      res.status(401).json({ error: "Bearer token is missing" });
+      return;
+    }
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    if (!decodedToken.email_verified) {
+      res.status(403).json({ error: "Email not verified" });
+      return;
+    }
+
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      res.status(400).json(result.array());
+      return;
+    }
+    const data = matchedData(req);
+
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader) {
-        res.status(401).json({ error: "Authorization header is missing" });
-        return;
-      }
-      const idToken = authHeader.split("Bearer ")[1];
-      if (!idToken) {
-        res.status(401).json({ error: "Bearer token is missing" });
-        return;
-      }
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      if (!decodedToken.email_verified) {
-        res.status(403).json({ error: "Email not verified" });
-        return;
-      }
-
-      const result = validationResult(req);
-      if (!result.isEmpty()) {
-        res.status(400).json(result.array());
-        return;
-      }
-
-      const data = matchedData(req);
       const sub = data.name.split(".")[0];
       const owner = getAddress(data.owner);
 

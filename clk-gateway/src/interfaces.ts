@@ -37,6 +37,8 @@ export const CLICK_RESOLVER_INTERFACE = new Interface([
   "error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData)",
 ]);
 
+export const CLICK_RESOLVER_ADDRESS_SELECTOR = "0x3b3b57de";
+
 // L2 Contract
 export const CLICK_NAME_SERVICE_INTERFACE = new Interface([
   "function expires(uint256 key) public view returns (uint256)",
