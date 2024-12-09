@@ -9,7 +9,8 @@ export async function handleNameRegistered(event: NameRegisteredLog): Promise<vo
   }
 
   const timestamp = event.block.timestamp * BigInt(1000);
-  const expiresAt = event.args.expires.toBigInt() * BigInt(1000);
+  const expiresAt =
+    event.args.expires ? event.args.expires.toBigInt() * BigInt(1000) : BigInt(0);
   const owner = await fetchAccount(event.args.owner, timestamp);
   const name = event.args.name.toString();
   const txHash = event.transaction.hash;

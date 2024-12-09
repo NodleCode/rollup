@@ -8,3 +8,4 @@ export * from "./mappings/grants";
 export * from "./mappings/grants-migration";
 
 export * from "./mappings/rewards";
+export * from "./mappings/ens";
