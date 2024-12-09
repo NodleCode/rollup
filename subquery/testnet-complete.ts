@@ -338,11 +338,11 @@ const project: EthereumProject = {
         file: "./dist/index.js",
         handlers: [
           {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleNameRegistered",
+            kind: EthereumHandlerKind.Call,
+            handler: "handleCallRegistry",
             filter: {
-              topics: ["NameRegistered(string,address,uint256)"],
-            }
+              function: "register(address,string)",
+            },
           },
         ],
       },
