@@ -14,7 +14,7 @@ export async function handleNameRegistered(
   const timestamp = event.block.timestamp * BigInt(1000);
   const _expires = expires ? expires.toBigInt() * BigInt(1000) : BigInt(0);
   const _owner = await fetchAccount(owner, timestamp);
-  const _name = event.args.name.toString();
+  const _name = name.toString();
   const txHash = event.transaction.hash;
 
   const registeredEns = new ENS(
