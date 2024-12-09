@@ -367,8 +367,10 @@ type UsersLevelsStats @entity {
 type ENS @entity {
   id: ID!
   owner: Account! @index
-  expiresAt: BigInt!
+  expiresAt: BigInt
   registeredAt: BigInt!
   name: String! @index
+  rawName: String
+  caller: Account!
 }
 
