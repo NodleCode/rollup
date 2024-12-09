@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import { query, body, matchedData, validationResult } from "express-validator";
+import cors from "cors";
 import { Provider as L2Provider, Wallet } from "zksync-ethers";
 import {
   JsonRpcProvider as L1Provider,
@@ -39,6 +40,13 @@ dotenv.config();
 
 const app = express();
 app.use(express.json());
+
+const corsOptions = {
+  origin: "*",
+  methods: ["GET", "POST", "OPTIONS", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+app.use(cors(corsOptions));
 
 const port = process.env.PORT || 8080;
 const privateKey = process.env.REGISTRAR_PRIVATE_KEY!;
