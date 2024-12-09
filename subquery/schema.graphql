@@ -28,6 +28,8 @@ type Account @entity {
   vestingSchedules: [VestingSchedule!]! @derivedFrom(field: "beneficiary")
   timestamp: BigInt
   balance: BigInt @index
+  name: String
+  ENS: ENS @derivedFrom(field: "owner") @index
 }
 
 type Wallet @entity {
@@ -360,5 +362,13 @@ type UsersLevelsStats @entity {
   total: BigInt! @index
   updatedAt: BigInt!
   createdAt: BigInt!
+}
+
+type ENS @entity {
+  id: ID!
+  owner: Account! @index
+  expiresAt: BigInt!
+  registeredAt: BigInt!
+  name: String! @index
 }
 
