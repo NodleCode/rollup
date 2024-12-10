@@ -97,14 +97,7 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
 
     /// @inheritdoc IClickNameService
     function register(address to, string memory name) public {
-        if (!_isAuthorized()) {
-            revert NotAuthorized();
-        }
-
-        uint256 tokenId = _register(to, name);
-        uint256 expireTimestamp = block.timestamp + expiryDuration;
-        expires[tokenId] = expireTimestamp;
-        emit NameRegistered(name, to, expireTimestamp);
+        registerWithExpiry(to, name, expiryDuration);
     }
 
     /// @inheritdoc IClickNameService
