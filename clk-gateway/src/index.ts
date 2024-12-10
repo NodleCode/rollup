@@ -478,7 +478,6 @@ app.post(
         });
         return;
       }
-      await admin.auth().revokeRefreshTokens(decodedToken.uid);
 
       const result = validationResult(req);
       if (!result.isEmpty()) {
@@ -486,10 +485,14 @@ app.post(
         return;
       }
       const data = matchedData(req);
-
       const sub = data.name.split(".")[0];
+      if (sub.length < 5) {
+        throw new Error("Current available subdomain names are limited to those with at least 5 characters");
+      }
       const owner = getAddress(data.owner);
 
+      await admin.auth().revokeRefreshTokens(decodedToken.uid);
+      
       const response = await clickNameServiceContract.register(owner, sub);
       const receipt = await response.wait();
       if (receipt.status !== 1) {
