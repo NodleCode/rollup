@@ -50,7 +50,7 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     /// @notice Thrown when attempting to register a name that already exists
     /// @param owner The address of the current owner of the name
     /// @param expiresAt The timestamp when the name expires
-    error NamAlreadyExists(address owner, uint256 expiresAt);
+    error NameAlreadyExists(address owner, uint256 expiresAt);
 
     /// @notice Thrown when attempting to remove a name that has not yet expired
     /// @param expiresAt The timestamp when the name expires
@@ -126,7 +126,7 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
             _safeMint(to, tokenId);
         } else {
             if (expires[tokenId] > block.timestamp) {
-                revert NamAlreadyExists(owner, expires[tokenId]);
+                revert NameAlreadyExists(owner, expires[tokenId]);
             }
             _safeTransfer(owner, to, tokenId);
         }
