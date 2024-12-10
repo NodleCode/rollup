@@ -77,7 +77,11 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     /**
      * @notice Register multiple names at once
      */
-    function batchRegister(NameOwner[] memory nameOwners) external isAuthorized {
+    function batchRegister(NameOwner[] memory nameOwners) external {
+        if (!_isAuthorized()) {
+            revert NotAuthorized();
+        }
+
         for (uint256 i = 0; i < nameOwners.length; i++) {
             register(nameOwners[i].owner, nameOwners[i].name);
         }
@@ -92,7 +96,11 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     }
 
     /// @inheritdoc IClickNameService
-    function register(address to, string memory name) public isAuthorized {
+    function register(address to, string memory name) public {
+        if (!_isAuthorized()) {
+            revert NotAuthorized();
+        }
+
         uint256 tokenId = _register(to, name);
         uint256 expireTimestamp = block.timestamp + expiryDuration;
         expires[tokenId] = expireTimestamp;
@@ -100,7 +108,11 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     }
 
     /// @inheritdoc IClickNameService
-    function registerWithExpiry(address to, string memory name, uint256 duration) public isAuthorized {
+    function registerWithExpiry(address to, string memory name, uint256 duration) public {
+        if (!_isAuthorized()) {
+            revert NotAuthorized();
+        }
+
         uint256 tokenId = _register(to, name);
         uint256 expireTimestamp = block.timestamp + duration;
         expires[tokenId] = expireTimestamp;
@@ -163,10 +175,14 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
      * @notice Extend expiry of a name
      * @dev Only authorized accounts can extend expiry
      */
-    function extendExpiry(uint256 tokenId, uint256 duration) public isAuthorized {
+    function extendExpiry(uint256 tokenId, uint256 duration) public {
+        if (!_isAuthorized()) {
+            revert NotAuthorized();
+        }
         if (_ownerOf(tokenId) == address(0)) {
             revert NameNotFound();
         }
+
         if (expires[tokenId] > block.timestamp) {
             expires[tokenId] += duration;
         } else {
@@ -184,11 +200,8 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
         return true;
     }
 
-    // Modifier to check if caller is authorized for mints and registries
-    modifier isAuthorized() {
-        if (!hasRole(REGISTERER_ROLE, msg.sender) && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
-            revert NotAuthorized();
-        }
-        _;
+    // Check if caller is authorized for priviledged operations
+    function _isAuthorized() private view returns (bool) {
+        return (hasRole(REGISTERER_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender));
     }
 }
