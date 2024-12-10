@@ -467,11 +467,18 @@ app.post(
         res.status(401).json({ error: "Bearer token is missing" });
         return;
       }
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
+      const decodedToken = await admin.auth().verifyIdToken(idToken, true);
       if (!decodedToken.email_verified) {
         res.status(403).json({ error: "Email not verified" });
         return;
       }
+      if (decodedToken.subDomain) {
+        res.status(403).json({
+          error: "One subdomain already claimed with this email address",
+        });
+        return;
+      }
+      await admin.auth().revokeRefreshTokens(decodedToken.uid);
 
       const result = validationResult(req);
       if (!result.isEmpty()) {
@@ -489,6 +496,9 @@ app.post(
         throw new Error("Transaction failed");
       }
 
+      await admin
+        .auth()
+        .setCustomUserClaims(decodedToken.uid, { subDomain: sub });
       res.status(200).send({
         txHash: receipt.hash,
       });
