@@ -9,5 +9,5 @@
   "github.copilot.chat.inlineChatCompletionTrigger.enabled": true,
   "github.copilot.chat.inlineChatHint.enabled": true,
   "github.copilot.chat.search.semanticTextResults": true,
-  "editor.defaultFormatter": "esbenp.prettier-vscode"
+  "editor.defaultFormatter": null
 }
