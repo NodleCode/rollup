@@ -114,8 +114,6 @@ export const getContractDetails = async (
     const [isErc721] = await callContract(address, abi, "supportsInterface", [
       "0x80ac58cd",
     ]).catch((error: any) => {
-      logger.info(`Error calling supportsInterface for ${address}`);
-      logger.info(JSON.stringify(error));
       return [false];
     });
 
@@ -124,14 +122,9 @@ export const getContractDetails = async (
     const [erc1155] = await callContract(address, abi, "supportsInterface", [
       "0xd9b67a26",
     ]).catch((error: any) => {
-      logger.info(`Error calling supportsInterface for ${address}`);
-      logger.info(JSON.stringify(error));
       return [false];
     });
 
-    console.log("erc1155", erc1155);
-
-    logger.info(`isErc721: ${isErc721}`);
     const isErc20 = isErc721 || erc1155 ? false : await checkERC20(address);
 
     return {
@@ -141,8 +134,6 @@ export const getContractDetails = async (
       isErc20: Boolean(isErc20),
     };
   } catch (error: any) {
-    logger.info(`Error getting contract details for ${address}`);
-    logger.info(JSON.stringify(error));
 
     return {
       symbol: "",

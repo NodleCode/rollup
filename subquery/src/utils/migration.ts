@@ -9,9 +9,6 @@ export const fetchContract = async (
   const contract = await ProposalContract.get(lowercaseAddress);
 
   if (!contract) {
-    logger.error(
-      `Contract not found for lowercaseAddress: ${lowercaseAddress}`
-    );
     const newContract = new ProposalContract(
       lowercaseAddress,
       lowercaseAddress
