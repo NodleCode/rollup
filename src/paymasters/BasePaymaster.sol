@@ -6,12 +6,13 @@ import {
     IPaymaster,
     ExecutionResult,
     PAYMASTER_VALIDATION_SUCCESS_MAGIC
-} from "zksync-contracts/l2/system-contracts/interfaces/IPaymaster.sol";
-import {IPaymasterFlow} from "zksync-contracts/l2/system-contracts/interfaces/IPaymasterFlow.sol";
-import {Transaction} from "zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
-import {BOOTLOADER_FORMAL_ADDRESS} from "zksync-contracts/l2/system-contracts/Constants.sol";
-
+} from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymaster.sol";
+import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymasterFlow.sol";
+import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
 import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
+
+uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000;
+address payable constant BOOTLOADER_FORMAL_ADDRESS = payable(address(SYSTEM_CONTRACTS_OFFSET + 0x01));
 
 /// @notice This smart contract serves as a base for any other paymaster contract.
 abstract contract BasePaymaster is IPaymaster, AccessControl {
@@ -34,11 +35,11 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         _grantRole(WITHDRAWER_ROLE, withdrawer);
     }
 
-    function validateAndPayForPaymasterTransaction(bytes32, bytes32, Transaction calldata transaction)
-        external
-        payable
-        returns (bytes4 magic, bytes memory /* context */ )
-    {
+    function validateAndPayForPaymasterTransaction(
+        bytes32, /*_txHash*/
+        bytes32, /*_suggestedSignedHash*/
+        Transaction calldata transaction
+    ) external payable returns (bytes4 magic, bytes memory context) {
         _mustBeBootloader();
 
         // By default we consider the transaction as accepted.
@@ -76,11 +77,14 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         return (magic, "");
     }
 
-    function postTransaction(bytes calldata, Transaction calldata, bytes32, bytes32, ExecutionResult, uint256)
-        external
-        payable
-        override
-    {
+    function postTransaction(
+        bytes calldata, /*_context*/
+        Transaction calldata, /*_transaction*/
+        bytes32, /*_txHash*/
+        bytes32, /*_suggestedSignedHash*/
+        ExecutionResult, /*_txResult*/
+        uint256 /*_maxRefundedGas*/
+    ) external payable {
         _mustBeBootloader();
 
         // Refunds are not supported yet.
