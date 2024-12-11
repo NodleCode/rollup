@@ -48,6 +48,8 @@
     "ENSIP",
     "MULTICHAIN",
     "CCIP",
-    "namesevice"
+    "nameservice",
+    "firebaseapp",
+    "permissioned"
   ]
 }

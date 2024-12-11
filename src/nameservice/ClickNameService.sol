@@ -193,7 +193,7 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
         return true;
     }
 
-    // Check if caller is authorized for priviledged operations
+    // Check if caller is authorized for privileged operations
     function _isAuthorized() private view returns (bool) {
         return (hasRole(REGISTERER_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender));
     }
