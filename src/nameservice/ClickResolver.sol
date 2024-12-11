@@ -23,9 +23,9 @@ interface IExtendedResolver {
 contract ClickResolver is IExtendedResolver, IERC165, Ownable {
     bytes4 private constant EXTENDED_INTERFACE_ID = 0x9061b923; // ENSIP-10
 
-    bytes4 constant ADDR_SELECTOR = 0x3b3b57de; // addr(bytes32)
-    bytes4 constant ADDR_MULTICHAIN_SELECTOR = 0xf1cb7e06; // addr(bytes32,uint)
-    uint256 constant ZKSYNC_MAINNET_COIN_TYPE = 2147483972; // (0x80000000 | 0x144) >>> 0 as per ENSIP11
+    bytes4 private constant ADDR_SELECTOR = 0x3b3b57de; // addr(bytes32)
+    bytes4 private constant ADDR_MULTICHAIN_SELECTOR = 0xf1cb7e06; // addr(bytes32,uint)
+    uint256 private constant ZKSYNC_MAINNET_COIN_TYPE = 2147483972; // (0x80000000 | 0x144) >>> 0 as per ENSIP11
 
     error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData);
     error UnsupportedCoinType(uint256 coinType);
@@ -110,12 +110,12 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
     }
 
     /// @notice Resolves a name based on its subdomain part regardless of the given domain and top level
-    /// @param _name The name to resolve which must be a pack of length prefixed names for subdomain, domain and top. 
+    /// @param _name The name to resolve which must be a pack of length prefixed names for subdomain, domain and top.
     /// example: b"\x07example\x05clave\x03eth"
     ///
     /// @param _data The ABI encoded data for the underlying resolution function (Eg, addr(bytes32), text(bytes32,string), etc).
     function resolve(bytes calldata _name, bytes calldata _data) external view returns (bytes memory) {
-        (string memory sub, string memory _domain, string memory _top) = parseDnsDomain(_name);
+        (string memory sub,,) = parseDnsDomain(_name);
 
         if (bytes(sub).length == 0) {
             return abi.encodePacked(domainOwner);
@@ -130,26 +130,14 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
 
         bytes4 functionSelector = bytes4(_data[:4]);
         if (functionSelector == ADDR_SELECTOR) {
-            revert OffchainLookup(
-                address(this),
-                urls,
-                callData,
-                ClickResolver.resolveWithProof.selector,
-                callData
-            );
+            revert OffchainLookup(address(this), urls, callData, ClickResolver.resolveWithProof.selector, callData);
         } else if (functionSelector == ADDR_MULTICHAIN_SELECTOR) {
             (, uint256 coinType) = abi.decode(_data[4:], (bytes32, uint256));
             if (coinType != ZKSYNC_MAINNET_COIN_TYPE) {
                 // TODO: Handle other chains when this is supported
                 revert UnsupportedCoinType(coinType);
             }
-            revert OffchainLookup(
-                address(this),
-                urls,
-                callData,
-                ClickResolver.resolveWithProof.selector,
-                callData
-            );
+            revert OffchainLookup(address(this), urls, callData, ClickResolver.resolveWithProof.selector, callData);
         } else {
             revert UnsupportedSelector(functionSelector);
         }
