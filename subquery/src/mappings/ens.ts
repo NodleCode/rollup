@@ -48,6 +48,7 @@ export async function handleCallRegistry(tx: RegisterTransaction) {
 
   registeredEns.expiresAt = _expires;
   registeredEns.rawName = _name;
+  _owner.name = name;
 
-  return registeredEns.save();
+  return Promise.all([registeredEns.save(), _owner.save()]);
 }
