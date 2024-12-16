@@ -9,6 +9,8 @@ services:
       - 5432:5432
     volumes:
       - .data/postgres:/var/lib/postgresql/data
+      - ./docker/pg.conf:/usr/share/postgresql/postgresql.conf
+    command: ["postgres", "-c", "config_file=/usr/share/postgresql/postgresql.conf"]
     environment:
       POSTGRES_PASSWORD: postgres
     shm_size: '1gb'
@@ -36,8 +38,8 @@ services:
       - ${SUB_COMMAND:-} # set SUB_COMMAND env variable to "test" to run tests
       - -f=/app
       - --db-schema=app
-      - --workers=4
-      - --batch-size=30
+      - --workers=2
+      - --batch-size=20
       - --unfinalized-blocks=false
       - --unsafe
       - --block-confirmations=0
@@ -67,7 +69,7 @@ services:
       DB_DATABASE: postgres
       DB_HOST: postgres
       DB_PORT: 5432
-      # NODE_ENV: production
+      NODE_ENV: production
     command:
       - --name=app
       #- --log-level=silent

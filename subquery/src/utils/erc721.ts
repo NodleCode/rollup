@@ -11,9 +11,6 @@ export const fetchContract = async (
   const contract = await ERC721Contract.get(lowercaseAddress);
 
   if (!contract) {
-    logger.error(
-      `Contract not found for lowercaseAddress: ${lowercaseAddress}`
-    );
     const newContract = new ERC721Contract(lowercaseAddress, lowercaseAddress);
     newContract.save();
 
@@ -33,7 +30,6 @@ export const fetchToken = async (
   const token = await ERC721Token.get(id);
 
   if (!token) {
-    logger.error(`Token not found for id: ${id}`);
     const newToken = new ERC721Token(
       id,
       contractId,
@@ -54,7 +50,9 @@ export const getApprovalLog = (
   address: string
 ) => {
   const targetLog = logs.find((log) => log.args?.to === address);
-  assert(targetLog, "No target log found");
+  if (!targetLog) {
+    throw new Error("Approval log not found");
+  }
 
   return targetLog.args;
 };
@@ -73,7 +71,6 @@ export const fetchERC721Operator = async (
   const op = await ERC721Operator.get(id);
 
   if (!op) {
-    logger.error(`Operator not found for id: ${id}`);
     const newOp = new ERC721Operator(
       id,
       contract.id,

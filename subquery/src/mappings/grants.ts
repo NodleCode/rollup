@@ -21,6 +21,8 @@ export async function handleClaimed(event: ClaimedLog): Promise<void> {
   const who = event.args.who?.toString();
   const amount = event.args.amount?.toBigInt();
   const id = event.transactionHash + "-" + event.logIndex.toString();
+  const start = event.args.start?.toBigInt();
+  const end = event.args.end?.toBigInt();
 
   const transaction = await fetchTransaction(
     event.transactionHash,
@@ -31,6 +33,8 @@ export async function handleClaimed(event: ClaimedLog): Promise<void> {
   const claimTransaction = new VestingScheduleClaimed(id, who, transaction.id);
 
   claimTransaction.amount = amount;
+  claimTransaction.start = start;
+  claimTransaction.end = end;
 
   await claimTransaction.save();
 }
@@ -43,6 +47,8 @@ export async function handleRenounced(event: RenouncedLog): Promise<void> {
 
   const to = event.args.to.toString();
   const from = event.args.from.toString();
+  const start = event.args.start?.toBigInt();
+  const end = event.args.end?.toBigInt();
   const id = event.transactionHash + "-" + event.logIndex.toString();
   const transaction = await fetchTransaction(
     event.transactionHash,
@@ -51,6 +57,9 @@ export async function handleRenounced(event: RenouncedLog): Promise<void> {
   );
 
   const action = new VestingScheduleRenounced(id, to, transaction.id);
+
+  action.start = start;
+  action.end = end;
 
   const schedules = await VestingSchedule.getByCancelAuthorityId(from, { limit: 100 });
 
@@ -82,7 +91,6 @@ export async function handleVestingScheduleAdded(
   const id = event.transactionHash + "-" + event.logIndex.toString();
   const to = event.args.to.toString();
   const schedule = event.args.schedule;
-  logger.info("schedule: " + JSON.stringify(schedule) + " to: " + to);
   const transaction = await fetchTransaction(
     event.transactionHash,
     event.block.timestamp,
@@ -90,11 +98,13 @@ export async function handleVestingScheduleAdded(
   );
 
   const vestingSchedule = new VestingSchedule(id, to, transaction.id);
-
+  const total =
+    BigInt(schedule.periodCount) * schedule.perPeriodAmount.toBigInt();
   vestingSchedule.start = schedule.start.toBigInt();
   vestingSchedule.period = schedule.period.toBigInt();
   vestingSchedule.periodCount = schedule.periodCount;
   vestingSchedule.perPeriodAmount = schedule.perPeriodAmount.toBigInt();
+  vestingSchedule.total = total;
 
   vestingSchedule.cancelAuthorityId = schedule.cancelAuthority?.toString();
 
@@ -111,6 +121,8 @@ export async function handleVestingSchedulesCanceled(
 
   const from = event.args.from.toString();
   const to = event.args.to.toString();
+  const start = event.args.start?.toBigInt();
+  const end = event.args.end?.toBigInt();
   const id = event.transactionHash + "-" + event.logIndex.toString();
 
   const transaction = await fetchTransaction(
@@ -120,6 +132,9 @@ export async function handleVestingSchedulesCanceled(
   );
 
   const action = new VestingScheduleCanceled(id, to, transaction.id);
+
+  action.start = start;
+  action.end = end;
 
   const schedules = await VestingSchedule.getByCancelAuthorityId(from, { limit: 100 });
 
