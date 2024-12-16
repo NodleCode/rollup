@@ -34,9 +34,7 @@ function convertArrayToObject(arr: any[]) {
 }
 
 export async function handleTransfer(event: TransferLog): Promise<void> {
-  logger.error("Handling transfer event");
   assert(event.args, "No event.args");
-  logger.info(`Handling transfer event: ${event.transaction.hash}`);
   const contract = await fetchContract(event.address);
   if (contract) {
     const timestamp = event.block.timestamp * BigInt(1000);
