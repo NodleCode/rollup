@@ -1,18 +1,16 @@
 import assert from "assert";
 import {
   fetchContract,
-  fetchERC721Operator,
   fetchToken,
   getApprovalLog,
 } from "../utils/erc721";
 import {
   TransferLog,
-  ApprovalForAllLog,
   SafeMintTransaction,
 } from "../types/abi-interfaces/ClickContentSignAbi";
 import { fetchAccount, fetchMetadata, fetchTransaction } from "../utils/utils";
-import { contractForSnapshot, nodleContracts } from "../utils/const";
-import { TokenSnapshot, TokenSnapshotV2 } from "../types";
+import { abi, callContract, contractForSnapshot, nodleContracts } from "../utils/const";
+import { ERC721Transfer, TokenSnapshot, TokenSnapshotV2 } from "../types";
 
 const keysMapping = {
   application: "Application",
@@ -36,51 +34,95 @@ function convertArrayToObject(arr: any[]) {
 }
 
 export async function handleTransfer(event: TransferLog): Promise<void> {
+  logger.error("Handling transfer event");
   assert(event.args, "No event.args");
-
+  logger.info(`Handling transfer event: ${event.transaction.hash}`);
   const contract = await fetchContract(event.address);
-  /* if (contract) {
-    const from = await fetchAccount(event.args.from);
-    const to = await fetchAccount(event.args.to);
+  if (contract) {
+    const timestamp = event.block.timestamp * BigInt(1000);
+    const from = await fetchAccount(event.args[0], timestamp);
+    const to = await fetchAccount(event.args[1], timestamp);
+    const tokenId = event.args[2];
 
-    const tokenId = event.args.tokenId;
+    const transferTx = await fetchTransaction(
+      event.transaction.hash,
+      timestamp,
+      BigInt(event.block.number)
+    );
 
     const token = await fetchToken(
       `${contract.id}/${tokenId}`,
       contract.id,
-      tokenId.toBigInt(),
+      BigInt(tokenId as any),
       from.id,
-      from.id
+      ""
+    );
+
+    if (!token.uri) {
+      const tokenUri = await callContract(contract.id, abi, "tokenURI", [
+        tokenId,
+      ]).catch((error) => {
+        return null;
+      });
+
+      if (tokenUri && nodleContracts.includes(contract.id)) {
+        const metadata = await fetchMetadata(String(tokenUri), [
+          "nodle-community-nfts.myfilebase.com/ipfs",
+          "storage.googleapis.com/ipfs-backups",
+        ]);
+
+        if (metadata) {
+          token.content = metadata.content || metadata.image || "";
+          token.channel = metadata.channel || "";
+          token.contentType = metadata.contentType || "";
+          token.thumbnail = metadata.thumbnail || "";
+          token.name = metadata.name || "";
+          token.description = metadata.description || "";
+          token.contentHash = metadata.content_hash || "";
+
+          // new metadata from attributes
+          if (metadata.attributes && metadata.attributes?.length > 0) {
+            const objectAttributes = convertArrayToObject(metadata.attributes);
+
+            if (objectAttributes) {
+              token.application = objectAttributes[keysMapping.application];
+              token.channel = objectAttributes[keysMapping.channel];
+              token.contentType = objectAttributes[keysMapping.contentType];
+              token.duration = objectAttributes[keysMapping.duration] || 0;
+              token.captureDate = objectAttributes[keysMapping.captureDate]
+                ? BigInt(objectAttributes[keysMapping.captureDate])
+                : BigInt(0);
+              token.longitude = objectAttributes[keysMapping.longitude]
+                ? parseFloat(objectAttributes[keysMapping.longitude])
+                : 0;
+              token.latitude = objectAttributes[keysMapping.latitude]
+                ? parseFloat(objectAttributes[keysMapping.latitude])
+                : 0;
+              token.locationPrecision =
+                objectAttributes[keysMapping.locationPrecision];
+            }
+          }
+        }
+      }
+      token.uri = String(tokenUri);
+    }
+
+    const transfer = new ERC721Transfer(
+      `${contract.id}/${token.id}`,
+      from.id,
+      transferTx.id,
+      event.block.timestamp * BigInt(1000),
+      contract.id,
+      token.id,
+      from.id,
+      to.id
     );
 
     token.ownerId = to.id;
+    token.transactionHash = event.transaction.hash;
+    token.timestamp = event.block.timestamp * BigInt(1000);
 
-    return token.save();
-  } */
-}
-
-// This event is not being emitted by the contract, it is an issue?
-/* export function handleApproval(event: ApprovalLog): Promise<void> {
-  logger.info("handleApproval: " + JSON.stringify(event));
-  // const account = await fetchAccount();
-
-  return Promise.resolve();
-} */
-
-export async function handleApprovalForAll(event: ApprovalForAllLog) {
-  assert(event.args, "No event.args");
-
-  const contract = await fetchContract(event.address);
-  if (contract != null) {
-    const timestamp = event.block.timestamp * BigInt(1000);
-    const owner = await fetchAccount(event.args.owner, timestamp);
-    const operator = await fetchAccount(event.args.operator, timestamp);
-
-    const delegation = await fetchERC721Operator(contract, owner, operator);
-
-    delegation.approved = event.args.approved;
-
-    return delegation.save();
+    await Promise.all([token.save(), transfer.save()]);
   }
 }
 
@@ -208,5 +250,6 @@ export async function handleSafeMint(tx: SafeMintTransaction) {
 
     toSave.push(snapshot);
   }
+
   return Promise.all(toSave.map((entity) => entity.save()));
 }

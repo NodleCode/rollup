@@ -53,27 +53,6 @@ const project: EthereumProject = {
         file: "./dist/index.js",
         handlers: [
           {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleSafeMint",
-            filter: {
-              function: "safeMint(address,string)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
-          },
-          {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
