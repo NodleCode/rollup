@@ -1,4 +1,12 @@
 import { toUtf8Bytes, ErrorDescription } from "ethers";
+import { CommitBatchInfo, StoredBatchInfo as BatchInfo } from "./types";
+import {
+  diamondAddress,
+  diamondContract,
+  l1Provider,
+  l2Provider,
+} from "./setup";
+import { ZKSYNC_DIAMOND_INTERFACE } from "./interfaces";
 
 export function toLengthPrefixedBytes(
   sub: string,
@@ -53,4 +61,104 @@ export function isOffchainLookupError(
     typeof errorDisc.args[3] === "string" &&
     typeof errorDisc.args[4] === "string"
   );
+}
+
+/** Parses the transaction where batch is committed and returns commit info */
+export async function parseCommitTransaction(
+  txHash: string,
+  batchNumber: number,
+): Promise<{ commitBatchInfo: CommitBatchInfo; commitment: string }> {
+  const transactionData = await l1Provider.getTransaction(txHash);
+  const [, , newBatch] = ZKSYNC_DIAMOND_INTERFACE.decodeFunctionData(
+    "commitBatchesSharedBridge",
+    transactionData!.data,
+  );
+
+  // Find the batch with matching number
+  const batch = newBatch.find((batch: any) => {
+    return batch[0] === BigInt(batchNumber);
+  });
+  if (batch == undefined) {
+    throw new Error(`Batch ${batchNumber} not found in calldata`);
+  }
+
+  const commitBatchInfo: CommitBatchInfo = {
+    batchNumber: batch[0],
+    timestamp: batch[1],
+    indexRepeatedStorageChanges: batch[2],
+    newStateRoot: batch[3],
+    numberOfLayer1Txs: batch[4],
+    priorityOperationsHash: batch[5],
+    bootloaderHeapInitialContentsHash: batch[6],
+    eventsQueueStateHash: batch[7],
+    systemLogs: batch[8],
+    totalL2ToL1Pubdata: batch[9],
+  };
+
+  const receipt = await l1Provider.getTransactionReceipt(txHash);
+  if (receipt == undefined) {
+    throw new Error(`Receipt for commit tx ${txHash} not found`);
+  }
+
+  // Parse event logs of the transaction to find commitment
+  const blockCommitFilter = ZKSYNC_DIAMOND_INTERFACE.encodeFilterTopics(
+    "BlockCommit",
+    [batchNumber],
+  );
+  const commitLog = receipt.logs.find(
+    (log) =>
+      log.address === diamondAddress &&
+      blockCommitFilter.every((topic, i) => topic === log.topics[i]),
+  );
+  if (commitLog == undefined) {
+    throw new Error(`Commit log for batch ${batchNumber} not found`);
+  }
+  const { commitment } = ZKSYNC_DIAMOND_INTERFACE.decodeEventLog(
+    "BlockCommit",
+    commitLog.data,
+    commitLog.topics,
+  );
+
+  return { commitBatchInfo, commitment };
+}
+/** Returns logs root hash stored in L1 contract */
+export async function getL2LogsRootHash(batchNumber: number): Promise<string> {
+  const l2RootsHash = await diamondContract.l2LogsRootHash(batchNumber);
+  return String(l2RootsHash);
+}
+
+/**
+ * Returns the batch info for the given batch number for those stored on L1.
+ * Returns null if the batch is not stored.
+ * @param batchNumber
+ */
+export async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
+  const { commitTxHash, proveTxHash } =
+    await l2Provider.getL1BatchDetails(batchNumber);
+
+  // If batch is not committed or proved, return null
+  if (commitTxHash == undefined) {
+    throw new Error(`Batch ${batchNumber} is not committed`);
+  } else if (proveTxHash == undefined) {
+    throw new Error(`Batch ${batchNumber} is not proved`);
+  }
+
+  // Parse commit calldata from commit transaction
+  const { commitBatchInfo, commitment } = await parseCommitTransaction(
+    commitTxHash,
+    batchNumber,
+  );
+  const l2LogsTreeRoot = await getL2LogsRootHash(batchNumber);
+
+  const storedBatchInfo: BatchInfo = {
+    batchNumber: commitBatchInfo.batchNumber,
+    batchHash: commitBatchInfo.newStateRoot,
+    indexRepeatedStorageChanges: commitBatchInfo.indexRepeatedStorageChanges,
+    numberOfLayer1Txs: commitBatchInfo.numberOfLayer1Txs,
+    priorityOperationsHash: commitBatchInfo.priorityOperationsHash,
+    l2LogsTreeRoot,
+    timestamp: commitBatchInfo.timestamp,
+    commitment,
+  };
+  return storedBatchInfo;
 }

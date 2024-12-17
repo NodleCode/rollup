@@ -1,29 +1,19 @@
 import express, { Request, Response } from "express";
 import { query, body, matchedData, validationResult } from "express-validator";
 import cors from "cors";
-import { Provider as L2Provider, Wallet } from "zksync-ethers";
 import {
-  JsonRpcProvider as L1Provider,
   keccak256,
   toBigInt,
   toUtf8Bytes,
   AbiCoder,
   getAddress,
-  Contract,
   isHexString,
   ZeroAddress,
   isAddress,
 } from "ethers";
+import { StorageProof } from "./types";
 import {
-  CommitBatchInfo,
-  StoredBatchInfo as BatchInfo,
-  StorageProof,
-} from "./types";
-import {
-  ZKSYNC_DIAMOND_INTERFACE,
-  CLICK_NAME_SERVICE_INTERFACE,
   CLICK_RESOLVER_INTERFACE,
-  CLICK_NAME_SERVICE_OWNERS_STORAGE_SLOT,
   STORAGE_PROOF_TYPE,
   CLICK_RESOLVER_ADDRESS_SELECTOR,
 } from "./interfaces";
@@ -32,11 +22,18 @@ import {
   isParsableError,
   isOffchainLookupError,
 } from "./helpers";
-import dotenv from "dotenv";
 import admin from "firebase-admin";
-import { initializeApp } from "firebase-admin/app";
-
-dotenv.config();
+import {
+  port,
+  l2Provider,
+  clickResolverContract,
+  clickNameServiceAddress,
+  clickNameServiceContract,
+  batchQueryOffset,
+  cnsDomain,
+  cnsTld,
+} from "./setup";
+import { getBatchInfo } from "./helpers";
 
 const app = express();
 app.use(express.json());
@@ -47,138 +44,6 @@ const corsOptions = {
   allowedHeaders: ["Content-Type", "Authorization"],
 };
 app.use(cors(corsOptions));
-
-const port = process.env.PORT || 8080;
-const privateKey = process.env.REGISTRAR_PRIVATE_KEY!;
-const l2Provider = new L2Provider(process.env.L2_RPC_URL!);
-const l2Wallet = new Wallet(privateKey, l2Provider);
-const l1Provider = new L1Provider(process.env.L1_RPC_URL!);
-const diamondAddress = process.env.DIAMOND_PROXY_ADDR!;
-const diamondContract = new Contract(
-  diamondAddress,
-  ZKSYNC_DIAMOND_INTERFACE,
-  l1Provider,
-);
-const clickResolverAddress = process.env.CLICK_RESOLVER_ADDR!;
-const clickResolverContract = new Contract(
-  clickResolverAddress,
-  CLICK_RESOLVER_INTERFACE,
-  l1Provider,
-);
-const clickNameServiceAddress = process.env.CNS_ADDR!;
-const clickNameServiceContract = new Contract(
-  clickNameServiceAddress,
-  CLICK_NAME_SERVICE_INTERFACE,
-  l2Wallet,
-);
-const batchQueryOffset = Number(process.env.SAFE_BATCH_QUERY_OFFSET!);
-const serviceAccountKey = process.env.SERVICE_ACCOUNT_KEY!;
-const serviceAccount = JSON.parse(serviceAccountKey);
-const firebaseApp = initializeApp({
-  credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-});
-const cnsDomain = process.env.CNS_DOMAIN!;
-const cnsTld = process.env.CNS_TLD!;
-
-/** Parses the transaction where batch is committed and returns commit info */
-async function parseCommitTransaction(
-  txHash: string,
-  batchNumber: number,
-): Promise<{ commitBatchInfo: CommitBatchInfo; commitment: string }> {
-  const transactionData = await l1Provider.getTransaction(txHash);
-  const [, , newBatch] = ZKSYNC_DIAMOND_INTERFACE.decodeFunctionData(
-    "commitBatchesSharedBridge",
-    transactionData!.data,
-  );
-
-  // Find the batch with matching number
-  const batch = newBatch.find((batch: any) => {
-    return batch[0] === BigInt(batchNumber);
-  });
-  if (batch == undefined) {
-    throw new Error(`Batch ${batchNumber} not found in calldata`);
-  }
-
-  const commitBatchInfo: CommitBatchInfo = {
-    batchNumber: batch[0],
-    timestamp: batch[1],
-    indexRepeatedStorageChanges: batch[2],
-    newStateRoot: batch[3],
-    numberOfLayer1Txs: batch[4],
-    priorityOperationsHash: batch[5],
-    bootloaderHeapInitialContentsHash: batch[6],
-    eventsQueueStateHash: batch[7],
-    systemLogs: batch[8],
-    totalL2ToL1Pubdata: batch[9],
-  };
-
-  const receipt = await l1Provider.getTransactionReceipt(txHash);
-  if (receipt == undefined) {
-    throw new Error(`Receipt for commit tx ${txHash} not found`);
-  }
-
-  // Parse event logs of the transaction to find commitment
-  const blockCommitFilter = ZKSYNC_DIAMOND_INTERFACE.encodeFilterTopics(
-    "BlockCommit",
-    [batchNumber],
-  );
-  const commitLog = receipt.logs.find(
-    (log) =>
-      log.address === diamondAddress &&
-      blockCommitFilter.every((topic, i) => topic === log.topics[i]),
-  );
-  if (commitLog == undefined) {
-    throw new Error(`Commit log for batch ${batchNumber} not found`);
-  }
-  const { commitment } = ZKSYNC_DIAMOND_INTERFACE.decodeEventLog(
-    "BlockCommit",
-    commitLog.data,
-    commitLog.topics,
-  );
-
-  return { commitBatchInfo, commitment };
-}
-/** Returns logs root hash stored in L1 contract */
-async function getL2LogsRootHash(batchNumber: number): Promise<string> {
-  const l2RootsHash = await diamondContract.l2LogsRootHash(batchNumber);
-  return String(l2RootsHash);
-}
-
-/**
- * Returns the batch info for the given batch number for those stored on L1.
- * Returns null if the batch is not stored.
- * @param batchNumber
- */
-async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
-  const { commitTxHash, proveTxHash } =
-    await l2Provider.getL1BatchDetails(batchNumber);
-
-  // If batch is not committed or proved, return null
-  if (commitTxHash == undefined) {
-    throw new Error(`Batch ${batchNumber} is not committed`);
-  } else if (proveTxHash == undefined) {
-    throw new Error(`Batch ${batchNumber} is not proved`);
-  }
-
-  // Parse commit calldata from commit transaction
-  const { commitBatchInfo, commitment } = await parseCommitTransaction(
-    commitTxHash,
-    batchNumber,
-  );
-  const l2LogsTreeRoot = await getL2LogsRootHash(batchNumber);
-
-  const storedBatchInfo: BatchInfo = {
-    batchNumber: commitBatchInfo.batchNumber,
-    batchHash: commitBatchInfo.newStateRoot,
-    indexRepeatedStorageChanges: commitBatchInfo.indexRepeatedStorageChanges,
-    numberOfLayer1Txs: commitBatchInfo.numberOfLayer1Txs,
-    priorityOperationsHash: commitBatchInfo.priorityOperationsHash,
-    l2LogsTreeRoot,
-    timestamp: commitBatchInfo.timestamp,
-    commitment,
-  };
-  return storedBatchInfo;
-}
 
 // Health endpoint to check the status of L1 and L2 connections.
 // This endpoint verifies that the batch number used for L1 APIs is committed to L1 as expected.
@@ -487,12 +352,14 @@ app.post(
       const data = matchedData(req);
       const sub = data.name.split(".")[0];
       if (sub.length < 5) {
-        throw new Error("Current available subdomain names are limited to those with at least 5 characters");
+        throw new Error(
+          "Current available subdomain names are limited to those with at least 5 characters",
+        );
       }
       const owner = getAddress(data.owner);
 
       await admin.auth().revokeRefreshTokens(decodedToken.uid);
-      
+
       const response = await clickNameServiceContract.register(owner, sub);
       const receipt = await response.wait();
       if (receipt.status !== 1) {
