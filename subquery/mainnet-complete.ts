@@ -256,14 +256,15 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Call,
             handler: "handleMintReward",
             filter: {
-              function: "mintReward((address,uint256,uint256),bytes)",
+              function: "mintReward(tuple(address,uint256,uint256),bytes)",
             },
           },
           {
             kind: EthereumHandlerKind.Call,
             handler: "handleMintBatchReward",
             filter: {
-              function: "mintBatchReward((address[],uint256[],uint256),bytes)",
+              function:
+                "mintBatchReward(tuple(address[],uint256[],uint256),bytes)",
             },
           },
         ],
