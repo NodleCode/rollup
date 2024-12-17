@@ -148,10 +148,10 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 33492696, // This is the block that the contract was deployed on
+      startBlock: 51533910, // This is the block that the contract was deployed on
       options: {
         abi: "ENS",
-        address: "0xAD4360c87275C7De1229A8c3C0567f921c9302b1",
+        address: "0x48e5c6f97b00Db0A4F74B1C1bc8ecd78452dDF6F",
       },
       assets: new Map([
         [
