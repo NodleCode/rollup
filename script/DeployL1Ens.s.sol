@@ -37,13 +37,14 @@ contract DeployL1Ens is Script {
                 IZkSyncDiamond(vm.envAddress("DIAMOND_PROXY_ADDR")), SparseMerkleTree(smtAddress)
             );
             spvAddress = address(storageProofVerifier);
+            console.log("Deployed StorageProofVerifier at", spvAddress);
         } else {
             console.log("Using StorageProofVerifier at", spvAddress);
         }
 
         address clickResolverAddress = vm.envOr("CLICK_RESOLVER_ADDR", address(0));
 
-        if (clickResolverAddress != address(0)) {
+        if (clickResolverAddress == address(0)) {
             console.log("Deploying ClickResolver...");
             ClickResolver l1Resolver = new ClickResolver(
                 vm.envString("CNS_OFFCHAIN_RESOLVER_URL"),
