@@ -152,7 +152,7 @@ const project: EthereumProject = {
       startBlock: 51533910, // This is the block that the contract was deployed on
       options: {
         abi: "ENS",
-        address: "0x48e5c6f97b00Db0A4F74B1C1bc8ecd78452dDF6F",
+        address: "0xF3271B61291C128F9dA5aB208311d8CF8E2Ba5A9",
       },
       assets: new Map([
         [
