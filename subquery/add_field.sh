@@ -97,6 +97,12 @@ analyze_tables() {
     echo "Analyzing tables..."
     execute_sql "ANALYZE VERBOSE ${SCHEMA_NAME}.e_r_c20_transfers;" || return 1
     execute_sql "VACUUM ANALYZE ${SCHEMA_NAME}.e_r_c20_transfers;" || return 1
+
+    execute_sql "ANALYZE VERBOSE ${SCHEMA_NAME}.e_r_c721_tokens;" || return 1
+    execute_sql "VACUUM ANALYZE ${SCHEMA_NAME}.e_r_c721_tokens;" || return 1
+    
+    execute_sql "ANALYZE VERBOSE ${SCHEMA_NAME}.e_r_c721_transfers;" || return 1
+    execute_sql "VACUUM ANALYZE ${SCHEMA_NAME}.e_r_c721_transfers;" || return 1
 }
 
 # Function to enable required extensions
