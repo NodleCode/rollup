@@ -32,6 +32,7 @@ const project: EthereumProject = {
       "https://wandering-distinguished-tree.zksync-mainnet.quiknode.pro/20c0bc25076ea895aa263c9296c6892eba46077c/",
       "https://mainnet.era.zksync.io",
     ],
+    dictionary: ["https://dict-tyk.subquery.network/query/zksync-mainnet"],
   },
   dataSources: [
     {

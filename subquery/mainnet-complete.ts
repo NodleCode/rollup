@@ -32,6 +32,7 @@ const project: EthereumProject = {
       process.env.ZKSYNC_MAINNET_RPC!,
       "https://mainnet.era.zksync.io",
     ],
+    dictionary: ["https://dict-tyk.subquery.network/query/zksync-mainnet"],
   },
   dataSources: [
     {
