@@ -50,6 +50,7 @@
     "CCIP",
     "nameservice",
     "firebaseapp",
-    "permissioned"
+    "permissioned",
+    "zyfi"
   ]
 }

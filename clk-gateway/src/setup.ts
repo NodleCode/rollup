@@ -1,10 +1,11 @@
 import { Provider as L2Provider, Wallet } from "zksync-ethers";
-import { Contract, JsonRpcProvider as L1Provider } from "ethers";
+import { Contract, JsonRpcProvider as L1Provider, parseEther } from "ethers";
 import {
   ZKSYNC_DIAMOND_INTERFACE,
   CLICK_NAME_SERVICE_INTERFACE,
   CLICK_RESOLVER_INTERFACE,
 } from "./interfaces";
+import { ZyfiSponsoredRequest } from "./types";
 import admin from "firebase-admin";
 import { initializeApp } from "firebase-admin/app";
 import dotenv from "dotenv";
@@ -42,11 +43,31 @@ const firebaseApp = initializeApp({
 });
 const cnsDomain = process.env.CNS_DOMAIN!;
 const cnsTld = process.env.CNS_TLD!;
+const zyfiSponsoredUrl = process.env.ZYFI_BASE_URL
+  ? new URL(process.env.ZYFI_SPONSORED!, process.env.ZYFI_BASE_URL)
+  : null;
+
+const zyfiRequestTemplate: ZyfiSponsoredRequest = {
+  chainId: Number(process.env.L2_CHAIN_ID!),
+  feeTokenAddress: process.env.FEE_TOKEN_ADDR!,
+  gasLimit: process.env.GAS_LIMIT!,
+  isTestnet: process.env.L2_CHAIN_ID === "300",
+  checkNft: false,
+  txData: {
+    from: l2Wallet.address,
+    to: clickNameServiceAddress,
+    data: "0x0",
+    value: "0",
+  },
+  sponsorshipRatio: 100,
+  replayLimit: 5,
+};
 
 export {
   port,
   l1Provider,
   l2Provider,
+  l2Wallet,
   diamondAddress,
   diamondContract,
   clickResolverContract,
@@ -55,4 +76,6 @@ export {
   batchQueryOffset,
   cnsDomain,
   cnsTld,
+  zyfiSponsoredUrl,
+  zyfiRequestTemplate,
 };
