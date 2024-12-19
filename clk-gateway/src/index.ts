@@ -34,6 +34,7 @@ import {
   cnsTld,
 } from "./setup";
 import { getBatchInfo } from "./helpers";
+import reservedHashes from "./reservedHashes";
 
 const app = express();
 app.use(express.json());
@@ -303,6 +304,8 @@ app.post(
   "/registerL2",
   [
     body("name")
+      .isLowercase()
+      .withMessage("Name must be a lowercase string")
       .isFQDN()
       .withMessage("Name must be a fully qualified domain name")
       .custom((name) => {
@@ -310,9 +313,15 @@ app.post(
         if (domain !== cnsDomain || tld !== cnsTld) {
           return false;
         }
+
+        const subHash = keccak256(toUtf8Bytes(sub));
+        if (reservedHashes.includes(subHash)) {
+          return false;
+        }
+
         return true;
       })
-      .withMessage("Invalid domain or tld"),
+      .withMessage("Invalid domain or tld or reserved subdomain"),
     body("owner")
       .isString()
       .custom((owner) => {
