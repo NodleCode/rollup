@@ -408,6 +408,13 @@ const project: EthereumProject = {
               function: "register(address,string)",
             },
           },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleENSTransfer",
+            filter: {
+              topics: ["Transfer(address,address,uint256)"],
+            },
+          },
         ],
       },
     },
