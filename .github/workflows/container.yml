@@ -1,0 +1,54 @@
+name: Build and Push Container Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - aliX/ens-1
+    tags:
+      - v*
+
+# Cancel pending jobs when pushing a new commit
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest-8-cores
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.PROJECT_ID }}
+          install_components: beta
+
+      - name: Authenticate to Artifact Registry
+        run: |-
+          gcloud auth configure-docker us-west1-docker.pkg.dev
+
+      - name: Build and Tag Images
+        run: |-
+          docker build --no-cache \
+            -t us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway:latest \
+            -t us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway:${{ github.sha }} \
+            ./clk-gateway
+
+      - name: Publish Images
+        run: |-
+          docker push us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway:latest
+          docker push us-west1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/service/clk-gateway:${{ github.sha }}

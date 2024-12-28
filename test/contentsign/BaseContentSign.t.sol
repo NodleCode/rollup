@@ -28,7 +28,7 @@ contract BaseContentSignTest is Test {
         contentSign = new MockContentSign();
     }
 
-    function test_setsMetadata() public {
+    function test_setsMetadata() public view {
         assertEq(contentSign.name(), "Mock");
         assertEq(contentSign.symbol(), "MOCK");
     }
