@@ -198,50 +198,102 @@ show_indexes() {
 validate_postgres_config() {
     echo "Validating PostgreSQL configuration..."
     
-    # Array of important settings to check
-    declare -a settings=(
-        "shared_buffers"
-        "work_mem"
-        "maintenance_work_mem"
-        "effective_cache_size"
-        "max_connections"
-        "autovacuum"
-        "checkpoint_timeout"
-        "logging_collector"
-        "shared_preload_libraries"
+    # Check system resources
+    echo -e "\nSystem Resources:"
+    echo "--------------------------------"
+    echo "CPU Usage:"
+    docker stats --no-stream $CONTAINER_NAME --format "CPU: {{.CPUPerc}}"
+    echo "Memory Usage:"
+    docker stats --no-stream $CONTAINER_NAME --format "Memory: {{.MemPerc}} ({{.MemUsage}})"
+    
+    # Array of important settings to check with expected values
+    declare -A settings=(
+        ["shared_buffers"]="1GB"
+        ["work_mem"]="32MB"
+        ["maintenance_work_mem"]="64MB"
+        ["effective_cache_size"]="2GB"
+        ["max_connections"]="30"
+        ["max_worker_processes"]="2"
+        ["max_parallel_workers_per_gather"]="1"
+        ["max_parallel_workers"]="2"
+        ["autovacuum"]="on"
+        ["autovacuum_naptime"]="60s"
+        ["checkpoint_timeout"]="15min"
+        ["shared_preload_libraries"]="pg_stat_statements"
+        ["jit"]="off"
+        ["track_activities"]="off"
+        ["track_counts"]="off"
+        ["track_io_timing"]="off"
     )
     
-    echo -e "\nCurrent PostgreSQL Settings:"
+    echo -e "\nPostgreSQL Settings:"
     echo "--------------------------------"
     
-    for setting in "${settings[@]}"; do
-        local value=$(docker exec -i $CONTAINER_NAME psql -U $DB_USER -d $DB_DATABASE -t -c "SHOW $setting;")
+    local all_correct=true
+    
+    for setting in "${!settings[@]}"; do
+        local expected="${settings[$setting]}"
+        local current=$(docker exec -i $CONTAINER_NAME psql -U $DB_USER -d $DB_DATABASE -t -c "SHOW $setting;" | tr -d ' ')
         local config_value=$(docker exec -i $CONTAINER_NAME grep "^$setting" /var/lib/postgresql/data/postgresql.conf | cut -d'=' -f2- | tr -d ' ' || echo "not_set")
         
-        echo -e "${YELLOW}$setting:${NC}"
-        echo -e "  Current value: ${GREEN}$value${NC}"
-        echo -e "  Config file  : ${YELLOW}$config_value${NC}"
+        echo -e "\n${YELLOW}$setting:${NC}"
+        echo -e "  Expected value : ${GREEN}$expected${NC}"
+        echo -e "  Current value  : ${GREEN}$current${NC}"
+        echo -e "  Config file    : ${YELLOW}$config_value${NC}"
+        
+        if [[ "$current" != "$expected" ]]; then
+            echo -e "  ${RED}⚠ Value mismatch${NC}"
+            all_correct=false
+        else
+            echo -e "  ${GREEN}✓ Correct${NC}"
+        fi
     done
     
-    # Check if pg_stat_statements is properly loaded
-    echo -e "\nChecking pg_stat_statements:"
+    # Check active connections
+    echo -e "\nConnection Status:"
     echo "--------------------------------"
+    execute_sql "
+        SELECT datname as database, 
+               usename as user, 
+               application_name,
+               client_addr,
+               state,
+               count(*) as count
+        FROM pg_stat_activity 
+        GROUP BY 1,2,3,4,5
+        ORDER BY count DESC;
+    "
     
-    # Check if extension exists
-    local extension_exists=$(docker exec -i $CONTAINER_NAME psql -U $DB_USER -d $DB_DATABASE -t -c "SELECT count(*) FROM pg_extension WHERE extname = 'pg_stat_statements';")
-    
-    # Check if it's in shared_preload_libraries
-    local in_preload=$(docker exec -i $CONTAINER_NAME psql -U $DB_USER -d $DB_DATABASE -t -c "SHOW shared_preload_libraries;" | grep -c "pg_stat_statements" || echo "0")
-    
-    echo -e "Extension installed: ${GREEN}$extension_exists${NC}"
-    echo -e "In shared_preload_libraries: ${GREEN}$in_preload${NC}"
-    
-    # Try to query pg_stat_statements
-    echo -e "\nTesting pg_stat_statements access:"
+    # Check pg_stat_statements status
+    echo -e "\npg_stat_statements Status:"
+    echo "--------------------------------"
     if docker exec -i $CONTAINER_NAME psql -U $DB_USER -d $DB_DATABASE -c "SELECT count(*) FROM pg_stat_statements LIMIT 1;" >/dev/null 2>&1; then
         echo -e "${GREEN}✓ pg_stat_statements is accessible${NC}"
+        
+        # Show pg_stat_statements statistics
+        echo -e "\nStatement Statistics:"
+        execute_sql "
+            SELECT 
+                round(total_exec_time::numeric, 2) as total_time_ms,
+                calls,
+                round(mean_exec_time::numeric, 2) as avg_time_ms,
+                round((100 * total_exec_time / sum(total_exec_time) over ())::numeric, 2) as time_percent
+            FROM pg_stat_statements 
+            ORDER BY total_exec_time DESC 
+            LIMIT 5;
+        "
     else
         echo -e "${RED}✗ Cannot access pg_stat_statements${NC}"
+        all_correct=false
+    fi
+    
+    # Final status
+    echo -e "\nOverall Status:"
+    echo "--------------------------------"
+    if [ "$all_correct" = true ]; then
+        echo -e "${GREEN}✓ All configurations match expected values${NC}"
+    else
+        echo -e "${RED}⚠ Some configurations need attention${NC}"
     fi
 }
 
