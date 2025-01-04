@@ -159,14 +159,15 @@ show_slow_queries() {
     echo "Showing slow queries..."
     execute_sql "
         SELECT 
-            substring(query, 1, 200) as query_preview,
+            substring(query, 1, 500) as query_preview,
             calls,
             round(total_exec_time::numeric, 2) as total_exec_time_ms,
             round(mean_exec_time::numeric, 2) as mean_exec_time_ms,
             round((100 * total_exec_time / sum(total_exec_time) over ())::numeric, 2) as percentage,
             round(rows/calls::numeric, 2) as avg_rows,
             round(shared_blks_hit/calls::numeric, 2) as avg_cache_hits,
-            round(shared_blks_read/calls::numeric, 2) as avg_disk_reads
+            round(shared_blks_read/calls::numeric, 2) as avg_disk_reads,
+            round((shared_blks_hit::numeric / NULLIF(shared_blks_hit + shared_blks_read, 0)) * 100, 2) as cache_hit_ratio
         FROM pg_stat_statements
         WHERE total_exec_time > 1000
         ORDER BY total_exec_time DESC
