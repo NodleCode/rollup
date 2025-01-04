@@ -119,7 +119,6 @@ modify_postgres_config() {
     echo "Reiniciando contenedor PostgreSQL..."
     docker restart $CONTAINER_NAME
     
-    # Esperar a que el contenedor esté saludable
     while [ "$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER_NAME)" != "healthy" ]; do
         echo "Esperando que PostgreSQL se reinicie..."
         sleep 5
@@ -135,9 +134,12 @@ show_slow_queries() {
     if [ "$has_config" = "0" ]; then
         echo -e "${YELLOW}pg_stat_statements no está configurado en shared_preload_libraries. Configurando...${NC}"
         modify_postgres_config
+        enable_extensions 
     fi
     
-    echo "Showing slow queries..."
+    enable_extensions
+    
+    echo "Mostrando queries lentos..."
     execute_sql "
         SELECT 
             substring(query, 1, 100) as query_preview,
