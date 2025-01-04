@@ -1,4 +1,7 @@
-import { RegisterTransaction, TransferLog } from "./../types/abi-interfaces/ENSAbi";
+import {
+  RegisterTransaction,
+  TransferLog,
+} from "./../types/abi-interfaces/ENSAbi";
 import { fetchAccount, fetchTransaction } from "../utils/utils";
 import { ENS } from "../types";
 import { fetchContract } from "../utils/erc721";
@@ -23,17 +26,14 @@ export async function handleCallRegistry(tx: RegisterTransaction) {
 
   const [owner, name] = tx.args;
   const txHash = tx.hash;
-  const idx = tx.logs.findIndex(
-    (log) =>
-    {
-      return (
-        log.transactionHash === txHash &&
-        !!log.args &&
-        log.args[0] !== "0x0000000000000000000000000000000000000000" &&
-        log.args[1] === owner
-      );
-    }
-  );
+  const idx = tx.logs.findIndex((log) => {
+    return (
+      log.transactionHash === txHash &&
+      !!log.args &&
+      log.args[0] !== "0x0000000000000000000000000000000000000000" &&
+      log.args[1] === owner
+    );
+  });
 
   const timestamp = BigInt(tx.blockTimestamp) * BigInt(1000);
   const _owner = await fetchAccount(owner, timestamp);
@@ -61,6 +61,29 @@ export async function handleCallRegistry(tx: RegisterTransaction) {
   return Promise.all([registeredEns.save(), _owner.save()]);
 }
 
+const getENSPaginated = async (
+  ownerId: string,
+  offset: number = 0,
+  limit: number = 100
+): Promise<ENS[]> => {
+  const ens = await ENS.getByOwnerId(ownerId, {
+    limit,
+    offset,
+    orderBy: "registeredAt",
+    orderDirection: "DESC",
+  });
+
+  if (ens.length === 0) {
+    return [];
+  }
+
+  if (ens.length === limit) {
+    return [...ens, ...(await getENSPaginated(ownerId, offset + limit, limit))];
+  }
+
+  return ens;
+};
+
 export async function handleENSTransfer(event: TransferLog) {
   const [from, to, tokenId] = event.args!;
   const txHash = event.transactionHash;
@@ -79,13 +102,11 @@ export async function handleENSTransfer(event: TransferLog) {
     BigInt(event.block.number)
   );
 
-  const fromENSs = await ENS.getByOwnerId(_from.id, {
-    limit: 1000,
-    orderBy: "registeredAt",
-    orderDirection: "DESC",
-  });
+  const fromENSs = await getENSPaginated(_from.id);
 
-  const fromENS = fromENSs.find((ens) => generateId(ens.name) === tokenId.toString());
+  const fromENS = fromENSs.find(
+    (ens) => generateId(ens.name) === tokenId.toString()
+  );
 
   if (fromENS && fromENS.ownerId !== _to.id) {
     const ENSEntity = fromENS;
@@ -100,5 +121,10 @@ export async function handleENSTransfer(event: TransferLog) {
     await ENSEntity.save();
   }
 
-  return Promise.all([_to.save(), _from.save(), transfer.save(), contract.save()]);
+  return Promise.all([
+    _to.save(),
+    _from.save(),
+    transfer.save(),
+    contract.save(),
+  ]);
 }

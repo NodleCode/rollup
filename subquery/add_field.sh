@@ -111,15 +111,30 @@ enable_extensions() {
     execute_sql "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;" || return 1
 }
 
+# Function to modify PostgreSQL configuration
+modify_postgres_config() {
+    echo "Modificando configuración de PostgreSQL..."
+    docker exec -i $CONTAINER_NAME bash -c "echo \"shared_preload_libraries = 'pg_stat_statements'\" >> /var/lib/postgresql/data/postgresql.conf"
+    
+    echo "Reiniciando contenedor PostgreSQL..."
+    docker restart $CONTAINER_NAME
+    
+    # Esperar a que el contenedor esté saludable
+    while [ "$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER_NAME)" != "healthy" ]; do
+        echo "Esperando que PostgreSQL se reinicie..."
+        sleep 5
+    done
+}
+
 # Function to show slow queries
 show_slow_queries() {
-    echo "Checking pg_stat_statements extension..."
+    echo "Verificando configuración de pg_stat_statements..."
     
-    local has_extension=$(docker exec -i $CONTAINER_NAME psql -U $DB_USER -d $DB_DATABASE -tAc "SELECT COUNT(*) FROM pg_extension WHERE extname = 'pg_stat_statements';")
+    local has_config=$(docker exec -i $CONTAINER_NAME grep -c "shared_preload_libraries.*pg_stat_statements" /var/lib/postgresql/data/postgresql.conf || echo "0")
     
-    if [ "$has_extension" = "0" ]; then
-        echo -e "${YELLOW}pg_stat_statements extension is not enabled. Attempting to enable it...${NC}"
-        enable_extensions
+    if [ "$has_config" = "0" ]; then
+        echo -e "${YELLOW}pg_stat_statements no está configurado en shared_preload_libraries. Configurando...${NC}"
+        modify_postgres_config
     fi
     
     echo "Showing slow queries..."
