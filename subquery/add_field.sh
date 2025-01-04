@@ -186,13 +186,64 @@ show_indexes() {
     "
 }
 
+# Function to validate PostgreSQL configuration
+validate_postgres_config() {
+    echo "Validating PostgreSQL configuration..."
+    
+    # Array of important settings to check
+    declare -a settings=(
+        "shared_buffers"
+        "work_mem"
+        "maintenance_work_mem"
+        "effective_cache_size"
+        "max_connections"
+        "autovacuum"
+        "checkpoint_timeout"
+        "logging_collector"
+        "shared_preload_libraries"
+    )
+    
+    echo -e "\nCurrent PostgreSQL Settings:"
+    echo "--------------------------------"
+    
+    for setting in "${settings[@]}"; do
+        local value=$(docker exec -i $CONTAINER_NAME psql -U $DB_USER -d $DB_DATABASE -t -c "SHOW $setting;")
+        local config_value=$(docker exec -i $CONTAINER_NAME grep "^$setting" /var/lib/postgresql/data/postgresql.conf | cut -d'=' -f2- | tr -d ' ' || echo "not_set")
+        
+        echo -e "${YELLOW}$setting:${NC}"
+        echo -e "  Current value: ${GREEN}$value${NC}"
+        echo -e "  Config file  : ${YELLOW}$config_value${NC}"
+    done
+    
+    # Check if pg_stat_statements is properly loaded
+    echo -e "\nChecking pg_stat_statements:"
+    echo "--------------------------------"
+    
+    # Check if extension exists
+    local extension_exists=$(docker exec -i $CONTAINER_NAME psql -U $DB_USER -d $DB_DATABASE -t -c "SELECT count(*) FROM pg_extension WHERE extname = 'pg_stat_statements';")
+    
+    # Check if it's in shared_preload_libraries
+    local in_preload=$(docker exec -i $CONTAINER_NAME psql -U $DB_USER -d $DB_DATABASE -t -c "SHOW shared_preload_libraries;" | grep -c "pg_stat_statements" || echo "0")
+    
+    echo -e "Extension installed: ${GREEN}$extension_exists${NC}"
+    echo -e "In shared_preload_libraries: ${GREEN}$in_preload${NC}"
+    
+    # Try to query pg_stat_statements
+    echo -e "\nTesting pg_stat_statements access:"
+    if docker exec -i $CONTAINER_NAME psql -U $DB_USER -d $DB_DATABASE -c "SELECT count(*) FROM pg_stat_statements LIMIT 1;" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ pg_stat_statements is accessible${NC}"
+    else
+        echo -e "${RED}✗ Cannot access pg_stat_statements${NC}"
+    fi
+}
+
 # Main menu
 main() {
     local command=$1
     
     if [ -z "$command" ]; then
         echo -e "${RED}Error: Command required${NC}"
-        echo "Usage: $0 {create-indexes|analyze|show-slow-queries|show-indexes|all}"
+        echo "Usage: $0 {create-indexes|analyze|show-slow-queries|show-indexes|validate-config|all}"
         exit 1
     fi
 
@@ -209,15 +260,19 @@ main() {
         "show-indexes")
             show_indexes
             ;;
+        "validate-config")
+            validate_postgres_config
+            ;;
         "all")
             create_indexes && \
             analyze_tables && \
             show_slow_queries && \
-            show_indexes
+            show_indexes && \
+            validate_postgres_config
             ;;
         *)
             echo -e "${RED}Invalid command: $command${NC}"
-            echo "Usage: $0 {create-indexes|analyze|show-slow-queries|show-indexes|all}"
+            echo "Usage: $0 {create-indexes|analyze|show-slow-queries|show-indexes|validate-config|all}"
             exit 1
             ;;
     esac
