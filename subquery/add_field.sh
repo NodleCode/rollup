@@ -85,6 +85,10 @@ create_indexes() {
         
         # Simple timestamp index
         "CREATE INDEX IF NOT EXISTS idx_erc20_transfers_timestamp ON ${SCHEMA_NAME}.e_r_c20_transfers (timestamp DESC)"
+
+        "CREATE INDEX IF NOT EXISTS idx_ens_block_range_owner ON ${SCHEMA_NAME}.e_ns USING gist (_block_range, owner_id)"
+
+        "CREATE INDEX IF NOT EXISTS idx_ens_id_block_range ON ${SCHEMA_NAME}.e_ns USING btree (_id, _block_range)"
     )
 
     for index in "${indexes[@]}"; do
