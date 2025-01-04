@@ -113,33 +113,50 @@ enable_extensions() {
 
 # Function to modify PostgreSQL configuration
 modify_postgres_config() {
-    echo "Modificando configuración de PostgreSQL..."
-    docker exec -i $CONTAINER_NAME bash -c "echo \"shared_preload_libraries = 'pg_stat_statements'\" >> /var/lib/postgresql/data/postgresql.conf"
+    echo "Modifying PostgreSQL configuration..."
     
-    echo "Reiniciando contenedor PostgreSQL..."
+    # Check if configuration already exists
+    if ! docker exec -i $CONTAINER_NAME grep -q "shared_preload_libraries" /var/lib/postgresql/data/postgresql.conf; then
+        # If it doesn't exist, add the complete line
+        docker exec -i $CONTAINER_NAME bash -c 'echo "shared_preload_libraries = '\''pg_stat_statements'\''" >> /var/lib/postgresql/data/postgresql.conf'
+    else
+        # If it exists, update the existing line
+        docker exec -i $CONTAINER_NAME sed -i 's/^shared_preload_libraries.*/shared_preload_libraries = '\''pg_stat_statements'\''/' /var/lib/postgresql/data/postgresql.conf
+    fi
+    
+    echo "Restarting PostgreSQL container..."
     docker restart $CONTAINER_NAME
     
-    while [ "$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER_NAME)" != "healthy" ]; do
-        echo "Esperando que PostgreSQL se reinicie..."
-        sleep 5
+    # Wait until PostgreSQL is available
+    while ! docker exec -i $CONTAINER_NAME pg_isready -U postgres > /dev/null 2>&1; do
+        echo "Waiting for PostgreSQL to be available..."
+        sleep 2
     done
+    
+    # Wait until container is healthy
+    while [ "$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER_NAME)" != "healthy" ]; do
+        echo "Waiting for PostgreSQL to be fully healthy..."
+        sleep 2
+    done
+    
+    echo "PostgreSQL restarted and ready"
 }
 
 # Function to show slow queries
 show_slow_queries() {
-    echo "Verificando configuración de pg_stat_statements..."
+    echo "Checking pg_stat_statements configuration..."
     
     local has_config=$(docker exec -i $CONTAINER_NAME grep -c "shared_preload_libraries.*pg_stat_statements" /var/lib/postgresql/data/postgresql.conf || echo "0")
     
     if [ "$has_config" = "0" ]; then
-        echo -e "${YELLOW}pg_stat_statements no está configurado en shared_preload_libraries. Configurando...${NC}"
+        echo -e "${YELLOW}pg_stat_statements is not configured in shared_preload_libraries. Configuring...${NC}"
         modify_postgres_config
         enable_extensions 
     fi
     
     enable_extensions
     
-    echo "Mostrando queries lentos..."
+    echo "Showing slow queries..."
     execute_sql "
         SELECT 
             substring(query, 1, 100) as query_preview,
