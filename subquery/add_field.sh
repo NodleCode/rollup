@@ -89,6 +89,15 @@ create_indexes() {
         "CREATE INDEX IF NOT EXISTS idx_ens_block_range_owner ON ${SCHEMA_NAME}.e_ns USING gist (_block_range, owner_id)"
 
         "CREATE INDEX IF NOT EXISTS idx_ens_id_block_range ON ${SCHEMA_NAME}.e_ns USING btree (_id, _block_range)"
+
+        "CREATE INDEX IF NOT EXISTS idx_ens_owner_block_range ON app.e_ns USING GIST (owner_id, _block_range)"
+
+        "CREATE INDEX IF NOT EXISTS idx_ens_block_range_id ON app.e_ns USING GIST (_block_range, _id)"
+
+        "CREATE INDEX IF NOT EXISTS idx_accounts_block_range ON app.accounts USING GIST (_block_range)"
+
+        "CREATE INDEX IF NOT EXISTS idx_users_levels_stats_block_range ON app.users_levels_stats USING GIST (_block_range)"
+
     )
 
     for index in "${indexes[@]}"; do
