@@ -36,7 +36,7 @@ export async function handleCallRegistry(tx: RegisterTransaction) {
   });
 
   const timestamp = BigInt(tx.blockTimestamp) * BigInt(1000);
-  const _owner = await fetchAccount(owner, timestamp);
+  const ownerAccount = await fetchAccount(owner, timestamp);
   const caller = await fetchAccount(String(tx.from).toLowerCase(), timestamp);
   const txIndex = tx.transactionIndex;
 
@@ -44,21 +44,22 @@ export async function handleCallRegistry(tx: RegisterTransaction) {
 
   const [rawOwner, _, expires] = event.args!;
 
-  const _expires = expires ? expires.toBigInt() * BigInt(1000) : BigInt(0);
-  const _name = JSON.stringify(rawOwner);
+  const expiresAt = expires ? expires.toBigInt() * BigInt(1000) : BigInt(0);
+  // rawName is the encoded name
+  const rawName = JSON.stringify(rawOwner);
   const registeredEns = new ENS(
     txHash.concat("/").concat(txIndex.toString()),
-    _owner.id,
+    ownerAccount.id,
     timestamp,
     name,
     caller.id
   );
 
-  registeredEns.expiresAt = _expires;
-  registeredEns.rawName = _name;
-  _owner.name = name;
+  registeredEns.expiresAt = expiresAt;
+  registeredEns.rawName = rawName;
+  ownerAccount.name = name;
 
-  return Promise.all([registeredEns.save(), _owner.save()]);
+  return Promise.all([registeredEns.save(), ownerAccount.save()]);
 }
 
 const getENSPaginated = async (
@@ -90,8 +91,8 @@ export async function handleENSTransfer(event: TransferLog) {
   const idx = event.transactionIndex;
 
   const timestamp = event.block.timestamp * BigInt(1000);
-  const _from = await fetchAccount(from, timestamp);
-  const _to = await fetchAccount(to, timestamp);
+  const fromAccount = await fetchAccount(from, timestamp);
+  const toAccount = await fetchAccount(to, timestamp);
   const txIndex = event.transactionIndex;
 
   const contract = await fetchContract(event.address);
@@ -102,28 +103,28 @@ export async function handleENSTransfer(event: TransferLog) {
     BigInt(event.block.number)
   );
 
-  const fromENSs = await getENSPaginated(_from.id);
+  const fromENSs = await getENSPaginated(fromAccount.id);
 
   const fromENS = fromENSs.find(
     (ens) => generateId(ens.name) === tokenId.toString()
   );
 
-  if (fromENS && fromENS.ownerId !== _to.id) {
+  if (fromENS && fromENS.ownerId !== toAccount.id) {
     const ENSEntity = fromENS;
 
-    ENSEntity.ownerId = _to.id;
+    ENSEntity.ownerId = toAccount.id;
     const restFromENSs = fromENSs.filter((ens) => ens.id !== fromENS.id);
 
     // set name to the remaining last registered ens name
-    _from.name = restFromENSs.length > 0 ? restFromENSs[0].name : "";
-    _to.name = _to.name ? _to.name : fromENS.name;
+    fromAccount.name = restFromENSs.length > 0 ? restFromENSs[0].name : "";
+    toAccount.name = toAccount.name ? toAccount.name : fromENS.name;
 
     await ENSEntity.save();
   }
 
   return Promise.all([
-    _to.save(),
-    _from.save(),
+    toAccount.save(),
+    fromAccount.save(),
     transfer.save(),
     contract.save(),
   ]);
