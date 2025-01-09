@@ -44,3 +44,52 @@ export type StorageProofBatch = {
 export type StorageProof = RpcProof & {
   metadata: BatchMetadata;
 };
+
+export type ZyfiSponsoredRequest = {
+  chainId: number;
+  feeTokenAddress: string;
+  gasLimit: string;
+  isTestnet: boolean;
+  checkNft: boolean;
+  txData: {
+    from: string;
+    to: string;
+    value: string;
+    data: string;
+  };
+  sponsorshipRatio: number;
+  replayLimit: number;
+};
+
+export interface ZyfiSponsoredResponse {
+  txData: {
+    chainId: number;
+    from: string;
+    to: string;
+    value: string;
+    data: string;
+    customData: {
+      paymasterParams: {
+        paymaster: string;
+        paymasterInput: string;
+      };
+      gasPerPubdata: number;
+    };
+    maxFeePerGas: string;
+    gasLimit: number;
+  };
+  gasLimit: string;
+  gasPrice: string;
+  tokenAddress: string;
+  tokenPrice: string;
+  feeTokenAmount: string;
+  feeTokendecimals: string;
+  feeUSD: string;
+  markup: string;
+  expirationTime: string;
+  expiresIn: string;
+  maxNonce: string;
+  protocolAddress: string;
+  sponsorshipRatio: string;
+  warnings: string[];
+}

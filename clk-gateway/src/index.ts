@@ -11,11 +11,12 @@ import {
   ZeroAddress,
   isAddress,
 } from "ethers";
-import { StorageProof } from "./types";
+import { StorageProof, ZyfiSponsoredRequest } from "./types";
 import {
   CLICK_RESOLVER_INTERFACE,
   STORAGE_PROOF_TYPE,
   CLICK_RESOLVER_ADDRESS_SELECTOR,
+  CLICK_NAME_SERVICE_INTERFACE,
 } from "./interfaces";
 import {
   toLengthPrefixedBytes,
@@ -26,14 +27,17 @@ import admin from "firebase-admin";
 import {
   port,
   l2Provider,
+  l2Wallet,
   clickResolverContract,
   clickNameServiceAddress,
   clickNameServiceContract,
   batchQueryOffset,
   cnsDomain,
   cnsTld,
+  zyfiRequestTemplate,
+  zyfiSponsoredUrl,
 } from "./setup";
-import { getBatchInfo } from "./helpers";
+import { getBatchInfo, fetchZyfiSponsored } from "./helpers";
 import reservedHashes from "./reservedHashes";
 
 const app = express();
@@ -367,9 +371,31 @@ app.post(
       }
       const owner = getAddress(data.owner);
 
-      await admin.auth().revokeRefreshTokens(decodedToken.uid);
+      let response;
+      if (zyfiSponsoredUrl) {
+        const encodedRegister = CLICK_NAME_SERVICE_INTERFACE.encodeFunctionData(
+          "register",
+          [owner, sub],
+        );
+        const zyfiRequest: ZyfiSponsoredRequest = {
+          ...zyfiRequestTemplate,
+          txData: {
+            ...zyfiRequestTemplate.txData,
+            data: encodedRegister,
+          },
+        };
+        const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
+        console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
 
-      const response = await clickNameServiceContract.register(owner, sub);
+        await admin.auth().revokeRefreshTokens(decodedToken.uid);
+
+        response = await l2Wallet.sendTransaction(zyfiResponse.txData);
+      } else {
+        await admin.auth().revokeRefreshTokens(decodedToken.uid);
+
+        response = await clickNameServiceContract.register(owner, sub);
+      }
+
       const receipt = await response.wait();
       if (receipt.status !== 1) {
         throw new Error("Transaction failed");
