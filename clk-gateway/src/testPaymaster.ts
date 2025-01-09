@@ -12,13 +12,13 @@ GAS_LIMIT=1000000
 */
 // Usage example: source .env && npx ts-node src/testPaymaster.ts 0x2E7F3926Ae74FDCDcAde2c2AB50990C5daFD42bD alex
 
-import { Interface, getAddress, Contract } from "ethers";
-import { Provider as L2Provider, Wallet } from "zksync-ethers";
+import {  getAddress } from "ethers";
+import { Provider as L2Provider, Wallet, Contract } from "zksync-ethers";
 
 // L2 Contract
-export const PAYMASTER_TEST_INTERFACE = new Interface([
+export const PAYMASTER_TEST_ABI = [
   "function register(address to, string memory name)",
-]);
+];
 
 import dotenv from "dotenv";
 dotenv.config();
@@ -32,7 +32,7 @@ const paymasterTestAddress = getAddress(process.env.PAYMASTER_TEST_ADDR!);
 
 const paymasterTestContract = new Contract(
   paymasterTestAddress,
-  PAYMASTER_TEST_INTERFACE,
+  PAYMASTER_TEST_ABI,
   l2Wallet,
 );
 const zyfiSponsoredUrl = process.env.ZYFI_BASE_URL
@@ -90,7 +90,7 @@ interface ZyfiSponsoredResponse {
 
 async function fetchZyfiSponsored(
   request: ZyfiSponsoredRequest,
-): Promise<ZyfiSponsoredResponse> {
+): Promise<any> {
   console.log(`zyfiSponsoredUrl: ${zyfiSponsoredUrl}`);
   const response = await fetch(zyfiSponsoredUrl!, {
     method: "POST",
@@ -104,7 +104,7 @@ async function fetchZyfiSponsored(
   if (!response.ok) {
     throw new Error(`Failed to fetch zyfi sponsored`);
   }
-  const sponsoredResponse = (await response.json()) as ZyfiSponsoredResponse;
+  const sponsoredResponse = (await response.json());
 
   return sponsoredResponse;
 }
@@ -128,7 +128,8 @@ const zyfiRequestTemplate: ZyfiSponsoredRequest = {
 async function main(to: string, name: string): Promise<void> {
   let response;
   if (zyfiSponsoredUrl) {
-    const encodedRegister = PAYMASTER_TEST_INTERFACE.encodeFunctionData(
+    const paymasterInterface = paymasterTestContract.interface;
+    const encodedRegister = paymasterInterface.encodeFunctionData(
       "register",
       [to, name],
     );
