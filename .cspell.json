@@ -51,6 +51,7 @@
     "nameservice",
     "firebaseapp",
     "permissioned",
+    "Tokendecimals",
     "zyfi"
   ]
 }
