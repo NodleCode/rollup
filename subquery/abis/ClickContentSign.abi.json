@@ -12,8 +12,8 @@
         "type": "string"
       },
       {
-        "internalType": "address payable",
-        "name": "whitelistAddress",
+        "internalType": "contract WhitelistPaymaster",
+        "name": "whitelist",
         "type": "address"
       }
     ],

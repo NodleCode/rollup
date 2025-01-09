@@ -32,6 +32,7 @@ const project: EthereumProject = {
       process.env.ZKSYNC_MAINNET_RPC!,
       "https://mainnet.era.zksync.io",
     ],
+    dictionary: ["https://dict-tyk.subquery.network/query/zksync-mainnet"],
   },
   dataSources: [
     {
@@ -256,14 +257,15 @@ const project: EthereumProject = {
             kind: EthereumHandlerKind.Call,
             handler: "handleMintReward",
             filter: {
-              function: "mintReward((address,uint256,uint256),bytes)",
+              function: "mintReward(tuple(address,uint256,uint256),bytes)",
             },
           },
           {
             kind: EthereumHandlerKind.Call,
             handler: "handleMintBatchReward",
             filter: {
-              function: "mintBatchReward((address[],uint256[],uint256),bytes)",
+              function:
+                "mintBatchReward(tuple(address[],uint256[],uint256),bytes)",
             },
           },
         ],
@@ -287,27 +289,6 @@ const project: EthereumProject = {
       mapping: {
         file: "./dist/index.js",
         handlers: [
-          {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleSafeMint",
-            filter: {
-              function: "safeMint(address,string)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
-          },
           {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
@@ -337,34 +318,6 @@ const project: EthereumProject = {
         file: "./dist/index.js",
         handlers: [
           {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleSafeMint",
-            filter: {
-              function: "safeMint(address,string)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleApprove",
-            filter: {
-              function: "approve(address,uint256)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
-          },
-          {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
@@ -392,34 +345,6 @@ const project: EthereumProject = {
       mapping: {
         file: "./dist/index.js",
         handlers: [
-          {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleSafeMint",
-            filter: {
-              function: "safeMint(address,string)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleApprove",
-            filter: {
-              function: "approve(address,uint256)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
-          },
           {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
@@ -449,38 +374,45 @@ const project: EthereumProject = {
         file: "./dist/index.js",
         handlers: [
           {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleSafeMint",
-            filter: {
-              function: "safeMint(address,string)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleApprove",
-            filter: {
-              function: "approve(address,uint256)",
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
-            filter: {
-              topics: ["Approval(address,address,uint256)"],
-            },
-          },
-          {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
-          },
-          {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
             filter: {
               topics: ["Transfer(address from,address to,uint256 tokenId)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 51533910, // This is the block that the contract was deployed on
+      options: {
+        abi: "ENS",
+        address: "0xF3271B61291C128F9dA5aB208311d8CF8E2Ba5A9",
+      },
+      assets: new Map([
+        [
+          "ENS",
+          {
+            file: "./abis/ENS.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleCallRegistry",
+            filter: {
+              function: "register(address,string)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleENSTransfer",
+            filter: {
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],

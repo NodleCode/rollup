@@ -2,7 +2,7 @@ import { fetchContract } from "../utils/erc20";
 import { ApprovalLog, TransferLog } from "../types/abi-interfaces/NODLAbi";
 import { fetchAccount, fetchTransaction } from "../utils/utils";
 import { ERC20Approval, ERC20Transfer, ERC20TransferV2, Wallet } from "../types";
-import { handleSnapshot, handleStatSnapshot } from "../utils/snapshot";
+import { handleLevel, handleSnapshot, handleStatSnapshot } from "../utils/snapshot";
 
 export async function handleERC20Transfer(event: TransferLog): Promise<void> {
   if (!event.args) {
@@ -63,10 +63,20 @@ export async function handleERC20Transfer(event: TransferLog): Promise<void> {
       to.id,
       value
     );
+    
+    const BigIntZero = BigInt(0);
+    const fromBalance = from.balance || BigIntZero;
+    const toBalance = to.balance || BigIntZero;
+    
+    const fromNewBalance = fromBalance - value;
+    const toNewBalance = toBalance + value;
 
-    from.balance =
-      (from.balance || BigInt(0)) - (value > 0 ? value : BigInt(0));
-    to.balance = (to.balance || BigInt(0)) + value;
+    await handleLevel(fromNewBalance, fromBalance, timestamp);
+    await handleLevel(toNewBalance, toBalance, timestamp);
+    
+    // Secure the new balance of the sender is greater than 0
+    from.balance = fromNewBalance < BigIntZero ? BigIntZero : fromNewBalance;
+    to.balance = toNewBalance; 
 
     await Promise.all([
       lightTransfer.save(),
