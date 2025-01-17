@@ -125,6 +125,21 @@ app.get(
         owner,
       });
     } catch (error) {
+      if (isParsableError(error)) {
+        const decodedError = CLICK_NAME_SERVICE_INTERFACE.parseError(
+          error.data,
+        );
+        if (decodedError !== null && typeof decodedError.name === "string") {
+          if (decodedError.name === "ERC721NonexistentToken") {
+            res.status(404).send({ error: "Name not found" });
+            return;
+          }
+          if (decodedError.name === "NameExpired") {
+            res.status(410).send({ error: "Name expired" });
+            return;
+          }
+        }
+      }
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       res.status(500).send({ error: errorMessage });

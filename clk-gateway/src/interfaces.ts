@@ -44,6 +44,8 @@ export const CLICK_NAME_SERVICE_INTERFACE = new Interface([
   "function expires(uint256 key) public view returns (uint256)",
   "function register(address to, string memory name)",
   "function resolve(string memory name) external view returns (address)",
+  "error NameExpired(address oldOwner, uint256 expiredAt)",
+  "error ERC721NonexistentToken(uint256 tokenId)",
 ]);
 
 // The storage slot of ERC721._owners within the ClickNameService contract
