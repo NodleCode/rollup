@@ -41,24 +41,34 @@ contract PaymentMiddleware is Ownable {
         uint256 tokenId = target.nextTokenId() - 1;
     }
 
-    function withdraw(IERC20 token) external onlyOwner {
+    function withdraw(IERC20 token) external {
+        _checkOwner();
+
         uint256 balance = token.balanceOf(address(this));
         token.safeTransfer(owner(), balance);
     }
 
-    function setFeeAmount(uint256 _feeAmount) external onlyOwner {
+    function setFeeAmount(uint256 _feeAmount) external {
+        _checkOwner();
+
         feeAmount = _feeAmount;
     }
 
-    function setTarget(BaseContentSign _target) external onlyOwner {
+    function setTarget(BaseContentSign _target) external {
+        _checkOwner();
+
         target = _target;
     }
 
-    function setWhitelist(IERC721 _whitelist) external onlyOwner {
+    function setWhitelist(IERC721 _whitelist) external {
+        _checkOwner();
+
         whitelist = _whitelist;
     }
 
-    function setFeeToken(IERC20 _feeToken) external onlyOwner {
+    function setFeeToken(IERC20 _feeToken) external {
+        _checkOwner();
+
         feeToken = _feeToken;
     }
 }
