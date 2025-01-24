@@ -38,7 +38,6 @@ contract PaymentMiddleware is Ownable {
 
         // Mint the token
         target.safeMint(to, uri);
-        uint256 tokenId = target.nextTokenId() - 1;
     }
 
     function withdraw(IERC20 token) external {
