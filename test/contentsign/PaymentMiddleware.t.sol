@@ -47,10 +47,6 @@ contract PaymentMiddlewareTest is Test {
 
     uint256 internal constant FEE_AMOUNT = 100 ether;
 
-    error UserNotWhitelisted(address user);
-
-    event Minted(address indexed minter, uint256 clickId);
-
     function setUp() public {
         target = new MockContentSign();
         whitelist = new MockWhitelist();
@@ -78,9 +74,6 @@ contract PaymentMiddlewareTest is Test {
     function test_safeMint_succeeds() public {
         vm.prank(alice);
 
-        vm.expectEmit(true, true, true, true);
-        emit Minted(alice, 0);
-
         middleware.safeMint(alice, "test-uri");
 
         assertEq(target.ownerOf(0), alice);
@@ -90,7 +83,7 @@ contract PaymentMiddlewareTest is Test {
 
     function test_safeMint_failsIfNotWhitelisted() public {
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(UserNotWhitelisted.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(PaymentMiddleware.UserNotWhitelisted.selector, bob));
         middleware.safeMint(bob, "test-uri");
     }
 

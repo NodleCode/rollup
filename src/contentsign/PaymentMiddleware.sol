@@ -13,8 +13,6 @@ contract PaymentMiddleware is Ownable {
 
     error UserNotWhitelisted(address user);
 
-    event Minted(address indexed minter, uint256 clickId);
-
     BaseContentSign public target;
     IERC721 public whitelist;
     IERC20 public feeToken;
@@ -41,8 +39,6 @@ contract PaymentMiddleware is Ownable {
         // Mint the token
         target.safeMint(to, uri);
         uint256 tokenId = target.nextTokenId() - 1;
-
-        emit Minted(msg.sender, tokenId);
     }
 
     function withdraw(IERC20 token) external onlyOwner {
