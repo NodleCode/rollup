@@ -64,6 +64,34 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
+      startBlock: 1993364, // This is the block that the contract was deployed on
+      options: {
+        abi: "ClickContentSign",
+        address: "0x195e4E251c41e8Ae9E9E961366C73e2CFbfB115A",
+      },
+      assets: new Map([
+        [
+          "ClickContentSign",
+          {
+            file: "./abis/ClickContentSign.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleTransfer",
+            filter: {
+              topics: ["Transfer(address,address,uint256)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
       startBlock: 2178049, // This is the block that the contract was deployed on
       options: {
         abi: "NODL",
