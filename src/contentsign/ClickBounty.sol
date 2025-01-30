@@ -131,9 +131,9 @@ contract ClickBounty is AccessControl {
      * Emits:
      * - RoleGranted events for assigning ORACLE_ROLE and DEFAULT_ADMIN_ROLE.
      */
-    constructor(address oracle, address _token, address _contentSign, address admin) {
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(ORACLE_ROLE, oracle);
+    constructor(address _oracle, address _token, address _contentSign, address _admin) {
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        _grantRole(ORACLE_ROLE, _oracle);
         token = IERC20(_token);
         contentSign = BaseContentSign(_contentSign);
     }
