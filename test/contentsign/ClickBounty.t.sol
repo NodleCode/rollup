@@ -111,7 +111,7 @@ contract ClickBountyTest is Test {
         clickBounty.awardBounty(tokenId, 0);
     }
 
-    function testAwardBountyaMountMatchingEntryFee() public {
+    function testAwardBountyAmountMatchingEntryFee() public {
         contentSign.safeMint(user1, "tokenURIAwardMatchingFee");
         uint256 tokenId = contentSign.nextTokenId() - 1;
         uint256 fee = clickBounty.entryFee();
