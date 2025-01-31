@@ -123,10 +123,10 @@ contract ClickBounty is AccessControl {
 
     /**
      * @notice Initializes the contract with the given roles, token address, contentSign reference, and admin address.
-     * @param oracle The address granted the ORACLE_ROLE.
+     * @param _oracle The address granted the ORACLE_ROLE.
      * @param _token The ERC20 token address used for payments.
      * @param _contentSign The address of the BaseContentSign contract that handles token ownership and URIs.
-     * @param admin The address granted DEFAULT_ADMIN_ROLE.
+     * @param _admin The address granted DEFAULT_ADMIN_ROLE.
      *
      * Emits:
      * - RoleGranted events for assigning ORACLE_ROLE and DEFAULT_ADMIN_ROLE.
