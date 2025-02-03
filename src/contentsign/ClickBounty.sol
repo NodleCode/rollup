@@ -8,16 +8,14 @@ import {BaseContentSign} from "./BaseContentSign.sol";
 
 /**
  * @title ClickBounty
- * @notice This contract facilitates bounty rewards for specific token IDs. An Oracle triggers
- *         the payments (bounties), and a small top-N list of highest bounties is maintained on-chain.
+ * @notice This contract facilitates bounty rewards for specific token IDs (managed by a BaseContentSign contract).
+ *         The bounty mechanism involves an optional entry fee that must be paid by the token owner prior to
+ *         receiving a bounty. Only addresses with the ORACLE_ROLE can award a bounty, and only addresses
+ *         with the DEFAULT_ADMIN_ROLE can modify administrative parameters or withdraw funds.
  *
  * @dev
- * - Utilizes an ERC20 token both for bounty payouts and fee collection.
- * - Only addresses with the ORACLE_ROLE can call `pay()`.
- * - Only addresses with the DEFAULT_ADMIN_ROLE can call administrative functions such as `withdraw()`
- *   and `setEntryFee()`.
- * - Maintains a leaderboard (top-N) of the highest bounties paid. The size of the leaderboard is fixed
- *   at `LEADERBOARD_SIZE`.
+ * - Each token can only receive one bounty. Once a token's bounty is set, further calls to award it will revert.
+ * - The contract maintains a simple on-chain leaderboard of the top bounties (up to LEADERBOARD_SIZE).
  */
 contract ClickBounty is AccessControl {
     using SafeERC20 for IERC20;
@@ -27,18 +25,28 @@ contract ClickBounty is AccessControl {
     // -------------------------------------------------------------------------
 
     /**
-     * @dev Holds a token’s URI and the associated bounty amount.
+     * @dev Holds a token URI and the associated bounty amount for leaderboard queries.
      */
     struct URIBounty {
         string uri;
         uint256 bounty;
     }
 
+    /**
+     * @dev Represents the overall status of a token's fee payment and awarded bounty amount.
+     * @param feePaid Indicates whether the token’s entry fee has been paid.
+     * @param amount  The bounty amount awarded to the token. Zero if not yet awarded.
+     */
+    struct BountyStatus {
+        bool feePaid;
+        uint256 amount;
+    }
+
     // -------------------------------------------------------------------------
     // Constants and Roles
     // -------------------------------------------------------------------------
 
-    /// @dev Role identifier for the Oracle. Accounts with this role can trigger payments via `pay()`.
+    /// @dev Role identifier for the Oracle. Accounts with this role can trigger bounty awards via `awardBounty()`.
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
 
     /// @notice Maximum number of tracked top winners (token IDs).
@@ -50,31 +58,31 @@ contract ClickBounty is AccessControl {
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Mapping from tokenId to the bounty amount awarded.
-     * @dev If a tokenId’s bounty is zero, it means no bounty has been paid yet.
+     * @notice A mapping from token ID to its BountyStatus.
+     * @dev `bounties[tokenId].feePaid` must be true for the token to be eligible for awarding.
+     *      Once `bounties[tokenId].amount` is set, that token is considered to have a bounty.
      */
-    mapping(uint256 => uint256) public bounties;
+    mapping(uint256 => BountyStatus) public bounties;
 
     /**
      * @dev An array of token IDs that currently have the highest bounties.
-     *      This is not strictly sorted, but each entry is among the largest
-     *      bounties recorded so far.
+     *      Not strictly sorted. Each entry is among the largest bounties recorded so far.
+     *      The size will never exceed LEADERBOARD_SIZE.
      */
     uint256[] private _leaderboard;
 
     /**
-     * @notice The entry fee (in ERC20 tokens) that partially or fully covers the bounty payment.
-     * @dev If `pay()` is called with an `amount` less than `entryFee`, the shortfall is collected
-     *      from the token’s owner. If `amount` exceeds `entryFee`, the surplus is paid out to
-     *      the token’s owner.
+     * @notice The entry fee (in ERC20 tokens) that a token owner must pay to be eligible for a bounty.
      */
-    uint256 public entryFee = 100;
+    uint256 public entryFee;
 
-    /// @notice The ERC20 token used for payments (bounties), fees, and withdrawals.
+    /// @notice The ERC20 token used for fee collection, awarding bounties, and withdrawals.
     IERC20 public immutable token;
 
     /**
      * @notice A reference to a BaseContentSign contract, which manages ownership and URIs for the tokens.
+     * @dev The contract calls `contentSign.ownerOf(tokenId)` to identify token owners and
+     *      `contentSign.tokenURI(tokenId)` to retrieve URIs for leaderboard queries.
      */
     BaseContentSign public immutable contentSign;
 
@@ -90,14 +98,14 @@ contract ClickBounty is AccessControl {
     event NewLeaderboardEntry(uint256 indexed tokenId, uint256 bounty);
 
     /**
-     * @notice Emitted when a bounty is successfully paid to a token ID.
+     * @notice Emitted when a bounty is successfully awarded to a token ID.
      * @param tokenId The token ID receiving the bounty.
      * @param amount  The total bounty amount in `token`.
      */
     event BountyIssued(uint256 indexed tokenId, uint256 amount);
 
     /**
-     * @dev Emitted when the entry fee is updated.
+     * @notice Emitted when the entry fee is updated.
      * @param entryFee The new entry fee value.
      */
     event EntryFeeUpdated(uint256 entryFee);
@@ -107,35 +115,83 @@ contract ClickBounty is AccessControl {
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Thrown when attempting to pay a bounty to a token ID that has already received one.
+     * @notice Thrown when attempting to award a bounty to a token ID that has already received one.
      */
     error BountyAlreadyPaid(uint256 tokenId);
 
     /**
-     * @dev Error indicating that the bounty amount is zero.
-     * @param tokenId The ID of the token associated with the zero bounty.
+     * @notice Thrown when trying to award a bounty with a zero amount, which is not allowed.
      */
     error ZeroBounty(uint256 tokenId);
+
+    /**
+     * @notice Thrown when the Oracle attempts to award a bounty to a token that hasn't paid the entry fee yet.
+     */
+    error FeeNotPaid(uint256 tokenId);
+
+    /**
+     * @notice Thrown if the token's entry fee has already been paid.
+     */
+    error FeeAlreadyPaid(uint256 tokenId);
+
+    /**
+     * @notice Thrown when a non-owner tries to pay the entry fee for a token.
+     */
+    error OnlyOwnerCanPayEntryFee(uint256 tokenId);
 
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Initializes the contract with the given roles, token address, contentSign reference, and admin address.
-     * @param _oracle The address granted the ORACLE_ROLE.
-     * @param _token The ERC20 token address used for payments.
-     * @param _contentSign The address of the BaseContentSign contract that handles token ownership and URIs.
-     * @param _admin The address granted DEFAULT_ADMIN_ROLE.
+     * @notice Initializes the contract, setting up roles and key parameters.
+     * @param _oracle     The address granted the ORACLE_ROLE, authorized to call `awardBounty()`.
+     * @param _token      The address of the ERC20 token used for fees and bounties.
+     * @param _contentSign The address of a BaseContentSign contract for verifying token ownership and retrieving URIs.
+     * @param _entryFee   The initial fee required to be paid by a token’s owner before it can receive a bounty.
+     * @param _admin      The address granted DEFAULT_ADMIN_ROLE, authorized for administrative calls.
      *
      * Emits:
-     * - RoleGranted events for assigning ORACLE_ROLE and DEFAULT_ADMIN_ROLE.
+     * - RoleGranted(DEFAULT_ADMIN_ROLE, _admin)
+     * - RoleGranted(ORACLE_ROLE, _oracle)
      */
-    constructor(address _oracle, address _token, address _contentSign, address _admin) {
+    constructor(address _oracle, address _token, address _contentSign, uint256 _entryFee, address _admin) {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(ORACLE_ROLE, _oracle);
+
         token = IERC20(_token);
         contentSign = BaseContentSign(_contentSign);
+        entryFee = _entryFee;
+    }
+
+    // -------------------------------------------------------------------------
+    // Public / External Functions
+    // -------------------------------------------------------------------------
+
+    /**
+     * @notice Allows the owner of a given token to pay the entry fee, making that token eligible for a bounty.
+     * @dev If the fee is already paid, this reverts with `FeeAlreadyPaid`.
+     *      If called by someone other than the token's owner, this reverts with `OnlyOwnerCanPayEntryFee`.
+     *
+     * @param tokenId The token ID whose fee is being paid.
+     *
+     * Emits:
+     * - A transfer event from the token’s owner to this contract for `entryFee` tokens.
+     */
+    function payEntryFee(uint256 tokenId) external {
+        BountyStatus storage status = bounties[tokenId];
+
+        if (status.feePaid) {
+            revert FeeAlreadyPaid(tokenId);
+        }
+
+        address owner = contentSign.ownerOf(tokenId);
+        if (msg.sender != owner) {
+            revert OnlyOwnerCanPayEntryFee(tokenId);
+        }
+
+        token.safeTransferFrom(owner, address(this), entryFee);
+        status.feePaid = true;
     }
 
     // -------------------------------------------------------------------------
@@ -143,9 +199,12 @@ contract ClickBounty is AccessControl {
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Sets the entry fee for bounties.
+     * @notice Sets the entry fee for future bounties.
      * @dev Only callable by addresses with DEFAULT_ADMIN_ROLE.
      * @param _entryFee The new entry fee in units of `token`.
+     *
+     * Emits:
+     * - `EntryFeeUpdated(_entryFee)` event.
      */
     function setEntryFee(uint256 _entryFee) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
@@ -172,52 +231,48 @@ contract ClickBounty is AccessControl {
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Pays a bounty for a given token ID.
-     *         - If `amount < entryFee`, the difference is collected from the token’s owner.
-     *         - If `amount > entryFee`, the surplus is paid out to the owner.
+     * @notice Awards a bounty for a given token ID.
+     *         - The token’s entry fee must have been paid beforehand.
+     *         - The token must not have received a bounty already.
+     *         - The bounty must be greater than zero.
      *
      * @dev Only callable by addresses with ORACLE_ROLE.
      *
-     * Requirements:
-     * - The token must not have been paid before (`bounties[tokenId] == 0`).
-     *
      * @param tokenId The token ID to which the bounty is awarded.
-     * @param amount  The bounty amount in `token`.
+     * @param amount  The bounty amount in `token`. Must be non-zero.
      *
      * Emits:
-     * - A transfer event from the token’s owner to this contract (if `amount < entryFee`).
-     * - A transfer event from this contract to the token’s owner (if `amount > entryFee`).
-     * - A {BountyIssued} event upon successful bounty payment.
+     * - `BountyIssued(tokenId, amount)` upon successful bounty payment.
+     * - A transfer event from this contract to the token’s owner for `amount` tokens.
+     * - `NewLeaderboardEntry(tokenId, amount)` if the leaderboard is updated.
      *
      * Reverts:
-     * - If `bounties[tokenId] != 0` (bounty already paid).
+     * - `ZeroBounty(tokenId)` if `amount == 0`.
+     * - `FeeNotPaid(tokenId)` if the token’s entry fee was not yet paid.
+     * - `BountyAlreadyPaid(tokenId)` if a bounty is already set for the token.
      */
     function awardBounty(uint256 tokenId, uint256 amount) external {
         _checkRole(ORACLE_ROLE);
-        // Ensure the bounty is non-zero
+
         if (amount == 0) {
             revert ZeroBounty(tokenId);
         }
-        // Ensure this token ID hasn't been paid yet
-        if (bounties[tokenId] != 0) {
+        BountyStatus storage status = bounties[tokenId];
+
+        if (!status.feePaid) {
+            revert FeeNotPaid(tokenId);
+        }
+        if (status.amount != 0) {
             revert BountyAlreadyPaid(tokenId);
         }
 
-        // Identify the token owner via the contentSign contract
         address owner = contentSign.ownerOf(tokenId);
 
-        // If the bounty is smaller than the entry fee, collect the shortfall from the owner
-        if (amount < entryFee) {
-            token.safeTransferFrom(owner, address(this), entryFee - amount);
-        }
-
         // Record the bounty
-        bounties[tokenId] = amount;
+        status.amount = amount;
 
-        // If the bounty is larger than the entry fee, pay out the surplus to the owner
-        if (amount > entryFee) {
-            token.safeTransfer(owner, amount - entryFee);
-        }
+        // Transfer bounty to the owner
+        token.safeTransfer(owner, amount);
 
         emit BountyIssued(tokenId, amount);
 
@@ -231,14 +286,16 @@ contract ClickBounty is AccessControl {
 
     /**
      * @notice Retrieves an array of `(URI, bountyAmount)` for each token in the top winners list.
-     * @dev The size of the returned array is up to `LEADERBOARD_SIZE`, but might be smaller if
-     *      fewer than `LEADERBOARD_SIZE` bounties have been paid.
-     * @return uriBounties A dynamic array of `URIBounty` structs, each with `uri` and `bounty`.
+     * @dev The size of the returned array is at most `LEADERBOARD_SIZE`. It may be smaller if fewer
+     *      tokens have received bounties. The order is not guaranteed to be sorted.
+     *
+     * @return uriBounties A dynamic array of `URIBounty` structs, each containing a token URI and its bounty amount.
      */
     function getLeaderboard() external view returns (URIBounty[] memory uriBounties) {
         uriBounties = new URIBounty[](_leaderboard.length);
         for (uint256 i = 0; i < _leaderboard.length; i++) {
-            uriBounties[i] = URIBounty({uri: contentSign.tokenURI(_leaderboard[i]), bounty: bounties[_leaderboard[i]]});
+            uint256 tid = _leaderboard[i];
+            uriBounties[i] = URIBounty({uri: contentSign.tokenURI(tid), bounty: bounties[tid].amount});
         }
     }
 
@@ -248,36 +305,35 @@ contract ClickBounty is AccessControl {
 
     /**
      * @dev Updates the leaderboard (`_leaderboard`) if `tokenId` is among the top bounties.
-     *      - If the leaderboard is not full, we simply append the new entry.
-     *      - Otherwise, we find the smallest bounty in `_leaderboard`; if `amount` exceeds that,
-     *        we replace it.
+     *      1. If the leaderboard is not full, push the new token ID.
+     *      2. Otherwise, find the smallest bounty in `_leaderboard`. If the new bounty is larger, replace it.
      *
      * @param tokenId The token ID that may enter the leaderboard.
      * @param amount  The bounty amount to compare.
      *
      * Emits:
-     * - A {NewLeaderboardEntry} event if a replacement or addition occurs.
+     * - `NewLeaderboardEntry(tokenId, amount)` if a replacement or addition occurs.
      */
     function _updateLeaderboard(uint256 tokenId, uint256 amount) private {
-        // If the leaderboard is not at capacity, just add the new entry
+        // If the leaderboard is not at capacity, add the new entry
         if (_leaderboard.length < LEADERBOARD_SIZE) {
             _leaderboard.push(tokenId);
             emit NewLeaderboardEntry(tokenId, amount);
             return;
         }
 
-        // Find the smallest bounty in the current leaderboard
+        // If it's at capacity, find the smallest bounty
         uint256 smallestIndex = 0;
-        uint256 smallestAmount = bounties[_leaderboard[0]];
+        uint256 smallestAmount = bounties[_leaderboard[0]].amount;
         for (uint256 i = 1; i < _leaderboard.length; i++) {
-            uint256 currentAmount = bounties[_leaderboard[i]];
+            uint256 currentAmount = bounties[_leaderboard[i]].amount;
             if (currentAmount < smallestAmount) {
                 smallestAmount = currentAmount;
                 smallestIndex = i;
             }
         }
 
-        // If the new amount is bigger than the smallest in the leaderboard, replace it
+        // Replace the smallest if the new amount is bigger
         if (amount > smallestAmount) {
             _leaderboard[smallestIndex] = tokenId;
             emit NewLeaderboardEntry(tokenId, amount);
