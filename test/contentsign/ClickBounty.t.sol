@@ -235,7 +235,7 @@ contract ClickBountyTest is Test {
         clickBounty.payEntryFee(tokenId);
     }
 
-    function testpayEntryFeeFailsIfFeeAlreadyPaid() public {
+    function testPayEntryFeeFailsIfFeeAlreadyPaid() public {
         contentSign.safeMint(user1, "tokenURIAlreadyPaid");
         uint256 tokenId = contentSign.nextTokenId() - 1;
         uint256 fee = clickBounty.entryFee();
