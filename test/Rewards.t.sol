@@ -6,7 +6,7 @@ import "forge-std/console.sol";
 import "../src/NODL.sol";
 import "../src/QuotaControl.sol";
 import "../src/Rewards.sol";
-import "openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "./__helpers__/AccessControlUtils.sol";
 
 contract RewardsTest is Test {
@@ -256,7 +256,7 @@ contract RewardsTest is Test {
         rewards.mintBatchReward(rewardsBatch, signature);
     }
 
-    function test_digestReward() public {
+    function test_digestReward() public view {
         bytes32 hashedEIP712DomainType =
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
         bytes32 hashedName = keccak256(bytes("rewards.depin.nodle"));
