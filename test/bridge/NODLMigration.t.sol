@@ -22,7 +22,7 @@ contract NODLMigrationTest is Test {
         nodl.grantRole(nodl.MINTER_ROLE(), address(migration));
     }
 
-    function test_oraclesAreRegisteredProperly() public {
+    function test_oraclesAreRegisteredProperly() public view {
         for (uint256 i = 0; i < oracles.length; i++) {
             assertEq(migration.isOracle(oracles[i]), true);
         }
@@ -30,7 +30,7 @@ contract NODLMigrationTest is Test {
         assertEq(migration.delay(), delay);
     }
 
-    function test_configuredProperToken() public {
+    function test_configuredProperToken() public view {
         assertEq(address(migration.nodl()), address(nodl));
     }
 

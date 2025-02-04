@@ -3,9 +3,9 @@ pragma solidity 0.8.23;
 
 import {NODL} from "./NODL.sol";
 import {QuotaControl} from "./QuotaControl.sol";
-import {EIP712} from "openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol";
-import {SignatureChecker} from "openzeppelin-contracts/contracts/utils/cryptography/SignatureChecker.sol";
-import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /**
  * @title Nodle DePIN Rewards
