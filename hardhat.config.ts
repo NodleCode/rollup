@@ -48,7 +48,7 @@ const config: HardhatUserConfig = {
         version: "0.8.23",
     },
     paths: {
-        sources: "src",        
+        sources: "src",
     },
     etherscan: {
         apiKey: process.env.ETHERSCAN_API_KEY,
