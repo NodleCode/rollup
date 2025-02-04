@@ -29,7 +29,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   ];
 
   console.log(
-    "Deploying Payment contract with constructor args: ",
+    "Deploying ClickBounty contract with constructor args: ",
     constructorArgs
   );
 
