@@ -28,6 +28,10 @@ For subquery utilization refer to [Nodle-zksync-subquery](/subquery/README.md)
 - while we do have a compatibility layer with `hardhat`, scripts, tests and contracts need to be fully usable via `forge` itself by default
 - if deploying a contract, ensure it is verified on Etherscan
 
+# Mainnet Deployments
+
+Please refer to the [Nodle on ZKsync documentation](https://docs.nodle.com/nodle-on-zksync-era) for main contract addresses.
+
 # Usage
 
 ## Build
