@@ -1,5 +1,10 @@
 import { toUtf8Bytes, ErrorDescription } from "ethers";
-import { CommitBatchInfo, StoredBatchInfo as BatchInfo } from "./types";
+import {
+  CommitBatchInfo,
+  StoredBatchInfo as BatchInfo,
+  ZyfiSponsoredRequest,
+  ZyfiSponsoredResponse,
+} from "./types";
 import {
   diamondAddress,
   diamondContract,
@@ -7,6 +12,7 @@ import {
   l2Provider,
 } from "./setup";
 import { ZKSYNC_DIAMOND_INTERFACE } from "./interfaces";
+import { zyfiSponsoredUrl } from "./setup";
 
 export function toLengthPrefixedBytes(
   sub: string,
@@ -161,4 +167,25 @@ export async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
     commitment,
   };
   return storedBatchInfo;
+}
+
+export async function fetchZyfiSponsored(
+  request: ZyfiSponsoredRequest,
+): Promise<ZyfiSponsoredResponse> {
+  console.log(`zyfiSponsoredUrl: ${zyfiSponsoredUrl}`);
+  const response = await fetch(zyfiSponsoredUrl!, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-KEY": process.env.ZYFI_API_KEY!,
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch zyfi sponsored`);
+  }
+  const sponsoredResponse = (await response.json()) as ZyfiSponsoredResponse;
+
+  return sponsoredResponse;
 }

@@ -3,7 +3,7 @@
 pragma solidity 0.8.23;
 
 import {Script, console} from "forge-std/Script.sol";
-import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {MigrationNFT} from "../src/bridge/MigrationNFT.sol";
 import {NODLMigration} from "../src/bridge/NODLMigration.sol";
 

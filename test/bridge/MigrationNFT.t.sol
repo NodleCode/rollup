@@ -51,7 +51,7 @@ contract MigrationNFTTest is Test {
         nodl.grantRole(nodl.MINTER_ROLE(), address(migration));
     }
 
-    function test_initialState() public {
+    function test_initialState() public view {
         assertEq(migrationNFT.nextTokenId(), 0);
         assertEq(migrationNFT.maxHolders(), maxHolders);
         assertEq(address(migrationNFT.migration()), address(migration));

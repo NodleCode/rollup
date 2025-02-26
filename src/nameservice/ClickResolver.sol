@@ -8,7 +8,7 @@
 pragma solidity ^0.8.23;
 
 import {IERC165} from "lib/forge-std/src/interfaces/IERC165.sol";
-import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {
     StorageProof,
     StorageProofVerifier
