@@ -9,7 +9,7 @@ import {
 } from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymaster.sol";
 import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymasterFlow.sol";
 import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
-import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000;
 address payable constant BOOTLOADER_FORMAL_ADDRESS = payable(address(SYSTEM_CONTRACTS_OFFSET + 0x01));

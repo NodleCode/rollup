@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
 import {NODL} from "../src/NODL.sol";
-import {ERC20Capped} from "openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Capped.sol";
+import {ERC20Capped} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Capped.sol";
 
 contract NODLTest is Test {
     NODL private nodl;
@@ -21,11 +21,11 @@ contract NODLTest is Test {
         assert(nodl.hasRole(nodl.MINTER_ROLE(), alice));
     }
 
-    function test_has18Decimals() public {
+    function test_has18Decimals() public view {
         assertEq(nodl.decimals(), 18);
     }
 
-    function test_shouldDeployWithNoSupply() public {
+    function test_shouldDeployWithNoSupply() public view {
         assertEq(nodl.totalSupply(), 0);
     }
 

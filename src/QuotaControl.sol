@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 pragma solidity 0.8.23;
 
-import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
-import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /**
  * @title QuotaControl
@@ -153,7 +153,7 @@ contract QuotaControl is AccessControl {
      * - The `newPeriod` must be greater than 0.
      * - The `newPeriod` must not exceed `MAX_PERIOD`.
      */
-    function _mustBeWithinPeriodRange(uint256 newPeriod) internal {
+    function _mustBeWithinPeriodRange(uint256 newPeriod) internal pure {
         if (newPeriod == 0) {
             revert ZeroPeriod();
         }
