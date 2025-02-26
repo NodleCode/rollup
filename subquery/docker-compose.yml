@@ -69,7 +69,7 @@ services:
       DB_DATABASE: postgres
       DB_HOST: postgres
       DB_PORT: 5432
-      NODE_ENV: production
+      # NODE_ENV: production
     command:
       - --name=app
       #- --log-level=silent

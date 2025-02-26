@@ -53,26 +53,33 @@ const project: EthereumProject = {
         file: "./dist/index.js",
         handlers: [
           {
-            kind: EthereumHandlerKind.Call,
-            handler: "handleSafeMint",
-            filter: {
-              function: "safeMint(address,string)",
-            },
-          },
-          {
             kind: EthereumHandlerKind.Event,
-            handler: "handleApproval",
+            handler: "handleTransfer",
             filter: {
-              topics: ["Approval(address,address,uint256)"],
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 1993364, // This is the block that the contract was deployed on
+      options: {
+        abi: "ClickContentSign",
+        address: "0x195e4E251c41e8Ae9E9E961366C73e2CFbfB115A",
+      },
+      assets: new Map([
+        [
+          "ClickContentSign",
           {
-            kind: EthereumHandlerKind.Event,
-            handler: "handleApprovalForAll",
-            filter: {
-              topics: ["ApprovalForAll(address,address,bool)"],
-            },
+            file: "./abis/ClickContentSign.abi.json",
           },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
           {
             kind: EthereumHandlerKind.Event,
             handler: "handleTransfer",
@@ -314,6 +321,41 @@ const project: EthereumProject = {
             handler: "handleMintBatchReward",
             filter: {
               function: "mintBatchReward((address[],uint256[],uint256),bytes)",
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 4261159, // This is the block that the contract was deployed on
+      options: {
+        abi: "ENS",
+        address: "0xAD4360c87275C7De1229A8c3C0567f921c9302b1",
+      },
+      assets: new Map([
+        [
+          "ENS",
+          {
+            file: "./abis/ENS.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleCallRegistry",
+            filter: {
+              function: "register(address,string)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleENSTransfer",
+            filter: {
+              topics: ["Transfer(address,address,uint256)"],
             },
           },
         ],

@@ -26,8 +26,10 @@ type Account @entity {
   roleRevokedSender: [RoleRevoked!]! @derivedFrom(field: "sender")
   events: [Event!]! @derivedFrom(field: "emitter")
   vestingSchedules: [VestingSchedule!]! @derivedFrom(field: "beneficiary")
-  timestamp: BigInt @index
+  timestamp: BigInt
   balance: BigInt @index
+  name: String
+  ENS: ENS @derivedFrom(field: "owner") @index
 }
 
 type Wallet @entity {
@@ -47,7 +49,7 @@ type ERC721Contract @entity {
   operators: [ERC721Operator!]! @derivedFrom(field: "contract")
   transfers: [ERC721Transfer!]! @derivedFrom(field: "contract")
 }
-type ERC721Token @entity @compositeIndexes(fields: [["owner", "contract"]]) {
+type ERC721Token @entity {
   id: ID!
   contract: ERC721Contract!
   identifier: BigInt!
@@ -162,9 +164,7 @@ type ERC20Contract @entity {
   approvals: [ERC20Approval!]! @derivedFrom(field: "contract")
 }
 
-type ERC20Transfer implements Event
-  @entity
-  @compositeIndexes(fields: [["from", "to"]]) {
+type ERC20Transfer implements Event @entity {
   id: ID!
   emitter: Account!
   transaction: Transaction!
@@ -204,7 +204,7 @@ type ProposalGrant @entity {
   recipient: Account
   initiator: Account
   amount: BigInt
-  timestamp: BigInt @index
+  timestamp: BigInt
   hash: String @index
   granted: Boolean
   votes: [ProposalVote!]! @derivedFrom(field: "proposal")
@@ -220,7 +220,7 @@ type Proposal @entity {
   withdrawn: Boolean
   votes: [ProposalVote!]! @derivedFrom(field: "proposal")
   hash: String @index
-  timestamp: BigInt @index
+  timestamp: BigInt
 }
 
 type ProposalVote @entity {
@@ -234,7 +234,7 @@ type ProposalVote @entity {
 type VestingSchedule @entity {
   id: ID!
   beneficiary: Account! @index
-  cancelAuthority: Account @index
+  cancelAuthority: Account
   start: BigInt
   period: BigInt
   periodCount: Int
@@ -254,7 +254,7 @@ type VestingScheduleCanceled @entity {
   beneficiary: Account! @index
   start: BigInt
   end: BigInt
-  cancelAuthority: Account @index
+  cancelAuthority: Account
   affectedVestingSchedules: [String!]
   transaction: Transaction!
 }
@@ -264,7 +264,7 @@ type VestingScheduleRenounced @entity {
   beneficiary: Account! @index
   start: BigInt
   end: BigInt
-  cancelAuthority: Account @index
+  cancelAuthority: Account
   affectedVestingSchedules: [String!]
   transaction: Transaction!
 }
@@ -288,7 +288,7 @@ type Reward @entity {
   id: ID!
   sender: Account! @index
   beneficiary: Account! @index
-  amount: BigInt @index
+  amount: BigInt
   transaction: Transaction!
   BatchMetadata: BatchMetadata
   sequence: BigInt
@@ -321,20 +321,20 @@ type StatSnapshot @entity {
 type TokenSnapshot @entity {
   id: ID!
   owner: Account! @index
-  blockNumber: Int! @index
+  blockNumber: Int!
   identifier: BigInt! @index
-  token: ERC721Token! @index
-  timestamp: BigInt! @index
+  token: ERC721Token!
+  timestamp: BigInt!
 }
 
 type TokenSnapshotV2 @entity {
   id: ID!
   owner: Account! @index
-  latestIdentifier: BigInt @index
-  firstIdentifier: BigInt! @index
+  latestIdentifier: BigInt
+  firstIdentifier: BigInt!
   tokensMinted: Int!
-  fistBlockTimestamp: BigInt! @index
-  latestBlockTimestamp: BigInt @index
+  fistBlockTimestamp: BigInt!
+  latestBlockTimestamp: BigInt
   latestBlockNumber: Int
   firstBlockNumber: Int!
   firstToken: ERC721Token!
@@ -349,8 +349,28 @@ type ERC20TransferV2 implements Event
   transaction: String!
   timestamp: BigInt! @index
   contract: String
-  hash: String @index
+  hash: String
   from: String! @index
   to: String! @index
   value: BigInt!
 }
+
+type UsersLevelsStats @entity {
+  id: ID!
+  level: Int! @index
+  members: Int! @index
+  total: BigInt! @index
+  updatedAt: BigInt!
+  createdAt: BigInt!
+}
+
+type ENS @entity {
+  id: ID!
+  owner: Account! @index
+  expiresAt: BigInt
+  registeredAt: BigInt!
+  name: String! @index
+  rawName: String
+  caller: Account!
+}
+

@@ -12,6 +12,17 @@ import { fetchAccount, fetchTransaction } from "../utils/utils";
 export async function handleMintReward(
   call: MintRewardTransaction
 ): Promise<void> {
+  const receipt = await call.receipt();
+
+  if (!receipt.status) {
+    // skip failed transactions
+    return;
+  }
+
+  if (!call.args || !call.logs) {
+    throw new Error("No tx.args or tx.logs");
+  }
+
   const signature = call.args![1];
   const reward = call.args![0];
 
@@ -71,6 +82,17 @@ export async function handleMintReward(
 export async function handleMintBatchReward(
   call: MintBatchRewardTransaction
 ): Promise<void> {
+  const receipt = await call.receipt();
+
+  if (!receipt.status) {
+    // skip failed transactions
+    return;
+  }
+
+  if (!call.args || !call.logs) {
+    throw new Error("No tx.args or tx.logs");
+  }
+
   const _rewards = call.args![0];
   const signature = call.args![1];
 
