@@ -47,17 +47,19 @@ export async function handleCallRegistry(tx: RegisterTransaction) {
   const expiresAt = expires ? expires.toBigInt() * BigInt(1000) : BigInt(0);
   // rawName is the encoded name
   const rawName = JSON.stringify(rawOwner);
+
+  const clkName = `${name}.clk.eth`;
   const registeredEns = new ENS(
     txHash.concat("/").concat(txIndex.toString()),
     ownerAccount.id,
     timestamp,
-    name,
+    clkName,
     caller.id
   );
 
   registeredEns.expiresAt = expiresAt;
   registeredEns.rawName = rawName;
-  ownerAccount.name = name;
+  ownerAccount.name = clkName;
 
   return Promise.all([registeredEns.save(), ownerAccount.save()]);
 }
