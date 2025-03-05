@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import { Request } from "express";
+import { NextFunction, Request, Response } from "express";
 import { toUtf8Bytes, ErrorDescription, verifyMessage, keccak256 } from "ethers";
 import {
   CommitBatchInfo,
@@ -264,3 +264,38 @@ export async function getDecodedToken(req: Request): Promise<DecodedIdToken> {
   return decodedToken;
 }
 
+/**
+ * Check if a user exists by email
+ * @param {Request} req - The request object
+ * @returns {void} - The user
+*/
+export async function checkUserByEmail(req: Request): Promise<void> {
+  const user = await admin.auth().getUserByEmail(req.body.email).catch(reason => {
+    if (reason.code === "auth/user-not-found") {
+      return null;
+    }
+    throw new HttpError(reason.message, 403);
+  });
+  if (user?.customClaims?.subDomain) {
+    throw new HttpError(
+      "One subdomain already claimed with this email address",
+      403
+    );
+  }
+}
+
+/**
+ * Async handler for express routes
+ * @returns {Function} - The async handler
+*/
+export const asyncHandler = (
+  handler: (req: Request, res: Response, next: NextFunction) => Promise<void>
+) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await handler(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  };
+};

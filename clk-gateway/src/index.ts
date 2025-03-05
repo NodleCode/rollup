@@ -25,6 +25,8 @@ import {
   getMessageHash,
   validateSignature,
   getDecodedToken,
+  checkUserByEmail,
+  asyncHandler,
 } from "./helpers";
 import admin from "firebase-admin";
 import {
@@ -466,7 +468,7 @@ app.post(
         return true;
       })
       .withMessage(
-        "Current available subdomain names are limited to those with at least 5 characters",
+        "Current available subdomain names are limited to those with at least 5 characters"
       ),
     body("signature")
       .isString()
@@ -481,7 +483,7 @@ app.post(
       })
       .withMessage("Owner must be a valid Ethereum address"),
   ],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const decodedToken = await getDecodedToken(req);
 
     const result = validationResult(req);
@@ -548,7 +550,7 @@ app.post(
     res.status(200).send({
       txHash: receipt.hash,
     });
-  }
+  })
 );
 
 app.post(
@@ -581,10 +583,12 @@ app.post(
         return true;
       })
       .withMessage(
-        "Current available subdomain names are limited to those with at least 5 characters",
+        "Current available subdomain names are limited to those with at least 5 characters"
       ),
+    body("email").isEmail().withMessage("Email must be a valid email address"),
   ],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
+    await checkUserByEmail(req);
     const result = validationResult(req);
     if (!result.isEmpty()) {
       throw new HttpError(
@@ -606,7 +610,7 @@ app.post(
     res.status(200).send({
       messageHash,
     });
-  }
+  })
 );
 
 app.post(
