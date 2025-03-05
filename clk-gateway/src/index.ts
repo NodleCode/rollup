@@ -36,6 +36,7 @@ import {
   cnsTld,
   zyfiRequestTemplate,
   zyfiSponsoredUrl,
+  l1Provider,
 } from "./setup";
 import { getBatchInfo, fetchZyfiSponsored } from "./helpers";
 import reservedHashes from "./reservedHashes";
@@ -431,6 +432,67 @@ app.post(
     }
   },
 );
+
+app.post(
+  "/name/resolve",
+  body("name")
+    .isFQDN()
+    .withMessage("Name must be a fully qualified domain name")
+    .custom((name) => {
+      const [sub, domain, tld] = name.split(".");
+      if (tld === undefined && domain !== cnsTld) {
+        return false;
+      }
+      return true;
+    })
+    .withMessage("Invalid domain or tld"),
+  async (req: Request, res: Response) => {
+    try {
+      const result = validationResult(req);
+      if (!result.isEmpty()) {
+        res.status(400).json(result.array());
+        return;
+      }
+      const name = matchedData(req).name;
+
+      const parts = name.split(".");
+      const [sub, domain] = parts;
+
+      let owner;
+      if (domain === cnsDomain) {
+        owner = await clickNameServiceContract.resolve(sub);
+      } else {
+        owner = await l1Provider.resolveName(name);
+      }
+
+      res.status(200).send({
+        owner,
+      });
+    } catch (error) {
+      if (isParsableError(error)) {
+        const decodedError = CLICK_RESOLVER_INTERFACE.parseError(error.data);
+        if (isOffchainLookupError(decodedError)) {
+          const { sender, urls, callData, callbackFunction, extraData } =
+            decodedError.args;
+          res.status(200).send({
+            OffchainLookup: {
+              sender,
+              urls,
+              callData,
+              callbackFunction,
+              extraData,
+            },
+          });
+          return;
+        }
+      }
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      res.status(500).send({ error: errorMessage });
+    }
+  }
+);
+
 
 // Start server
 app.listen(port, () => {
