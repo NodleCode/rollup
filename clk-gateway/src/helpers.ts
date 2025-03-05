@@ -1,9 +1,12 @@
-import { toUtf8Bytes, ErrorDescription } from "ethers";
+import admin from "firebase-admin";
+import { Request } from "express";
+import { toUtf8Bytes, ErrorDescription, verifyMessage, keccak256 } from "ethers";
 import {
   CommitBatchInfo,
   StoredBatchInfo as BatchInfo,
   ZyfiSponsoredRequest,
   ZyfiSponsoredResponse,
+  HttpError,
 } from "./types";
 import {
   diamondAddress,
@@ -13,6 +16,7 @@ import {
 } from "./setup";
 import { ZKSYNC_DIAMOND_INTERFACE } from "./interfaces";
 import { zyfiSponsoredUrl } from "./setup";
+import { DecodedIdToken } from "firebase-admin/lib/auth/token-verifier";
 
 export function toLengthPrefixedBytes(
   sub: string,
@@ -189,3 +193,74 @@ export async function fetchZyfiSponsored(
 
   return sponsoredResponse;
 }
+
+/**
+ * Validate an Ethereum signature
+ * @param {Object} params - Signature validation parameters
+ * @param {string} params.message - Original message that was signed
+ * @param {string} params.signature - Signature to validate
+ * @param {string} params.expectedSigner - Expected signer's address
+ * @returns {boolean} - Whether the signature is valid
+ */
+export function validateSignature({ message, signature, expectedSigner }: {
+  message: string,
+  signature: string,
+  expectedSigner: string,
+}) {
+  try {
+    const signerAddress = verifyMessage(
+      message, 
+      signature
+    );
+
+    return signerAddress.toLowerCase() === expectedSigner.toLowerCase();
+  } catch (error) {
+    console.error('Signature validation error:', error);
+    return false;
+  }
+}
+
+/**
+ * Get the hash of a message
+ * @param {Object} data - Message data
+ * @param {string} data.name - Name of the message
+ * @param {string} data.owner - Owner of the message
+ * @returns {string} - Hash of the message
+ */
+export function getMessageHash(data: {
+  name: string,
+}) {
+  const message = data;
+  const messageHash = keccak256(toUtf8Bytes(JSON.stringify(message)));
+
+  return messageHash;
+}
+
+/**
+ * Validate the header of the request
+ * @param {Request} req - The request object
+ * @returns {DecodedIdToken} - The decoded token
+*/
+export async function getDecodedToken(req: Request): Promise<DecodedIdToken> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    throw new HttpError("Authorization header is missing", 401);
+  }
+  const idToken = authHeader.split("Bearer ")[1];
+  if (!idToken) {
+    throw new HttpError("Bearer token is missing", 401);
+  }
+  const decodedToken = await admin.auth().verifyIdToken(idToken, true);
+  if (!decodedToken.email_verified) {
+    throw new HttpError("Email not verified", 403);
+  }
+  if (decodedToken.subDomain) {
+    throw new HttpError(
+      "One subdomain already claimed with this email address",
+      403
+    );
+  }
+
+  return decodedToken;
+}
+
