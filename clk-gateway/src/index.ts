@@ -601,7 +601,7 @@ app.post(
     }
     const data = matchedData(req);
 
-    /* Not require typed data */
+    /* No typed data required */
     const message = {
       name: data.name,
     };
