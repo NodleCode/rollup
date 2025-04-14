@@ -299,3 +299,14 @@ export const asyncHandler = (
     }
   };
 };
+
+export function buildTypedData(data: {
+  name: string,
+}) {
+  const domain = domain;
+  
+  const message = data;
+  const messageHash = keccak256(toUtf8Bytes(JSON.stringify(message)));
+
+  return messageHash;
+}
