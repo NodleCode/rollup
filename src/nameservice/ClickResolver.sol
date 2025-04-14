@@ -25,6 +25,7 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
 
     bytes4 private constant ADDR_SELECTOR = 0x3b3b57de; // addr(bytes32)
     bytes4 private constant ADDR_MULTICHAIN_SELECTOR = 0xf1cb7e06; // addr(bytes32,uint)
+    bytes4 private constant TEXT_SELECTOR = 0x59d1d43c; // text(bytes32,string)
     uint256 private constant ZKSYNC_MAINNET_COIN_TYPE = 2147483972; // (0x80000000 | 0x144) >>> 0 as per ENSIP11
 
     error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData);
@@ -129,7 +130,7 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
         bytes memory callData = abi.encode(key);
 
         bytes4 functionSelector = bytes4(_data[:4]);
-        if (functionSelector == ADDR_SELECTOR) {
+        if (functionSelector == ADDR_SELECTOR || functionSelector == TEXT_SELECTOR) {
             revert OffchainLookup(address(this), urls, callData, ClickResolver.resolveWithProof.selector, callData);
         } else if (functionSelector == ADDR_MULTICHAIN_SELECTOR) {
             (, uint256 coinType) = abi.decode(_data[4:], (bytes32, uint256));
@@ -168,6 +169,8 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
      * @dev See {IERC165-supportsInterface}.
      */
     function supportsInterface(bytes4 interfaceId) public view virtual override(IERC165) returns (bool) {
-        return interfaceId == type(IERC165).interfaceId || interfaceId == EXTENDED_INTERFACE_ID;
+        return interfaceId == type(IERC165).interfaceId || 
+               interfaceId == EXTENDED_INTERFACE_ID ||
+               interfaceId == type(IExtendedResolver).interfaceId;
     }
 }

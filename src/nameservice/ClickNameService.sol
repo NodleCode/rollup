@@ -30,8 +30,11 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
 
     // token id to expires timestamp
     mapping(uint256 => uint256) public expires;
+    // token id to text records
+    mapping(uint256 => mapping(string => string)) public textRecords;
 
     event NameRegistered(string indexed name, address indexed owner, uint256 expires);
+    event TextRecordSet(uint256 indexed tokenId, string indexed key, string value);
 
     /// @notice Thrown when attempting to resolve a name that has expired
     /// @param oldOwner The address of the previous owner of the name
@@ -196,5 +199,33 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     // Check if caller is authorized for privileged operations
     function _isAuthorized() private view returns (bool) {
         return (hasRole(REGISTERER_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender));
+    }
+
+    /// @notice Set a text record for a name
+    /// @param name The name to set the text record for
+    /// @param key The key of the text record
+    /// @param value The value of the text record
+    function setTextRecord(string memory name, string memory key, string memory value) external {
+        uint256 tokenId = uint256(keccak256(abi.encodePacked(name)));
+        if (_ownerOf(tokenId) != msg.sender) {
+            revert NotAuthorized();
+        }
+        if (expires[tokenId] <= block.timestamp) {
+            revert NameExpired(_ownerOf(tokenId), expires[tokenId]);
+        }
+        textRecords[tokenId][key] = value;
+        emit TextRecordSet(tokenId, key, value);
+    }
+
+    /// @notice Get a text record for a name
+    /// @param name The name to get the text record for
+    /// @param key The key of the text record
+    /// @return The value of the text record
+    function getTextRecord(string memory name, string memory key) external view returns (string memory) {
+        uint256 tokenId = uint256(keccak256(abi.encodePacked(name)));
+        if (expires[tokenId] <= block.timestamp) {
+            revert NameExpired(_ownerOf(tokenId), expires[tokenId]);
+        }
+        return textRecords[tokenId][key];
     }
 }
