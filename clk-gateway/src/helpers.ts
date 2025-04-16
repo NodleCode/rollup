@@ -1,4 +1,4 @@
-import { toUtf8Bytes, ErrorDescription } from "ethers";
+import { toUtf8Bytes, ErrorDescription, AbiCoder } from "ethers";
 import {
   CommitBatchInfo,
   StoredBatchInfo as BatchInfo,
@@ -11,13 +11,13 @@ import {
   l1Provider,
   l2Provider,
 } from "./setup";
-import { ZKSYNC_DIAMOND_INTERFACE } from "./interfaces";
+import { COMMIT_BATCH_INFO_ABI_STRING, STORED_BATCH_INFO_ABI_STRING, ZKSYNC_DIAMOND_INTERFACE } from "./interfaces";
 import { zyfiSponsoredUrl } from "./setup";
 
 export function toLengthPrefixedBytes(
   sub: string,
   domain: string,
-  top: string,
+  top: string
 ): Uint8Array {
   const totalLength = sub.length + domain.length + top.length + 3;
   const buffer = new Uint8Array(totalLength);
@@ -33,7 +33,7 @@ export function toLengthPrefixedBytes(
 }
 
 export function isParsableError(
-  error: any,
+  error: any
 ): error is { data: string | Uint8Array } {
   return (
     error &&
@@ -53,7 +53,7 @@ export type OffchainLookupArgs = {
 };
 
 export function isOffchainLookupError(
-  errorDisc: null | ErrorDescription,
+  errorDisc: null | ErrorDescription
 ): errorDisc is ErrorDescription & { args: OffchainLookupArgs } {
   return (
     errorDisc !== null &&
@@ -72,16 +72,25 @@ export function isOffchainLookupError(
 /** Parses the transaction where batch is committed and returns commit info */
 export async function parseCommitTransaction(
   txHash: string,
-  batchNumber: number,
+  batchNumber: number
 ): Promise<{ commitBatchInfo: CommitBatchInfo; commitment: string }> {
   const transactionData = await l1Provider.getTransaction(txHash);
-  const [, , newBatch] = ZKSYNC_DIAMOND_INTERFACE.decodeFunctionData(
+
+  if (transactionData == undefined) {
+    throw new Error(`Transaction data for batch ${batchNumber} not found`);
+  }
+
+  const commitBatchesSharedBridge = ZKSYNC_DIAMOND_INTERFACE.decodeFunctionData(
     "commitBatchesSharedBridge",
-    transactionData!.data,
+    transactionData!.data
   );
 
-  // Find the batch with matching number
-  const batch = newBatch.find((batch: any) => {
+  const [, , , commitData] = commitBatchesSharedBridge;
+
+  const { commitBatchInfos } =
+    decodeCommitData(commitData);
+
+  const batch = commitBatchInfos.find((batch: any) => {
     return batch[0] === BigInt(batchNumber);
   });
   if (batch == undefined) {
@@ -109,20 +118,21 @@ export async function parseCommitTransaction(
   // Parse event logs of the transaction to find commitment
   const blockCommitFilter = ZKSYNC_DIAMOND_INTERFACE.encodeFilterTopics(
     "BlockCommit",
-    [batchNumber],
+    [batchNumber]
   );
   const commitLog = receipt.logs.find(
     (log) =>
       log.address === diamondAddress &&
-      blockCommitFilter.every((topic, i) => topic === log.topics[i]),
+      blockCommitFilter.every((topic, i) => topic === log.topics[i])
   );
   if (commitLog == undefined) {
     throw new Error(`Commit log for batch ${batchNumber} not found`);
   }
+
   const { commitment } = ZKSYNC_DIAMOND_INTERFACE.decodeEventLog(
     "BlockCommit",
     commitLog.data,
-    commitLog.topics,
+    commitLog.topics
   );
 
   return { commitBatchInfo, commitment };
@@ -152,8 +162,9 @@ export async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
   // Parse commit calldata from commit transaction
   const { commitBatchInfo, commitment } = await parseCommitTransaction(
     commitTxHash,
-    batchNumber,
+    batchNumber
   );
+
   const l2LogsTreeRoot = await getL2LogsRootHash(batchNumber);
 
   const storedBatchInfo: BatchInfo = {
@@ -170,7 +181,7 @@ export async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
 }
 
 export async function fetchZyfiSponsored(
-  request: ZyfiSponsoredRequest,
+  request: ZyfiSponsoredRequest
 ): Promise<ZyfiSponsoredResponse> {
   console.log(`zyfiSponsoredUrl: ${zyfiSponsoredUrl}`);
   const response = await fetch(zyfiSponsoredUrl!, {
@@ -188,4 +199,20 @@ export async function fetchZyfiSponsored(
   const sponsoredResponse = (await response.json()) as ZyfiSponsoredResponse;
 
   return sponsoredResponse;
+}
+
+function decodeCommitData(commitData: string) {
+  // Remove the version prefix (0x00)
+  const encodedDataWithoutVersion = commitData.slice(4);
+
+  // Decode the data
+  const decoded = AbiCoder.defaultAbiCoder().decode(
+    [STORED_BATCH_INFO_ABI_STRING, `${COMMIT_BATCH_INFO_ABI_STRING}[]`],
+    "0x" + encodedDataWithoutVersion
+  );
+
+  return {
+    storedBatchInfo: decoded[0],
+    commitBatchInfos: decoded[1],
+  };
 }
