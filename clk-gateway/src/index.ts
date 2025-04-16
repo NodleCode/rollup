@@ -257,12 +257,20 @@ app.post(
 
 app.get(
   "/storageProof",
-  query("key")
-    .isString()
-    .custom((key) => {
-      return isHexString(key, 32);
-    })
-    .withMessage("Key must be a 32 bytes hex string"),
+  [
+    query("key")
+      .isString()
+      .custom((key) => {
+        return isHexString(key, 32);
+      })
+      .withMessage("Key must be a 32 bytes hex string"),
+    query("sender")
+      .isString()
+      .custom((sender) => {
+        return isAddress(sender);
+      })
+      .withMessage("Sender must be a valid Ethereum address"),
+  ],
   async (req: Request, res: Response) => {
     try {
       const result = validationResult(req);
@@ -271,6 +279,7 @@ app.get(
         return;
       }
       const key = matchedData(req).key;
+      // const sender = matchedData(req).sender;
 
       const l1BatchNumber = await l2Provider.getL1BatchNumber();
       const batchNumber = l1BatchNumber - batchQueryOffset;
@@ -278,7 +287,7 @@ app.get(
       const proof = await l2Provider.getProof(
         clickNameServiceAddress,
         [key],
-        batchNumber,
+        batchNumber
       );
 
       const batchDetails = await l2Provider.getL1BatchDetails(batchNumber);
@@ -306,7 +315,7 @@ app.get(
 
       const data = AbiCoder.defaultAbiCoder().encode(
         [STORAGE_PROOF_TYPE],
-        [storageProof],
+        [storageProof]
       );
 
       res.status(200).send({
@@ -317,7 +326,7 @@ app.get(
         error instanceof Error ? error.message : String(error);
       res.status(500).send({ error: errorMessage });
     }
-  },
+  }
 );
 
 app.post(
