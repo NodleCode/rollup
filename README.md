@@ -179,3 +179,8 @@ Verification on Etherscan is best done via the Solidity Json Input method as it 
   3. Copy paste its value and **strip the `0x prefix** as Etherscan will throw an error otherwise
 
 Use all these artifacts on the contract verification page on Etherscan for your given contract (open your contract on Etherscan, select `Contract` and the link starting with `Verify`). When prompted, enter the compiler versions, the license (we use BSD-3 Clause Clear). Then on the next page, enter your normalized JSON input file, and the contract constructor inputs.
+
+## Aditional resources
+
+- [L1 contracts](https://docs.zksync.io/zksync-era/environment/l1-contracts)
+- [ZK stack addresses](https://docs.zksync.io/zk-stack/zk-chain-addresses)
