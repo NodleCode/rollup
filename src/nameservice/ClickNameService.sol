@@ -32,9 +32,12 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     mapping(uint256 => uint256) public expires;
     // token id to text records
     mapping(uint256 => mapping(string => string)) public textRecords;
+    // token id to text record keys
+    mapping(uint256 => string[]) private _textRecordKeys;
 
     event NameRegistered(string indexed name, address indexed owner, uint256 expires);
     event TextRecordSet(uint256 indexed tokenId, string indexed key, string value);
+    event NameDeleted(uint256 indexed tokenId);
 
     /// @notice Thrown when attempting to resolve a name that has expired
     /// @param oldOwner The address of the previous owner of the name
@@ -151,6 +154,14 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
      */
     function burn(uint256 tokenId) public override(ERC721Burnable) {
         delete expires[tokenId];
+
+        string[] storage keys = _textRecordKeys[tokenId];
+        for (uint256 i = 0; i < keys.length; i++) {
+            delete textRecords[tokenId][keys[i]];
+        }
+        delete _textRecordKeys[tokenId];
+
+        emit NameDeleted(tokenId);
         super.burn(tokenId);
     }
 
