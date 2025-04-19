@@ -1,3 +1,4 @@
+import { SepoliaStorageProofProvider } from "./../../lib/zksync-storage-proofs/packages/zksync-storage-proofs/src/index";
 import express, { Request, Response } from "express";
 import { query, body, matchedData, validationResult } from "express-validator";
 import cors from "cors";
@@ -10,6 +11,7 @@ import {
   isHexString,
   ZeroAddress,
   isAddress,
+  ethers,
 } from "ethers";
 import { StorageProof, ZyfiSponsoredRequest } from "./types";
 import {
@@ -22,6 +24,7 @@ import {
   toLengthPrefixedBytes,
   isParsableError,
   isOffchainLookupError,
+  safeUtf8Decode,
 } from "./helpers";
 import admin from "firebase-admin";
 import {
@@ -105,7 +108,7 @@ app.get(
         error instanceof Error ? error.message : String(error);
       res.status(500).send({ error: errorMessage });
     }
-  },
+  }
 );
 
 app.get(
@@ -128,7 +131,7 @@ app.get(
     } catch (error) {
       if (isParsableError(error)) {
         const decodedError = CLICK_NAME_SERVICE_INTERFACE.parseError(
-          error.data,
+          error.data
         );
         if (decodedError !== null && typeof decodedError.name === "string") {
           if (decodedError.name === "ERC721NonexistentToken") {
@@ -145,7 +148,7 @@ app.get(
         error instanceof Error ? error.message : String(error);
       res.status(500).send({ error: errorMessage });
     }
-  },
+  }
 );
 
 app.post(
@@ -177,7 +180,7 @@ app.post(
 
       const owner = await clickResolverContract.resolve(
         encodedFqdn,
-        CLICK_RESOLVER_ADDRESS_SELECTOR,
+        CLICK_RESOLVER_ADDRESS_SELECTOR
       );
 
       res.status(200).send({
@@ -205,7 +208,7 @@ app.post(
         error instanceof Error ? error.message : String(error);
       res.status(500).send({ error: errorMessage });
     }
-  },
+  }
 );
 
 app.post(
@@ -234,7 +237,7 @@ app.post(
       const data = matchedData(req);
       const rawOwner = await clickResolverContract.resolveWithProof(
         data.proof,
-        data.key,
+        data.key
       );
       const owner = getAddress("0x" + rawOwner.slice(26));
       if (owner === ZeroAddress) {
@@ -252,7 +255,7 @@ app.post(
         error instanceof Error ? error.message : String(error);
       res.status(500).send({ error: errorMessage });
     }
-  },
+  }
 );
 
 app.get(
@@ -284,24 +287,91 @@ app.get(
       const l1BatchNumber = await l2Provider.getL1BatchNumber();
       const batchNumber = l1BatchNumber - batchQueryOffset;
 
-      const proof = await l2Provider.getProof(
+      const lengthProof = await l2Provider.getProof(
         clickNameServiceAddress,
         [key],
         batchNumber
       );
 
-      const batchDetails = await l2Provider.getL1BatchDetails(batchNumber);
-      if (batchDetails.commitTxHash == undefined) {
-        throw new Error(`Batch ${batchNumber} is not committed`);
+      const lengthValue = parseInt(lengthProof.storageProof[0].value, 16);
+      const isLongString = lengthValue & 1; // last bit indicates if it's a long string
+
+      if (!isLongString) {
+
+        const batchInfo = await getBatchInfo(batchNumber);
+
+        const storageProof: StorageProof = {
+          account: lengthProof.address,
+          key: lengthProof.storageProof[0].key,
+          path: lengthProof.storageProof[0].proof,
+          value: lengthProof.storageProof[0].value,
+          index: lengthProof.storageProof[0].index,
+          metadata: {
+            batchNumber: batchInfo.batchNumber,
+            indexRepeatedStorageChanges: batchInfo.indexRepeatedStorageChanges,
+            numberOfLayer1Txs: batchInfo.numberOfLayer1Txs,
+            priorityOperationsHash: batchInfo.priorityOperationsHash,
+            l2LogsTreeRoot: batchInfo.l2LogsTreeRoot,
+            timestamp: batchInfo.timestamp,
+            commitment: batchInfo.commitment,
+          },
+        };
+
+        // decode the value
+        const value = lengthProof.storageProof[0].value;
+        const decodedValue = safeUtf8Decode(value);
+
+        const data = AbiCoder.defaultAbiCoder().encode(
+          [STORAGE_PROOF_TYPE, "string"],
+          [storageProof, decodedValue]
+        );
+        res.status(200).send({
+          data,
+        });
+        return;
+      }
+
+      // Long string: calculate real length and slots needed
+      const stringLength = (lengthValue - 1) / 2;
+      const slotsNeeded = Math.ceil(stringLength / 32);
+
+      // Generate slots for the data
+      const slots = [key];
+      const baseSlot = ethers.keccak256("0x" + key.replace(/^0x/, ""));
+      for (let i = 0; i < slotsNeeded; i++) {
+        const slotNum = ethers.getBigInt(baseSlot) + BigInt(i);
+        const paddedHex = "0x" + slotNum.toString(16).padStart(64, "0");
+        slots.push(paddedHex);
+      }
+
+      // Get proofs for all necessary slots
+      const proof = await l2Provider.getProof(
+        clickNameServiceAddress,
+        slots,
+        batchNumber
+      );
+
+      // Concatenate only the necessary bytes
+      let fullValue = "0x";
+      for (let i = 1; i < proof.storageProof.length && i <= slotsNeeded; i++) {
+        const value = proof.storageProof[i].value.slice(2);
+        if (i === slotsNeeded) {
+          // last slot
+          const remainingBytes = stringLength - 32 * (i - 1);
+          fullValue += value.slice(0, remainingBytes * 2);
+        } else {
+          fullValue += value;
+        }
       }
 
       const batchInfo = await getBatchInfo(batchNumber);
+
       const storageProof: StorageProof = {
         account: proof.address,
-        key: proof.storageProof[0].key,
-        path: proof.storageProof[0].proof,
-        value: proof.storageProof[0].value,
-        index: proof.storageProof[0].index,
+        key: lengthProof.storageProof[0].key,
+        path: lengthProof.storageProof[0].proof,
+        value: lengthProof.storageProof[0].value,
+        index: lengthProof.storageProof[0].index,
         metadata: {
           batchNumber: batchInfo.batchNumber,
           indexRepeatedStorageChanges: batchInfo.indexRepeatedStorageChanges,
@@ -313,11 +383,13 @@ app.get(
         },
       };
 
-      const data = AbiCoder.defaultAbiCoder().encode(
-        [STORAGE_PROOF_TYPE],
-        [storageProof]
-      );
+      // decode the value
+      const decodedValue = safeUtf8Decode(fullValue);
 
+      const data = AbiCoder.defaultAbiCoder().encode(
+        [STORAGE_PROOF_TYPE, "string"],
+        [storageProof, decodedValue]
+      );
       res.status(200).send({
         data,
       });
@@ -391,7 +463,7 @@ app.post(
       const sub = data.name.split(".")[0];
       if (sub.length < 5) {
         throw new Error(
-          "Current available subdomain names are limited to those with at least 5 characters",
+          "Current available subdomain names are limited to those with at least 5 characters"
         );
       }
       const owner = getAddress(data.owner);
@@ -400,7 +472,7 @@ app.post(
       if (zyfiSponsoredUrl) {
         const encodedRegister = CLICK_NAME_SERVICE_INTERFACE.encodeFunctionData(
           "register",
-          [owner, sub],
+          [owner, sub]
         );
         const zyfiRequest: ZyfiSponsoredRequest = {
           ...zyfiRequestTemplate,
@@ -439,7 +511,7 @@ app.post(
           : String(error);
       res.status(500).send({ error: message });
     }
-  },
+  }
 );
 
 app.post(
@@ -501,7 +573,6 @@ app.post(
     }
   }
 );
-
 
 // Start server
 app.listen(port, () => {

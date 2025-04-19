@@ -36,6 +36,8 @@ export const CLICK_RESOLVER_INTERFACE = new Interface([
   "function resolve(bytes calldata _name, bytes calldata _data) external view returns (bytes memory)",
   "function resolveWithProof(bytes memory _response, bytes memory _extraData) external view returns (bytes memory)",
   "error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData)",
+  "error UnsupportedSelector(bytes4 selector)",
+  "error InvalidStorageProof()",
 ]);
 
 export const CLICK_RESOLVER_ADDRESS_SELECTOR = "0x3b3b57de";

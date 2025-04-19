@@ -1,4 +1,4 @@
-import { toUtf8Bytes, ErrorDescription, AbiCoder } from "ethers";
+import { toUtf8Bytes, ErrorDescription, AbiCoder, ethers } from "ethers";
 import {
   CommitBatchInfo,
   StoredBatchInfo as BatchInfo,
@@ -216,3 +216,24 @@ function decodeCommitData(commitData: string) {
     commitBatchInfos: decoded[1],
   };
 }
+
+
+/**
+ * Decodes a hex string to a utf8 string, removing trailing zeros
+ * @param hexString
+ * @returns
+ */
+export function safeUtf8Decode(hexString: string): string {
+  let hex = hexString.startsWith("0x") ? hexString.slice(2) : hexString;
+
+  // Look for the first occurrence of '00' (null byte)
+  for (let i = 0; i < hex.length; i += 2) {
+    if (hex.slice(i, i + 2) === "00") {
+      hex = hex.slice(0, i);
+      break;
+    }
+  }
+
+  return ethers.toUtf8String("0x" + hex);
+}
+
