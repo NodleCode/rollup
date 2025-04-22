@@ -52,6 +52,7 @@
     "firebaseapp",
     "permissioned",
     "Tokendecimals",
-    "zyfi"
+    "zyfi",
+    "addrsSlot"
   ]
 }
