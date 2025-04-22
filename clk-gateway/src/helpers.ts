@@ -217,7 +217,6 @@ function decodeCommitData(commitData: string) {
   };
 }
 
-
 /**
  * Decodes a hex string to a utf8 string, removing trailing zeros
  * @param hexString
@@ -236,4 +235,3 @@ export function safeUtf8Decode(hexString: string): string {
 
   return ethers.toUtf8String("0x" + hex);
 }
-
