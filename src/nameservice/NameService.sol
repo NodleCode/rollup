@@ -5,17 +5,17 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721Burnable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-import {IClickNameService} from "./IClickNameService.sol";
+import {INameService} from "./INameService.sol";
 
 /**
- * @title ClickNameService based on ClaveNameService which is authored by https://getclave.io
+ * @title NameService based on ClaveNameService which is authored by https://getclave.io
  * @notice L2 name service contract that is built compatible to resolved as ENS subdomains by L2 resolver
  * @dev Names can only be registered by authorized accounts
  * @dev Addresses can only have one name at a time
  * @dev Subdomains are stored as ERC-721 assets, cannot be transferred
  * @dev If renewals are enabled, non-renewed names can be burnt after expiration timeline
  */
-contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
+contract NameService is INameService, ERC721Burnable, AccessControl {
     using Strings for uint256;
 
     struct NameOwner {
@@ -30,8 +30,14 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
 
     // token id to expires timestamp
     mapping(uint256 => uint256) public expires;
+    // token id to text records
+    mapping(uint256 => mapping(string => string)) public textRecords;
+    // token id to text record keys
+    mapping(uint256 => string[]) private _textRecordKeys;
 
     event NameRegistered(string indexed name, address indexed owner, uint256 expires);
+    event TextRecordSet(uint256 indexed tokenId, string indexed key, string value);
+    event NameDeleted(uint256 indexed tokenId);
 
     /// @notice Thrown when attempting to resolve a name that has expired
     /// @param oldOwner The address of the previous owner of the name
@@ -59,12 +65,19 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     /// @notice Thrown when an unauthorized address attempts to perform a permissioned action
     error NotAuthorized();
 
-    constructor(address admin, address registrar) ERC721("ClickNameService", "CLK") {
+    /**
+     * @notice Initialize the contract
+     * @param admin The address of the admin
+     * @param registrar The address of the registrar
+     * @param tokenName The name of the token
+     * @param tokenSymbol The symbol of the token
+     */
+    constructor(address admin, address registrar, string memory tokenName, string memory tokenSymbol) ERC721(tokenName, tokenSymbol) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(REGISTERER_ROLE, registrar);
     }
 
-    /// @inheritdoc IClickNameService
+    /// @inheritdoc INameService
     function resolve(string memory name) external view returns (address) {
         uint256 tokenId = uint256(keccak256(abi.encodePacked(name)));
         address owner = ownerOf(tokenId);
@@ -95,12 +108,12 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
         expiryDuration = duration;
     }
 
-    /// @inheritdoc IClickNameService
+    /// @inheritdoc INameService
     function register(address to, string memory name) public {
         registerWithExpiry(to, name, expiryDuration);
     }
 
-    /// @inheritdoc IClickNameService
+    /// @inheritdoc INameService
     function registerWithExpiry(address to, string memory name, uint256 duration) public {
         if (!_isAuthorized()) {
             revert NotAuthorized();
@@ -138,7 +151,7 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
      * @dev See {IERC165-supportsInterface}.
      */
     function supportsInterface(bytes4 interfaceId) public view override(ERC721, AccessControl) returns (bool) {
-        return type(IClickNameService).interfaceId == interfaceId || ERC721.supportsInterface(interfaceId)
+        return type(INameService).interfaceId == interfaceId || ERC721.supportsInterface(interfaceId)
             || AccessControl.supportsInterface(interfaceId);
     }
 
@@ -148,6 +161,14 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
      */
     function burn(uint256 tokenId) public override(ERC721Burnable) {
         delete expires[tokenId];
+
+        string[] storage keys = _textRecordKeys[tokenId];
+        for (uint256 i = 0; i < keys.length; i++) {
+            delete textRecords[tokenId][keys[i]];
+        }
+        delete _textRecordKeys[tokenId];
+
+        emit NameDeleted(tokenId);
         super.burn(tokenId);
     }
 
@@ -196,5 +217,37 @@ contract ClickNameService is IClickNameService, ERC721Burnable, AccessControl {
     // Check if caller is authorized for privileged operations
     function _isAuthorized() private view returns (bool) {
         return (hasRole(REGISTERER_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender));
+    }
+
+    /// @notice Set a text record for a name
+    /// @param name The name to set the text record for
+    /// @param key The key of the text record
+    /// @param value The value of the text record
+    function setTextRecord(string memory name, string memory key, string memory value) external {
+        uint256 tokenId = uint256(keccak256(abi.encodePacked(name)));
+
+        bool isOwner = _ownerOf(tokenId) == msg.sender;
+        bool isAdmin = hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
+        if (!isOwner && !isAdmin) {
+            revert NotAuthorized();
+        }
+        if (expires[tokenId] <= block.timestamp) {
+            revert NameExpired(_ownerOf(tokenId), expires[tokenId]);
+        }
+        textRecords[tokenId][key] = value;
+        emit TextRecordSet(tokenId, key, value);
+    }
+
+    /// @notice Get a text record for a name
+    /// @param name The name to get the text record for
+    /// @param key The key of the text record
+    /// @return The value of the text record
+    function getTextRecord(string memory name, string memory key) external view returns (string memory) {
+        uint256 tokenId = uint256(keccak256(abi.encodePacked(name)));
+        if (expires[tokenId] <= block.timestamp) {
+            revert NameExpired(_ownerOf(tokenId), expires[tokenId]);
+        }
+        return textRecords[tokenId][key];
     }
 }
