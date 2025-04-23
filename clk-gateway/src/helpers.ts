@@ -3,10 +3,10 @@ import { NextFunction, Request, Response } from "express";
 import {
   toUtf8Bytes,
   ErrorDescription,
-  verifyMessage,
   keccak256,
   AbiCoder,
   ethers,
+  verifyTypedData,
 } from "ethers";
 import {
   CommitBatchInfo,
@@ -250,25 +250,31 @@ export function safeUtf8Decode(hexString: string): string {
 /**
  * Validate an Ethereum signature
  * @param {Object} params - Signature validation parameters
- * @param {string} params.message - Original message that was signed
+ * @param {string} params.typedData - Typed data
  * @param {string} params.signature - Signature to validate
  * @param {string} params.expectedSigner - Expected signer's address
  * @returns {boolean} - Whether the signature is valid
  */
-export function validateSignature({ message, signature, expectedSigner }: {
-  message: string,
-  signature: string,
-  expectedSigner: string,
+export function validateSignature({
+  typedData,
+  signature,
+  expectedSigner,
+}: {
+  typedData: ReturnType<typeof buildTypedData>;
+  signature: string;
+  expectedSigner: string;
 }) {
   try {
-    const signerAddress = verifyMessage(
-      message, 
+    const signerAddress = verifyTypedData(
+      typedData.domain,
+      typedData.types,
+      typedData.value,
       signature
     );
 
     return signerAddress.toLowerCase() === expectedSigner.toLowerCase();
   } catch (error) {
-    console.error('Signature validation error:', error);
+    console.error("Signature validation error:", error);
     return false;
   }
 }
@@ -353,13 +359,20 @@ export const asyncHandler = (
   };
 };
 
-export function buildTypedData(data: {
-  name: string,
-}) {
-  const domain = domain;
-  
-  const message = data;
-  const messageHash = keccak256(toUtf8Bytes(JSON.stringify(message)));
+export function buildTypedData(value: { name: string; email: string }) {
+  const types = {
+    Transaction: [
+      { name: "name", type: "string" },
+      { name: "email", type: "string" },
+    ],
+  };
 
-  return messageHash;
+  /* Representative domain for the Name Service, this is a placeholder */
+  const domain = {
+    name: "Nodle Name Service",
+    version: "1",
+    chainId: Number(process.env.L2_CHAIN_ID!),
+  };
+
+  return { types, domain, value };
 }

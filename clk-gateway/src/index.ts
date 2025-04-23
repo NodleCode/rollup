@@ -29,6 +29,7 @@ import {
   getDecodedToken,
   checkUserByEmail,
   asyncHandler,
+  buildTypedData,
 } from "./helpers";
 import admin from "firebase-admin";
 import {
@@ -562,6 +563,7 @@ app.post(
         return isAddress(owner);
       })
       .withMessage("Owner must be a valid Ethereum address"),
+    body("email").isEmail().withMessage("Email must be a valid email address"),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const decodedToken = await getDecodedToken(req);
@@ -580,12 +582,13 @@ app.post(
     const sub = data.name.split(".")[0];
     const owner = getAddress(data.owner);
 
-    const messageHash = getMessageHash({
+    const typedData = buildTypedData({
       name: data.name,
+      email: data.email,
     });
 
     const isValidSignature = validateSignature({
-      message: messageHash,
+      typedData,
       signature: data.signature,
       expectedSigner: owner,
     });
@@ -681,14 +684,13 @@ app.post(
     }
     const data = matchedData(req);
 
-    /* Not require typed data */
-    const message = {
+    const typedData = buildTypedData({
       name: data.name,
-    };
-    const messageHash = getMessageHash(message);
+      email: data.email,
+    });
 
     res.status(200).send({
-      messageHash,
+      typedData,
     });
   })
 );
