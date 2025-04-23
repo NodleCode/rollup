@@ -6,6 +6,7 @@ import {NameService} from "../../src/nameservice/NameService.sol";
 
 contract NameServiceTest is Test {
     NameService public nameService;
+    address public unknown;
     address public admin;
     address public registrar;
     address public user;
@@ -14,6 +15,7 @@ contract NameServiceTest is Test {
     string public constant AVATAR_VALUE = "https://example.com/avatar.png";
 
     function setUp() public {
+        unknown = makeAddr("unknown");
         admin = makeAddr("admin");
         registrar = makeAddr("registrar");
         user = makeAddr("user");
@@ -34,13 +36,13 @@ contract NameServiceTest is Test {
         assertEq(value, AVATAR_VALUE);
     }
 
-    function test_OnlyOwnerCanSetTextRecord() public {
+    function test_OnlyOwnerOrAdminCanSetTextRecord() public {
         // Register a name
         vm.prank(registrar);
         nameService.register(user, TEST_NAME);
 
         // Try to set text record as non-owner
-        vm.prank(admin);
+        vm.prank(unknown);
         vm.expectRevert(NameService.NotAuthorized.selector);
         nameService.setTextRecord(TEST_NAME, AVATAR_KEY, AVATAR_VALUE);
     }
