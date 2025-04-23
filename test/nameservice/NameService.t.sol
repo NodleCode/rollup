@@ -2,10 +2,10 @@
 pragma solidity ^0.8.23;
 
 import {Test} from "forge-std/Test.sol";
-import {ClickNameService} from "../../src/nameservice/ClickNameService.sol";
+import {NameService} from "../../src/nameservice/NameService.sol";
 
-contract ClickNameServiceTest is Test {
-    ClickNameService public nameService;
+contract NameServiceTest is Test {
+    NameService public nameService;
     address public admin;
     address public registrar;
     address public user;
@@ -17,7 +17,7 @@ contract ClickNameServiceTest is Test {
         admin = makeAddr("admin");
         registrar = makeAddr("registrar");
         user = makeAddr("user");
-        nameService = new ClickNameService(admin, registrar);
+        nameService = new NameService(admin, registrar, "Name", "Symbol");
     }
 
     function test_RegisterAndSetTextRecord() public {
@@ -41,7 +41,7 @@ contract ClickNameServiceTest is Test {
 
         // Try to set text record as non-owner
         vm.prank(admin);
-        vm.expectRevert(ClickNameService.NotAuthorized.selector);
+        vm.expectRevert(NameService.NotAuthorized.selector);
         nameService.setTextRecord(TEST_NAME, AVATAR_KEY, AVATAR_VALUE);
     }
 
@@ -55,13 +55,13 @@ contract ClickNameServiceTest is Test {
 
         // Try to set text record
         vm.prank(user);
-        vm.expectRevert(abi.encodeWithSelector(ClickNameService.NameExpired.selector, user, block.timestamp - 1 days));
+        vm.expectRevert(abi.encodeWithSelector(NameService.NameExpired.selector, user, block.timestamp - 1 days));
         nameService.setTextRecord(TEST_NAME, AVATAR_KEY, AVATAR_VALUE);
     }
 
     function test_GetTextRecordForNonExistentName() public {
         // Try to get text record for non-existent name
-        vm.expectRevert(abi.encodeWithSelector(ClickNameService.NameExpired.selector, address(0), 0));
+        vm.expectRevert(abi.encodeWithSelector(NameService.NameExpired.selector, address(0), 0));
         nameService.getTextRecord("nonexistent", AVATAR_KEY);
     }
 
@@ -74,7 +74,7 @@ contract ClickNameServiceTest is Test {
         vm.warp(block.timestamp + 366 days);
 
         // Try to get text record
-        vm.expectRevert(abi.encodeWithSelector(ClickNameService.NameExpired.selector, user, block.timestamp - 1 days));
+        vm.expectRevert(abi.encodeWithSelector(NameService.NameExpired.selector, user, block.timestamp - 1 days));
         nameService.getTextRecord(TEST_NAME, AVATAR_KEY);
     }
 } 
