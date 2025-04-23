@@ -1,5 +1,4 @@
-import { SepoliaStorageProofProvider } from "./../../lib/zksync-storage-proofs/packages/zksync-storage-proofs/src/index";
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import { query, body, matchedData, validationResult } from "express-validator";
 import cors from "cors";
 import {
@@ -13,7 +12,7 @@ import {
   isAddress,
   ethers,
 } from "ethers";
-import { StorageProof, ZyfiSponsoredRequest } from "./types";
+import { HttpError, StorageProof, ZyfiSponsoredRequest } from "./types";
 import {
   CLICK_RESOLVER_INTERFACE,
   STORAGE_PROOF_TYPE,
@@ -25,6 +24,11 @@ import {
   isParsableError,
   isOffchainLookupError,
   safeUtf8Decode,
+  getMessageHash,
+  validateSignature,
+  getDecodedToken,
+  checkUserByEmail,
+  asyncHandler,
 } from "./helpers";
 import admin from "firebase-admin";
 import {
@@ -515,6 +519,181 @@ app.post(
 );
 
 app.post(
+  "/name/register-l2",
+  [
+    body("name")
+      .isLowercase()
+      .withMessage("Name must be a lowercase string")
+      .isFQDN()
+      .withMessage("Name must be a fully qualified domain name")
+      .custom((name) => {
+        const [sub, domain, tld] = name.split(".");
+        if (domain !== cnsDomain || tld !== cnsTld) {
+          return false;
+        }
+
+        const subHash = keccak256(toUtf8Bytes(sub));
+        if (reservedHashes.includes(subHash)) {
+          return false;
+        }
+
+        return true;
+      })
+      .withMessage("Invalid domain or tld or reserved subdomain")
+      .custom((name) => {
+        const [sub] = name.split(".");
+        if (sub.length < 5) {
+          return false;
+        }
+        return true;
+      })
+      .withMessage(
+        "Current available subdomain names are limited to those with at least 5 characters"
+      ),
+    body("signature")
+      .isString()
+      .custom((signature) => {
+        return isHexString(signature);
+      })
+      .withMessage("Signature must be a hex string"),
+    body("owner")
+      .isString()
+      .custom((owner) => {
+        return isAddress(owner);
+      })
+      .withMessage("Owner must be a valid Ethereum address"),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const decodedToken = await getDecodedToken(req);
+
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      throw new HttpError(
+        result
+          .array()
+          .map((error) => error.msg)
+          .join(", "),
+        400
+      );
+    }
+    const data = matchedData(req);
+    const sub = data.name.split(".")[0];
+    const owner = getAddress(data.owner);
+
+    const messageHash = getMessageHash({
+      name: data.name,
+    });
+
+    const isValidSignature = validateSignature({
+      message: messageHash,
+      signature: data.signature,
+      expectedSigner: owner,
+    });
+
+    if (!isValidSignature) {
+      throw new HttpError("Invalid signature", 403);
+    }
+
+    let response;
+    if (zyfiSponsoredUrl) {
+      const encodedRegister = CLICK_NAME_SERVICE_INTERFACE.encodeFunctionData(
+        "register",
+        [owner, sub]
+      );
+      const zyfiRequest: ZyfiSponsoredRequest = {
+        ...zyfiRequestTemplate,
+        txData: {
+          ...zyfiRequestTemplate.txData,
+          data: encodedRegister,
+        },
+      };
+      const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
+      console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
+
+      await admin.auth().revokeRefreshTokens(decodedToken.uid);
+
+      response = await l2Wallet.sendTransaction(zyfiResponse.txData);
+    } else {
+      await admin.auth().revokeRefreshTokens(decodedToken.uid);
+
+      response = await clickNameServiceContract.register(owner, sub);
+    }
+
+    const receipt = await response.wait();
+    if (receipt.status !== 1) {
+      throw new Error("Transaction failed");
+    }
+
+    await admin
+      .auth()
+      .setCustomUserClaims(decodedToken.uid, { subDomain: sub });
+    res.status(200).send({
+      txHash: receipt.hash,
+    });
+  })
+);
+
+app.post(
+  "/name/register/message",
+  [
+    body("name")
+      .isLowercase()
+      .withMessage("Name must be a lowercase string")
+      .isFQDN()
+      .withMessage("Name must be a fully qualified domain name")
+      .custom((name) => {
+        const [sub, domain, tld] = name.split(".");
+        if (domain !== cnsDomain || tld !== cnsTld) {
+          return false;
+        }
+
+        const subHash = keccak256(toUtf8Bytes(sub));
+        if (reservedHashes.includes(subHash)) {
+          return false;
+        }
+
+        return true;
+      })
+      .withMessage("Invalid domain or tld or reserved subdomain")
+      .custom((name) => {
+        const [sub] = name.split(".");
+        if (sub.length < 5) {
+          return false;
+        }
+        return true;
+      })
+      .withMessage(
+        "Current available subdomain names are limited to those with at least 5 characters"
+      ),
+    body("email").isEmail().withMessage("Email must be a valid email address"),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    await checkUserByEmail(req);
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      throw new HttpError(
+        result
+          .array()
+          .map((error) => error.msg)
+          .join(", "),
+        400
+      );
+    }
+    const data = matchedData(req);
+
+    /* Not require typed data */
+    const message = {
+      name: data.name,
+    };
+    const messageHash = getMessageHash(message);
+
+    res.status(200).send({
+      messageHash,
+    });
+  })
+);
+
+app.post(
   "/name/resolve",
   body("name")
     .isFQDN()
@@ -531,8 +710,13 @@ app.post(
     try {
       const result = validationResult(req);
       if (!result.isEmpty()) {
-        res.status(400).json(result.array());
-        return;
+        throw new HttpError(
+          result
+            .array()
+            .map((error) => error.msg)
+            .join(", "),
+          400
+        );
       }
       const name = matchedData(req).name;
 
@@ -567,12 +751,22 @@ app.post(
           return;
         }
       }
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      res.status(500).send({ error: errorMessage });
+      
+      throw error;
     }
   }
 );
+
+
+app.use((err: Error, req: Request, res: Response, next: NextFunction): void => {
+  if (err instanceof HttpError) {
+    res.status(err.statusCode).json({ error: err.message });
+    return;
+  }
+
+  const message = err instanceof Error ? err.message : String(err);
+  res.status(500).json({ error: message });
+});
 
 // Start server
 app.listen(port, () => {
