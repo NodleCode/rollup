@@ -463,7 +463,7 @@ app.post(
         return;
       }
       const data = matchedData(req);
-      const sub = data.name.split(".")[0];
+      const [name,sub] = data.name.split(".");
       if (sub.length < 5) {
         throw new Error(
           "Current available subdomain names are limited to those with at least 5 characters"
@@ -473,7 +473,7 @@ app.post(
 
       let response;
       if (zyfiSponsoredUrl) {
-        const zyfiRequest = buildZyfiRegisterRequest(owner, sub);
+        const zyfiRequest = buildZyfiRegisterRequest(owner, name, sub);
         const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
         console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
 
@@ -567,7 +567,7 @@ app.post(
       );
     }
     const data = matchedData(req);
-    const sub = data.name.split(".")[0];
+    const [name,sub] = data.name.split(".");
     const owner = getAddress(data.owner);
 
     const typedData = buildTypedData({
@@ -587,7 +587,7 @@ app.post(
 
     let response;
     if (zyfiSponsoredUrl) {
-      const zyfiRequest = buildZyfiRegisterRequest(owner, sub);
+      const zyfiRequest = buildZyfiRegisterRequest(owner, name, sub);
       const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
       console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
 

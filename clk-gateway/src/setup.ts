@@ -6,6 +6,9 @@ import {
   CLICK_RESOLVER_INTERFACE,
 } from "./interfaces";
 import { ZyfiSponsoredRequest } from "./types";
+import admin from "firebase-admin";
+import { initializeApp } from "firebase-admin/app";
+
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -16,6 +19,13 @@ const l2Provider = new L2Provider(process.env.L2_RPC_URL!);
 const l2Wallet = new Wallet(privateKey, l2Provider);
 const l1Provider = new L1Provider(process.env.L1_RPC_URL!);
 const diamondAddress = process.env.DIAMOND_PROXY_ADDR!;
+
+const serviceAccountKey = process.env.SERVICE_ACCOUNT_KEY!;
+const serviceAccount = JSON.parse(serviceAccountKey);
+initializeApp({
+  credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+});
+
 const diamondContract = new Contract(
   diamondAddress,
   ZKSYNC_DIAMOND_INTERFACE,
@@ -33,7 +43,7 @@ const clickNameServiceContract = new Contract(
   NAME_SERVICE_INTERFACE,
   l2Wallet,
 );
-const nodleNameServiceAddress = process.env.NODLE_CNS_ADDR!;
+const nodleNameServiceAddress = process.env.NODLE_NS_ADDR!;
 const nodleNameServiceContract = new Contract(
   nodleNameServiceAddress,
   NAME_SERVICE_INTERFACE,
@@ -69,10 +79,10 @@ const nameServiceContracts = {
   [nodleNSDomain]: nodleNameServiceAddress,
 };
 
-const buildZyfiRegisterRequest = (owner: string, subdomain: keyof typeof nameServiceContracts) => {
+const buildZyfiRegisterRequest = (owner: string, name: string, subdomain: keyof typeof nameServiceContracts) => {
   const encodedRegister = NAME_SERVICE_INTERFACE.encodeFunctionData(
     "register",
-    [owner, subdomain]
+    [owner, name]
   );
 
   const zyfiRequest: ZyfiSponsoredRequest = {
