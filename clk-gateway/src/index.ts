@@ -12,12 +12,12 @@ import {
   isAddress,
   ethers,
 } from "ethers";
-import { HttpError, StorageProof, ZyfiSponsoredRequest } from "./types";
+import { HttpError, StorageProof } from "./types";
 import {
   CLICK_RESOLVER_INTERFACE,
   STORAGE_PROOF_TYPE,
   CLICK_RESOLVER_ADDRESS_SELECTOR,
-  CLICK_NAME_SERVICE_INTERFACE,
+  NAME_SERVICE_INTERFACE,
 } from "./interfaces";
 import {
   toLengthPrefixedBytes,
@@ -40,11 +40,13 @@ import {
   clickNameServiceAddress,
   clickNameServiceContract,
   batchQueryOffset,
-  cnsDomain,
-  cnsTld,
-  zyfiRequestTemplate,
+  clickNSDomain,
+  nodleNSDomain,
+  parentTLD,
   zyfiSponsoredUrl,
   l1Provider,
+  nodleNameServiceContract,
+  buildZyfiRegisterRequest,
 } from "./setup";
 import { getBatchInfo, fetchZyfiSponsored } from "./helpers";
 import reservedHashes from "./reservedHashes";
@@ -135,7 +137,7 @@ app.get(
       });
     } catch (error) {
       if (isParsableError(error)) {
-        const decodedError = CLICK_NAME_SERVICE_INTERFACE.parseError(
+        const decodedError = NAME_SERVICE_INTERFACE.parseError(
           error.data
         );
         if (decodedError !== null && typeof decodedError.name === "string") {
@@ -163,7 +165,7 @@ app.post(
     .withMessage("Name must be a fully qualified domain name")
     .custom((name) => {
       const [sub, domain, tld] = name.split(".");
-      if (domain !== cnsDomain || tld !== cnsTld) {
+      if ([`${clickNSDomain}.${parentTLD}`, `${nodleNSDomain}.${parentTLD}`].includes(`${domain}.${tld}`)) {
         return false;
       }
       return true;
@@ -287,16 +289,12 @@ app.get(
         return;
       }
       const key = matchedData(req).key;
-      // const sender = matchedData(req).sender;
+      const sender = matchedData(req).sender;
 
       const l1BatchNumber = await l2Provider.getL1BatchNumber();
       const batchNumber = l1BatchNumber - batchQueryOffset;
 
-      const lengthProof = await l2Provider.getProof(
-        clickNameServiceAddress,
-        [key],
-        batchNumber
-      );
+      const lengthProof = await l2Provider.getProof(sender, [key], batchNumber);
 
       const lengthValue = parseInt(lengthProof.storageProof[0].value, 16);
       const isLongString = lengthValue & 1; // last bit indicates if it's a long string
@@ -416,7 +414,7 @@ app.post(
       .withMessage("Name must be a fully qualified domain name")
       .custom((name) => {
         const [sub, domain, tld] = name.split(".");
-        if (domain !== cnsDomain || tld !== cnsTld) {
+        if (![`${clickNSDomain}.${parentTLD}`, `${nodleNSDomain}.${parentTLD}`].includes(`${domain}.${tld}`)) {
           return false;
         }
 
@@ -475,17 +473,7 @@ app.post(
 
       let response;
       if (zyfiSponsoredUrl) {
-        const encodedRegister = CLICK_NAME_SERVICE_INTERFACE.encodeFunctionData(
-          "register",
-          [owner, sub]
-        );
-        const zyfiRequest: ZyfiSponsoredRequest = {
-          ...zyfiRequestTemplate,
-          txData: {
-            ...zyfiRequestTemplate.txData,
-            data: encodedRegister,
-          },
-        };
+        const zyfiRequest = buildZyfiRegisterRequest(owner, sub);
         const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
         console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
 
@@ -520,7 +508,7 @@ app.post(
 );
 
 app.post(
-  "/name/register-l2",
+  "/name/register",
   [
     body("name")
       .isLowercase()
@@ -529,7 +517,7 @@ app.post(
       .withMessage("Name must be a fully qualified domain name")
       .custom((name) => {
         const [sub, domain, tld] = name.split(".");
-        if (domain !== cnsDomain || tld !== cnsTld) {
+        if (![`${clickNSDomain}.${parentTLD}`, `${nodleNSDomain}.${parentTLD}`].includes(`${domain}.${tld}`)) {
           return false;
         }
 
@@ -599,17 +587,7 @@ app.post(
 
     let response;
     if (zyfiSponsoredUrl) {
-      const encodedRegister = CLICK_NAME_SERVICE_INTERFACE.encodeFunctionData(
-        "register",
-        [owner, sub]
-      );
-      const zyfiRequest: ZyfiSponsoredRequest = {
-        ...zyfiRequestTemplate,
-        txData: {
-          ...zyfiRequestTemplate.txData,
-          data: encodedRegister,
-        },
-      };
+      const zyfiRequest = buildZyfiRegisterRequest(owner, sub);
       const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
       console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
 
@@ -646,7 +624,7 @@ app.post(
       .withMessage("Name must be a fully qualified domain name")
       .custom((name) => {
         const [sub, domain, tld] = name.split(".");
-        if (domain !== cnsDomain || tld !== cnsTld) {
+        if (![`${clickNSDomain}.${parentTLD}`, `${nodleNSDomain}.${parentTLD}`].includes(`${domain}.${tld}`)) {
           return false;
         }
 
@@ -702,7 +680,7 @@ app.post(
     .withMessage("Name must be a fully qualified domain name")
     .custom((name) => {
       const [sub, domain, tld] = name.split(".");
-      if (tld === undefined && domain !== cnsTld) {
+      if (tld === undefined && ![`${clickNSDomain}.${parentTLD}`, `${nodleNSDomain}.${parentTLD}`].includes(`${domain}.${tld}`)) {
         return false;
       }
       return true;
@@ -726,8 +704,10 @@ app.post(
       const [sub, domain] = parts;
 
       let owner;
-      if (domain === cnsDomain) {
+      if (domain === clickNSDomain) {
         owner = await clickNameServiceContract.resolve(sub);
+      } else if (domain === nodleNSDomain) {
+        owner = await nodleNameServiceContract.resolve(sub);
       } else {
         owner = await l1Provider.resolveName(name);
       }
