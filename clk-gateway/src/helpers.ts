@@ -359,14 +359,16 @@ export const asyncHandler = (
   };
 };
 
-export function buildTypedData(value: { name: string; email: string }) {
-  const types = {
-    Transaction: [
-      { name: "name", type: "string" },
-      { name: "email", type: "string" },
-    ],
-  };
-
+const defaultTypes = {
+  Transaction: [
+    { name: "name", type: "string" },
+    { name: "email", type: "string" },
+  ],
+};
+export function buildTypedData(
+  value: { name: string; email: string },
+  types: Record<string, { name: string; type: string }[]> = defaultTypes
+) {
   /* Representative domain for the Name Service, this is a placeholder */
   const domain = {
     name: "Nodle Name Service",

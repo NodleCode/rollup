@@ -47,6 +47,7 @@ export const NAME_SERVICE_INTERFACE = new Interface([
   "function expires(uint256 key) public view returns (uint256)",
   "function register(address to, string memory name)",
   "function resolve(string memory name) external view returns (address)",
+  "function setTextRecord(string memory name, string memory key, string memory value) external",
   "error NameExpired(address oldOwner, uint256 expiredAt)",
   "error ERC721NonexistentToken(uint256 tokenId)",
 ]);

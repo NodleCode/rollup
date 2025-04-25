@@ -29,25 +29,25 @@ initializeApp({
 const diamondContract = new Contract(
   diamondAddress,
   ZKSYNC_DIAMOND_INTERFACE,
-  l1Provider,
+  l1Provider
 );
 const clickResolverAddress = process.env.CLICK_RESOLVER_ADDR!;
 const clickResolverContract = new Contract(
   clickResolverAddress,
   CLICK_RESOLVER_INTERFACE,
-  l1Provider,
+  l1Provider
 );
 const clickNameServiceAddress = process.env.CLICK_NS_ADDR!;
 const clickNameServiceContract = new Contract(
   clickNameServiceAddress,
   NAME_SERVICE_INTERFACE,
-  l2Wallet,
+  l2Wallet
 );
 const nodleNameServiceAddress = process.env.NODLE_NS_ADDR!;
 const nodleNameServiceContract = new Contract(
   nodleNameServiceAddress,
   NAME_SERVICE_INTERFACE,
-  l2Wallet,
+  l2Wallet
 );
 const batchQueryOffset = Number(process.env.SAFE_BATCH_QUERY_OFFSET!);
 
@@ -79,7 +79,11 @@ const nameServiceContracts = {
   [nodleNSDomain]: nodleNameServiceAddress,
 };
 
-const buildZyfiRegisterRequest = (owner: string, name: string, subdomain: keyof typeof nameServiceContracts) => {
+const buildZyfiRegisterRequest = (
+  owner: string,
+  name: string,
+  subdomain: keyof typeof nameServiceContracts
+) => {
   const encodedRegister = NAME_SERVICE_INTERFACE.encodeFunctionData(
     "register",
     [owner, name]
@@ -90,6 +94,29 @@ const buildZyfiRegisterRequest = (owner: string, name: string, subdomain: keyof 
     txData: {
       ...zyfiRequestTemplate.txData,
       data: encodedRegister,
+      to: nameServiceContracts[subdomain],
+    },
+  };
+
+  return zyfiRequest;
+};
+
+const buildZyfiSetTextRecordRequest = (
+  name: string,
+  subdomain: keyof typeof nameServiceContracts,
+  key: string,
+  value: string
+) => {
+  const encodedSetTextRecord = NAME_SERVICE_INTERFACE.encodeFunctionData(
+    "setTextRecord",
+    [name, key, value]
+  );
+
+  const zyfiRequest: ZyfiSponsoredRequest = {
+    ...zyfiRequestTemplate,
+    txData: {
+      ...zyfiRequestTemplate.txData,
+      data: encodedSetTextRecord,
       to: nameServiceContracts[subdomain],
     },
   };
@@ -116,4 +143,5 @@ export {
   zyfiSponsoredUrl,
   zyfiRequestTemplate,
   buildZyfiRegisterRequest,
+  buildZyfiSetTextRecordRequest,
 };
