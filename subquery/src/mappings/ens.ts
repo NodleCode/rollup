@@ -1,16 +1,33 @@
 import {
   RegisterTransaction,
+  TextRecordSetLog,
   TransferLog,
 } from "./../types/abi-interfaces/ENSAbi";
 import { fetchAccount, fetchTransaction } from "../utils/utils";
-import { ENS } from "../types";
+import { ENS, TextRecord } from "../types";
 import { fetchContract } from "../utils/erc721";
 import { ethers } from "ethers";
+
+if (!process.env.NODLE_NS_CONTRACT || !process.env.CLICK_NS_CONTRACT) {
+  throw new Error("NODLE_NS_CONTRACT or CLICK_NS_CONTRACT is not set");
+}
 
 function generateId(name: string) {
   const hash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(name));
   const uint256 = ethers.BigNumber.from(hash).toString();
   return uint256;
+}
+
+function getDomain(contract: string) {
+  const nodlContract = String(process.env.NODLE_NS_CONTRACT);
+  const clkContract = String(process.env.CLICK_NS_CONTRACT);
+
+  const map = {
+    [nodlContract]: "nodl.eth",
+    [clkContract]: "clk.eth",
+  };
+
+  return map[contract];
 }
 
 export async function handleCallRegistry(tx: RegisterTransaction) {
@@ -35,31 +52,32 @@ export async function handleCallRegistry(tx: RegisterTransaction) {
     );
   });
 
+  const domain = getDomain(tx.to!);
   const timestamp = BigInt(tx.blockTimestamp) * BigInt(1000);
   const ownerAccount = await fetchAccount(owner, timestamp);
   const caller = await fetchAccount(String(tx.from).toLowerCase(), timestamp);
-  const txIndex = tx.transactionIndex;
 
   const event = tx.logs[idx];
 
-  const [rawOwner, _, expires] = event.args!;
+  const [,, expires] = event.args!;
 
   const expiresAt = expires ? expires.toBigInt() * BigInt(1000) : BigInt(0);
-  // rawName is the encoded name
-  const rawName = JSON.stringify(rawOwner);
 
-  const clkName = `${name}.clk.eth`;
   const registeredEns = new ENS(
-    txHash.concat("/").concat(txIndex.toString()),
+    generateId(name),
     ownerAccount.id,
     timestamp,
-    clkName,
+    name,
+    `${name}.${domain}`,
+    tx.to!,
+    domain,
     caller.id
   );
 
   registeredEns.expiresAt = expiresAt;
-  registeredEns.rawName = rawName;
-  ownerAccount.name = clkName;
+  registeredEns.rawName = '';
+  ownerAccount.name = name;
+  ownerAccount.primaryName = `${name}.${domain}`;
 
   return Promise.all([registeredEns.save(), ownerAccount.save()]);
 }
@@ -86,6 +104,28 @@ const getENSPaginated = async (
 
   return ens;
 };
+
+export async function handleENSTextRecord(event: TextRecordSetLog) {
+  const [tokenId, key, value] = event.args!;
+  const ens = await ENS.get(tokenId.toString());
+  if (ens) {
+    const textRecordId = `${ens.id}-${key}`;
+    let textRecord = await TextRecord.get(textRecordId);
+
+    if (!textRecord) {
+      textRecord = new TextRecord(
+        textRecordId,
+        ens.id,
+        key,
+        value
+      );
+    }
+
+    textRecord.value = value;
+
+    return textRecord.save();
+  }
+}
 
 export async function handleENSTransfer(event: TransferLog) {
   const [from, to, tokenId] = event.args!;

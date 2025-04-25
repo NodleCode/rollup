@@ -179,6 +179,13 @@ const project: EthereumProject = {
               topics: ["Transfer(address,address,uint256)"],
             },
           },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleENSTextRecord",
+            filter: {
+              topics: ["TextRecordSet(uint256,string,string)"],
+            },
+          },
         ],
       },
     },
