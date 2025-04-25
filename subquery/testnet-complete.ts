@@ -331,7 +331,49 @@ const project: EthereumProject = {
       startBlock: 4261159, // This is the block that the contract was deployed on
       options: {
         abi: "ENS",
-        address: "0xAD4360c87275C7De1229A8c3C0567f921c9302b1",
+        address: "0xC84A95a3A012F25CdAa9922066427768Ef2186e5",
+      },
+      assets: new Map([
+        [
+          "ENS",
+          {
+            file: "./abis/ENS.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Call,
+            handler: "handleCallRegistry",
+            filter: {
+              function: "register(address,string)",
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleENSTransfer",
+            filter: {
+              topics: ["Transfer(address,address,uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleENSTextRecord",
+            filter: {
+              topics: ["TextRecordSet(uint256,string,string)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 4261159, // This is the block that the contract was deployed on
+      options: {
+        abi: "ENS",
+        address: "0x4a430a543Ab201307a5D33f5bab4056B5844DcA0",
       },
       assets: new Map([
         [
