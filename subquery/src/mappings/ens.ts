@@ -8,7 +8,12 @@ import { ENS, TextRecord } from "../types";
 import { fetchContract } from "../utils/erc721";
 import { ethers } from "ethers";
 
-if (!process.env.CLICK_NS_ADDR || !process.env.NODLE_NS_ADDR) {
+const CLICK_NS_ADDR =
+  process.env.CLICK_NS_ADDR || "0xC84A95a3A012F25CdAa9922066427768Ef2186e5";
+const NODLE_NS_ADDR =
+  process.env.NODLE_NS_ADDR || "0x4a430a543Ab201307a5D33f5bab4056B5844DcA0";
+
+if (!CLICK_NS_ADDR || !NODLE_NS_ADDR) {
   throw new Error("CLICK_NS_ADDR or NODLE_NS_ADDR is not set");
 }
 
@@ -19,8 +24,8 @@ function generateId(name: string) {
 }
 
 function getDomain(contract: string) {
-  const nodlContract = String(process.env.CLICK_NS_ADDR);
-  const clkContract = String(process.env.NODLE_NS_ADDR);
+  const nodlContract = String(CLICK_NS_ADDR);
+  const clkContract = String(NODLE_NS_ADDR);
 
   const map = {
     [nodlContract]: "nodl.eth",
