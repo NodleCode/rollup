@@ -42,7 +42,6 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
       console.log("Deployed NameService at", CONTRACT_ADDRESS);
 
       // Verify contract
-      // Verify contract
       console.log("Waiting for 5 confirmations...");
     await contract.deploymentTransaction()?.wait(5);
   }
@@ -52,7 +51,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
     try {
       await hre.run("verify:verify", {
         address: CONTRACT_ADDRESS,
-        contract: "src/nameservice/NameService.sol:NameService", // Ajusta la ruta según tu estructura
+        contract: "src/nameservice/NameService.sol:NameService",
         constructorArguments: constructorArgs,
       });
       console.log("Contract verified successfully!");
