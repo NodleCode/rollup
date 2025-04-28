@@ -286,9 +286,9 @@ app.get(
       const l1BatchNumber = await l2Provider.getL1BatchNumber();
       const batchNumber = l1BatchNumber - batchQueryOffset;
 
-      const lengthProof = await l2Provider.getProof(sender, [key], batchNumber);
+      const initialProof = await l2Provider.getProof(sender, [key], batchNumber);
 
-      const lengthValue = parseInt(lengthProof.storageProof[0].value, 16);
+      const lengthValue = parseInt(initialProof.storageProof[0].value, 16);
       const isLongString = lengthValue & 1; // last bit indicates if it's a long string
 
       if (!isLongString) {
@@ -296,11 +296,11 @@ app.get(
         const batchInfo = await getBatchInfo(batchNumber);
 
         const storageProof: StorageProof = {
-          account: lengthProof.address,
-          key: lengthProof.storageProof[0].key,
-          path: lengthProof.storageProof[0].proof,
-          value: lengthProof.storageProof[0].value,
-          index: lengthProof.storageProof[0].index,
+          account: initialProof.address,
+          key: initialProof.storageProof[0].key,
+          path: initialProof.storageProof[0].proof,
+          value: initialProof.storageProof[0].value,
+          index: initialProof.storageProof[0].index,
           metadata: {
             batchNumber: batchInfo.batchNumber,
             indexRepeatedStorageChanges: batchInfo.indexRepeatedStorageChanges,
@@ -313,7 +313,7 @@ app.get(
         };
 
         // decode the value
-        const value = lengthProof.storageProof[0].value;
+        const value = initialProof.storageProof[0].value;
         const decodedValue = safeUtf8Decode(value);
 
         const data = AbiCoder.defaultAbiCoder().encode(
@@ -363,10 +363,10 @@ app.get(
 
       const storageProof: StorageProof = {
         account: proof.address,
-        key: lengthProof.storageProof[0].key,
-        path: lengthProof.storageProof[0].proof,
-        value: lengthProof.storageProof[0].value,
-        index: lengthProof.storageProof[0].index,
+        key: initialProof.storageProof[0].key,
+        path: initialProof.storageProof[0].proof,
+        value: initialProof.storageProof[0].value,
+        index: initialProof.storageProof[0].index,
         metadata: {
           batchNumber: batchInfo.batchNumber,
           indexRepeatedStorageChanges: batchInfo.indexRepeatedStorageChanges,
