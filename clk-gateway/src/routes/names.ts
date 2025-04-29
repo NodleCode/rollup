@@ -195,6 +195,12 @@ router.post(
         return isAddress(owner);
       })
       .withMessage("Owner must be a valid Ethereum address"),
+    body("signature")
+      .isString()
+      .custom((signature) => {
+        return isHexString(signature);
+      })
+      .withMessage("Signature must be a hex string"),
   ],
   asyncHandler(async (req, res) => {
     const result = validationResult(req);
