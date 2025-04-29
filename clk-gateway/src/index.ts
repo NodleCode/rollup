@@ -284,12 +284,11 @@ app.get(
       }
       const codedData = matchedData(req).key;
       const [key, domain] = AbiCoder.defaultAbiCoder().decode(
-        ["bytes32", "string"],
+        codedData.length === 66 ? ["bytes32"] : ["bytes32", "string"],
         codedData
       );
-      const nameServiceAddress = getNameServiceAddressByDomain(domain);
+      const nameServiceAddress = getNameServiceAddressByDomain(domain || "clk");
       // const sender = matchedData(req).sender;
-
       const l1BatchNumber = await l2Provider.getL1BatchNumber();
       const batchNumber = l1BatchNumber - batchQueryOffset;
 
@@ -343,16 +342,15 @@ app.get(
 
       // Generate slots for the data
       const slots = [key];
-      const baseSlot = ethers.keccak256("0x" + key.replace(/^0x/, ""));
+      const baseSlot = ethers.keccak256(key);
       for (let i = 0; i < slotsNeeded; i++) {
         const slotNum = ethers.getBigInt(baseSlot) + BigInt(i);
         const paddedHex = "0x" + slotNum.toString(16).padStart(64, "0");
         slots.push(paddedHex);
       }
-
       // Get proofs for all necessary slots
       const proof = await l2Provider.getProof(
-        clickNameServiceAddress,
+        nameServiceAddress,
         slots,
         batchNumber
       );
@@ -373,7 +371,7 @@ app.get(
       const batchInfo = await getBatchInfo(batchNumber);
 
       const storageProof: StorageProof = {
-        account: proof.address,
+        account: initialProof.address,
         key: initialProof.storageProof[0].key,
         path: initialProof.storageProof[0].proof,
         value: initialProof.storageProof[0].value,
