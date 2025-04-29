@@ -24,6 +24,7 @@ import {
   isParsableError,
   isOffchainLookupError,
   safeUtf8Decode,
+  getNameServiceAddressByDomain,
 } from "./helpers";
 import admin from "firebase-admin";
 import {
@@ -264,9 +265,9 @@ app.get(
     query("key")
       .isString()
       .custom((key) => {
-        return isHexString(key, 32);
+        return isHexString(key);
       })
-      .withMessage("Key must be a 32 bytes hex string"),
+      .withMessage("Key must be hex string"),
     query("sender")
       .isString()
       .custom((sender) => {
@@ -281,13 +282,22 @@ app.get(
         res.status(400).json(result.array());
         return;
       }
-      const key = matchedData(req).key;
-      const sender = matchedData(req).sender;
+      const codedData = matchedData(req).key;
+      const [key, domain] = AbiCoder.defaultAbiCoder().decode(
+        ["bytes32", "string"],
+        codedData
+      );
+      const nameServiceAddress = getNameServiceAddressByDomain(domain);
+      // const sender = matchedData(req).sender;
 
       const l1BatchNumber = await l2Provider.getL1BatchNumber();
       const batchNumber = l1BatchNumber - batchQueryOffset;
 
-      const initialProof = await l2Provider.getProof(sender, [key], batchNumber);
+      const initialProof = await l2Provider.getProof(
+        nameServiceAddress,
+        [key],
+        batchNumber
+      );
 
       const lengthValue = parseInt(initialProof.storageProof[0].value, 16);
       const isLongString = lengthValue & 1; // last bit indicates if it's a long string

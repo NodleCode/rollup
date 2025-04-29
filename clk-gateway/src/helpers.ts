@@ -20,6 +20,7 @@ import {
   diamondContract,
   l1Provider,
   l2Provider,
+  nameServiceAddresses,
 } from "./setup";
 import { COMMIT_BATCH_INFO_ABI_STRING, STORED_BATCH_INFO_ABI_STRING, ZKSYNC_DIAMOND_INTERFACE } from "./interfaces";
 import { zyfiSponsoredUrl } from "./setup";
@@ -377,4 +378,13 @@ export function buildTypedData(
   };
 
   return { types, domain, value };
+}
+
+/**
+ * Get the address of the Name Service for a given domain
+ * @param {string} domain - The domain to get the Name Service address for
+ * @returns {string} - The address of the Name Service
+*/
+export function getNameServiceAddressByDomain(domain: "nodl" | "clk") {
+  return nameServiceAddresses[domain];
 }

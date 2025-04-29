@@ -128,7 +128,7 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
     ///
     /// @param _data The ABI encoded data for the underlying resolution function (Eg, addr(bytes32), text(bytes32,string), etc).
     function resolve(bytes calldata _name, bytes calldata _data) external view returns (bytes memory) {
-        (string memory sub,,) = _parseDnsDomain(_name);
+        (string memory sub,string memory dom,) = _parseDnsDomain(_name);
 
         if (bytes(sub).length == 0) {
             return abi.encodePacked(domainOwner);
@@ -152,7 +152,7 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
             revert UnsupportedSelector(functionSelector);
         }
 
-        bytes memory callData = abi.encode(storageKey);
+        bytes memory callData = abi.encode(storageKey, dom);
         bytes memory extraData = abi.encode(storageKey, functionSelector);
 
         string[] memory urls = new string[](1);

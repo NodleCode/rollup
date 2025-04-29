@@ -124,6 +124,11 @@ const buildZyfiSetTextRecordRequest = (
   return zyfiRequest;
 };
 
+const nameServiceAddresses = {
+  [clickNSDomain]: clickNameServiceAddress,
+  [nodleNSDomain]: nodleNameServiceAddress,
+};
+
 export {
   port,
   l1Provider,
@@ -144,4 +149,5 @@ export {
   zyfiRequestTemplate,
   buildZyfiRegisterRequest,
   buildZyfiSetTextRecordRequest,
+  nameServiceAddresses,
 };
