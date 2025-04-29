@@ -7,11 +7,24 @@ import { fetchAccount, fetchTransaction } from "../utils/utils";
 import { ENS, TextRecord } from "../types";
 import { fetchContract } from "../utils/erc721";
 import { ethers } from "ethers";
+import { keccak256, toUtf8Bytes } from "ethers/lib/utils";
 
 const CLICK_NS_ADDR =
   process.env.CLICK_NS_ADDR || "0xC84A95a3A012F25CdAa9922066427768Ef2186e5";
 const NODLE_NS_ADDR =
   process.env.NODLE_NS_ADDR || "0x4a430a543Ab201307a5D33f5bab4056B5844DcA0";
+const whitelistKeys = {
+  [keccak256(toUtf8Bytes("avatar"))]: "avatar",
+  [keccak256(toUtf8Bytes("description"))]: "description",
+  [keccak256(toUtf8Bytes("name"))]: "name",
+};
+
+const getKey = (key: any) => {
+  if (typeof key != "string") {
+    return whitelistKeys[key.hash];
+  }
+  return key;
+};
 
 if (!CLICK_NS_ADDR || !NODLE_NS_ADDR) {
   throw new Error("CLICK_NS_ADDR or NODLE_NS_ADDR is not set");
@@ -24,8 +37,8 @@ function generateId(name: string) {
 }
 
 function getDomain(contract: string) {
-  const nodlContract = String(CLICK_NS_ADDR);
-  const clkContract = String(NODLE_NS_ADDR);
+  const clkContract = String(CLICK_NS_ADDR);
+  const nodlContract = String(NODLE_NS_ADDR);
 
   const map = {
     [nodlContract]: "nodl.eth",
@@ -64,7 +77,7 @@ export async function handleCallRegistry(tx: RegisterTransaction) {
 
   const event = tx.logs[idx];
 
-  const [,, expires] = event.args!;
+  const [, , expires] = event.args!;
 
   const expiresAt = expires ? expires.toBigInt() * BigInt(1000) : BigInt(0);
 
@@ -80,7 +93,7 @@ export async function handleCallRegistry(tx: RegisterTransaction) {
   );
 
   registeredEns.expiresAt = expiresAt;
-  registeredEns.rawName = '';
+  registeredEns.rawName = "";
   ownerAccount.name = name;
   ownerAccount.primaryName = `${name}.${domain}`;
 
@@ -111,25 +124,23 @@ const getENSPaginated = async (
 };
 
 export async function handleENSTextRecord(event: TextRecordSetLog) {
-  const [tokenId, key, value] = event.args!;
+  const [tokenId, keyIndexed, value] = event.args!;
+  const key = getKey(keyIndexed);
   const ens = await ENS.get(tokenId.toString());
-  if (ens) {
+  if (ens && key) {
     const textRecordId = `${ens.id}-${key}`;
     let textRecord = await TextRecord.get(textRecordId);
 
     if (!textRecord) {
-      textRecord = new TextRecord(
-        textRecordId,
-        ens.id,
-        key,
-        value
-      );
+      textRecord = new TextRecord(textRecordId, ens.id, key, value);
     }
 
     textRecord.value = value;
 
     return textRecord.save();
   }
+
+  return null;
 }
 
 export async function handleENSTransfer(event: TransferLog) {

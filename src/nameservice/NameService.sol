@@ -36,7 +36,7 @@ contract NameService is INameService, ERC721Burnable, AccessControl {
     mapping(uint256 => string[]) private _textRecordKeys;
 
     event NameRegistered(string indexed name, address indexed owner, uint256 expires);
-    event TextRecordSet(uint256 indexed tokenId, string indexed key, string value);
+    event TextRecordSet(uint256 indexed tokenId, string key, string value);
     event NameDeleted(uint256 indexed tokenId);
 
     /// @notice Thrown when attempting to resolve a name that has expired
