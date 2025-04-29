@@ -42,6 +42,7 @@ import {
 } from "./setup";
 import { getBatchInfo, fetchZyfiSponsored } from "./helpers";
 import reservedHashes from "./reservedHashes";
+import namesRouter from "./routes/names";
 
 const app = express();
 app.use(express.json());
@@ -498,6 +499,8 @@ app.post(
     }
   }
 );
+
+app.use('/name', namesRouter);
 
 app.use((err: Error, req: Request, res: Response, next: NextFunction): void => {
   if (err instanceof HttpError) {
