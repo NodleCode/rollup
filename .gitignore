@@ -19,6 +19,7 @@ docs/
 
 # Dotenv file
 .env
+sa.json
 
 # Subquery files
 subquery/dist/

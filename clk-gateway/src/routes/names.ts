@@ -1,0 +1,422 @@
+import { Router } from "express";
+import { body, matchedData, validationResult } from "express-validator";
+import { isAddress, isHexString, getAddress } from "ethers";
+import { HttpError } from "../types";
+import {
+  clickNameServiceContract,
+  nodleNameServiceContract,
+  l1Provider,
+  clickNSDomain,
+  nodleNSDomain,
+  parentTLD,
+  zyfiSponsoredUrl,
+  l2Wallet,
+  buildZyfiRegisterRequest,
+  buildZyfiSetTextRecordRequest,
+} from "../setup";
+import {
+  buildTypedData,
+  validateSignature,
+  getDecodedToken,
+  checkUserByEmail,
+  asyncHandler,
+  fetchZyfiSponsored,
+  isParsableError,
+  isOffchainLookupError,
+} from "../helpers";
+import admin from "firebase-admin";
+import { keccak256, toUtf8Bytes } from "ethers";
+import reservedHashes from "../reservedHashes";
+import { CLICK_RESOLVER_INTERFACE } from "../interfaces";
+
+const router = Router();
+
+// POST /name/register
+router.post(
+  "/register",
+  [
+    body("name")
+      .isLowercase()
+      .withMessage("Name must be a lowercase string")
+      .isFQDN()
+      .withMessage("Name must be a fully qualified domain name")
+      .custom((name) => {
+        const [sub, domain, tld] = name.split(".");
+        if (
+          ![
+            `${clickNSDomain}.${parentTLD}`,
+            `${nodleNSDomain}.${parentTLD}`,
+          ].includes(`${domain}.${tld}`)
+        ) {
+          return false;
+        }
+
+        const subHash = keccak256(toUtf8Bytes(sub));
+        if (reservedHashes.includes(subHash)) {
+          return false;
+        }
+
+        return true;
+      })
+      .withMessage("Invalid domain or tld or reserved subdomain")
+      .custom((name) => {
+        const [sub] = name.split(".");
+        if (sub.length < 5) {
+          return false;
+        }
+        return true;
+      })
+      .withMessage(
+        "Current available subdomain names are limited to those with at least 5 characters"
+      ),
+    body("signature")
+      .isString()
+      .custom((signature) => {
+        return isHexString(signature);
+      })
+      .withMessage("Signature must be a hex string"),
+    body("owner")
+      .isString()
+      .custom((owner) => {
+        return isAddress(owner);
+      })
+      .withMessage("Owner must be a valid Ethereum address"),
+    body("email").isEmail().withMessage("Email must be a valid email address"),
+  ],
+  asyncHandler(async (req, res) => {
+    const decodedToken = await getDecodedToken(req);
+
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      throw new HttpError(
+        result
+          .array()
+          .map((error) => error.msg)
+          .join(", "),
+        400
+      );
+    }
+    const data = matchedData(req);
+    const [name, sub] = data.name.split(".");
+    const owner = getAddress(data.owner);
+
+    const typedData = buildTypedData({
+      name: data.name,
+      email: data.email,
+    });
+
+    const isValidSignature = validateSignature({
+      typedData,
+      signature: data.signature,
+      expectedSigner: owner,
+    });
+
+    if (!isValidSignature) {
+      throw new HttpError("Invalid signature", 403);
+    }
+
+    let response;
+    if (zyfiSponsoredUrl) {
+      const zyfiRequest = buildZyfiRegisterRequest(owner, name, sub);
+      const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
+      console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
+
+      await admin.auth().revokeRefreshTokens(decodedToken.uid);
+
+      response = await l2Wallet.sendTransaction(zyfiResponse.txData);
+    } else {
+      await admin.auth().revokeRefreshTokens(decodedToken.uid);
+
+      response = await clickNameServiceContract.register(owner, sub);
+    }
+
+    const receipt = await response.wait();
+    if (receipt.status !== 1) {
+      throw new Error("Transaction failed");
+    }
+
+    await admin
+      .auth()
+      .setCustomUserClaims(decodedToken.uid, { subDomain: sub });
+    res.status(200).send({
+      txHash: receipt.hash,
+    });
+  })
+);
+
+// POST /name/set-text-record
+router.post(
+  "/set-text-record",
+  [
+    body("name")
+      .isLowercase()
+      .withMessage("Name must be a lowercase string")
+      .isFQDN()
+      .withMessage("Name must be a fully qualified domain name")
+      .custom((name) => {
+        const [sub, domain, tld] = name.split(".");
+        if (
+          ![
+            `${clickNSDomain}.${parentTLD}`,
+            `${nodleNSDomain}.${parentTLD}`,
+          ].includes(`${domain}.${tld}`)
+        ) {
+          return false;
+        }
+
+        const subHash = keccak256(toUtf8Bytes(sub));
+        if (reservedHashes.includes(subHash)) {
+          return false;
+        }
+
+        return true;
+      })
+      .withMessage("Invalid domain or tld or reserved subdomain")
+      .custom((name) => {
+        const [sub] = name.split(".");
+        if (sub.length < 5) {
+          return false;
+        }
+        return true;
+      })
+      .withMessage(
+        "Current available subdomain names are limited to those with at least 5 characters"
+      ),
+    body("key")
+      .isString()
+      .isLength({ min: 4, max: 20 })
+      .withMessage("Key must be between 4 and 20 characters"),
+    body("value")
+      .isString()
+      .isLength({ min: 1, max: 256 })
+      .withMessage("Value must be between 1 and 256 characters"),
+    body("owner")
+      .custom((owner) => {
+        return isAddress(owner);
+      })
+      .withMessage("Owner must be a valid Ethereum address"),
+    body("signature")
+      .isString()
+      .custom((signature) => {
+        return isHexString(signature);
+      })
+      .withMessage("Signature must be a hex string"),
+  ],
+  asyncHandler(async (req, res) => {
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      throw new HttpError(
+        result
+          .array()
+          .map((error) => error.msg)
+          .join(", "),
+        400
+      );
+    }
+    const data = matchedData(req);
+    const [name, sub] = data.name.split(".");
+    const owner = getAddress(data.owner);
+
+    const typedData = buildTypedData(
+      {
+        name: data.name,
+        email: data.email,
+      },
+      {
+        TextRecord: [
+          {
+            name: "name",
+            type: "string",
+          },
+          {
+            name: "key",
+            type: "string",
+          },
+          {
+            name: "value",
+            type: "string",
+          },
+        ],
+      }
+    );
+
+    const isValidSignature = validateSignature({
+      typedData,
+      signature: data.signature,
+      expectedSigner: owner,
+    });
+
+    if (!isValidSignature) {
+      throw new HttpError("Invalid signature", 403);
+    }
+
+    let response;
+    if (zyfiSponsoredUrl) {
+      const zyfiRequest = buildZyfiSetTextRecordRequest(
+        name,
+        sub,
+        data.key,
+        data.value
+      );
+      const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
+      console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
+
+      response = await l2Wallet.sendTransaction(zyfiResponse.txData);
+    } else {
+      response = await clickNameServiceContract.setTextRecord(
+        name,
+        data.key,
+        data.value
+      );
+    }
+
+    const receipt = await response.wait();
+    if (receipt.status !== 1) {
+      throw new Error("Transaction failed");
+    }
+
+    res.status(200).send({
+      txHash: receipt.hash,
+    });
+  })
+);
+
+// POST /name/register/message
+router.post(
+  "/register/message",
+  [
+    body("name")
+      .isLowercase()
+      .withMessage("Name must be a lowercase string")
+      .isFQDN()
+      .withMessage("Name must be a fully qualified domain name")
+      .custom((name) => {
+        const [sub, domain, tld] = name.split(".");
+        if (
+          ![
+            `${clickNSDomain}.${parentTLD}`,
+            `${nodleNSDomain}.${parentTLD}`,
+          ].includes(`${domain}.${tld}`)
+        ) {
+          return false;
+        }
+
+        const subHash = keccak256(toUtf8Bytes(sub));
+        if (reservedHashes.includes(subHash)) {
+          return false;
+        }
+
+        return true;
+      })
+      .withMessage("Invalid domain or tld or reserved subdomain")
+      .custom((name) => {
+        const [sub] = name.split(".");
+        if (sub.length < 5) {
+          return false;
+        }
+        return true;
+      })
+      .withMessage(
+        "Current available subdomain names are limited to those with at least 5 characters"
+      ),
+    body("email").isEmail().withMessage("Email must be a valid email address"),
+  ],
+  asyncHandler(async (req, res) => {
+    await checkUserByEmail(req);
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      throw new HttpError(
+        result
+          .array()
+          .map((error) => error.msg)
+          .join(", "),
+        400
+      );
+    }
+    const data = matchedData(req);
+
+    const typedData = buildTypedData({
+      name: data.name,
+      email: data.email,
+    });
+
+    res.status(200).send({
+      typedData,
+    });
+  })
+);
+
+// POST /name/resolve
+router.post(
+  "/resolve",
+  body("name")
+    .isFQDN()
+    .withMessage("Name must be a fully qualified domain name")
+    .custom((name) => {
+      const [sub, domain, tld] = name.split(".");
+      if (
+        tld === undefined &&
+        ![
+          `${clickNSDomain}.${parentTLD}`,
+          `${nodleNSDomain}.${parentTLD}`,
+        ].includes(`${domain}.${tld}`)
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .withMessage("Invalid domain or tld"),
+  async (req, res) => {
+    try {
+      const result = validationResult(req);
+      if (!result.isEmpty()) {
+        throw new HttpError(
+          result
+            .array()
+            .map((error) => error.msg)
+            .join(", "),
+          400
+        );
+      }
+      const name = matchedData(req).name;
+
+      const parts = name.split(".");
+      const [sub, domain] = parts;
+
+      let owner;
+      if (domain === clickNSDomain) {
+        owner = await clickNameServiceContract.resolve(sub);
+      } else if (domain === nodleNSDomain) {
+        owner = await nodleNameServiceContract.resolve(sub);
+      } else {
+        owner = await l1Provider.resolveName(name);
+      }
+
+      res.status(200).send({
+        owner,
+      });
+    } catch (error) {
+      if (isParsableError(error)) {
+        const decodedError = CLICK_RESOLVER_INTERFACE.parseError(error.data);
+        if (isOffchainLookupError(decodedError)) {
+          const { sender, urls, callData, callbackFunction, extraData } =
+            decodedError.args;
+          res.status(200).send({
+            OffchainLookup: {
+              sender,
+              urls,
+              callData,
+              callbackFunction,
+              extraData,
+            },
+          });
+          return;
+        }
+      }
+
+      throw error;
+    }
+  }
+);
+
+export default router;

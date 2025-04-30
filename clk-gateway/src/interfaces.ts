@@ -36,15 +36,18 @@ export const CLICK_RESOLVER_INTERFACE = new Interface([
   "function resolve(bytes calldata _name, bytes calldata _data) external view returns (bytes memory)",
   "function resolveWithProof(bytes memory _response, bytes memory _extraData) external view returns (bytes memory)",
   "error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData)",
+  "error UnsupportedSelector(bytes4 selector)",
+  "error InvalidStorageProof()",
 ]);
 
 export const CLICK_RESOLVER_ADDRESS_SELECTOR = "0x3b3b57de";
 
 // L2 Contract
-export const CLICK_NAME_SERVICE_INTERFACE = new Interface([
+export const NAME_SERVICE_INTERFACE = new Interface([
   "function expires(uint256 key) public view returns (uint256)",
   "function register(address to, string memory name)",
   "function resolve(string memory name) external view returns (address)",
+  "function setTextRecord(string memory name, string memory key, string memory value) external",
   "error NameExpired(address oldOwner, uint256 expiredAt)",
   "error ERC721NonexistentToken(uint256 tokenId)",
 ]);

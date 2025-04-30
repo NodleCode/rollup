@@ -29,6 +29,7 @@ type Account @entity {
   timestamp: BigInt
   balance: BigInt @index
   name: String
+  primaryName: String
   ENS: ENS @derivedFrom(field: "owner") @index
 }
 
@@ -370,7 +371,17 @@ type ENS @entity {
   expiresAt: BigInt
   registeredAt: BigInt!
   name: String! @index
+  completeName: String! @index
+  textRecords: [TextRecord!]! @derivedFrom(field: "ens")
+  contract: String! @index
+  domain: String! @index
   rawName: String
   caller: Account!
 }
 
+type TextRecord @entity {
+  id: ID!
+  ens: ENS!
+  key: String!
+  value: String!
+}

@@ -32,6 +32,10 @@ services:
       DB_DATABASE: postgres
       DB_HOST: postgres
       DB_PORT: 5432
+      ZKSYNC_MAINNET_RPC: ${ZKSYNC_MAINNET_RPC}
+      ZKSYNC_TESTNET_RPC: ${ZKSYNC_TESTNET_RPC}
+      CLICK_NS_ADDR: ${CLICK_NS_ADDR}
+      NODLE_NS_ADDR: ${NODLE_NS_ADDR}
     volumes:
       - ./:/app
     command:
