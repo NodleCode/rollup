@@ -16,7 +16,7 @@ import { HttpError, StorageProof } from "./types";
 import {
   CLICK_RESOLVER_INTERFACE,
   STORAGE_PROOF_TYPE,
-  CLICK_RESOLVER_ADDRESS_SELECTOR,
+  RESOLVER_ADDRESS_SELECTOR,
   NAME_SERVICE_INTERFACE,
 } from "./interfaces";
 import {
@@ -31,8 +31,7 @@ import {
   port,
   l2Provider,
   l2Wallet,
-  clickResolverContract,
-  clickNameServiceAddress,
+  resolverContract,
   clickNameServiceContract,
   batchQueryOffset,
   clickNSDomain,
@@ -179,9 +178,9 @@ app.post(
 
       const encodedFqdn = toLengthPrefixedBytes(sub, domain, tld);
 
-      const owner = await clickResolverContract.resolve(
+      const owner = await resolverContract.resolve(
         encodedFqdn,
-        CLICK_RESOLVER_ADDRESS_SELECTOR
+        RESOLVER_ADDRESS_SELECTOR
       );
 
       res.status(200).send({
@@ -236,7 +235,7 @@ app.post(
         return;
       }
       const data = matchedData(req);
-      const rawOwner = await clickResolverContract.resolveWithProof(
+      const rawOwner = await resolverContract.resolveWithProof(
         data.proof,
         data.key
       );

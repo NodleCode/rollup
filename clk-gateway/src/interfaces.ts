@@ -40,7 +40,7 @@ export const CLICK_RESOLVER_INTERFACE = new Interface([
   "error InvalidStorageProof()",
 ]);
 
-export const CLICK_RESOLVER_ADDRESS_SELECTOR = "0x3b3b57de";
+export const RESOLVER_ADDRESS_SELECTOR = "0x3b3b57de";
 
 // L2 Contract
 export const NAME_SERVICE_INTERFACE = new Interface([
