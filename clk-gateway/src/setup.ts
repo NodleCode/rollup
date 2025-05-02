@@ -79,6 +79,11 @@ const nameServiceAddresses = {
   [nodleNSDomain]: nodleNameServiceAddress,
 };
 
+const nameServiceContracts = {
+  [clickNSDomain]: clickNameServiceContract,
+  [nodleNSDomain]: nodleNameServiceContract,
+};
+
 const buildZyfiRegisterRequest = (
   owner: string,
   name: string,
@@ -145,4 +150,5 @@ export {
   buildZyfiRegisterRequest,
   buildZyfiSetTextRecordRequest,
   nameServiceAddresses,
+  nameServiceContracts,
 };

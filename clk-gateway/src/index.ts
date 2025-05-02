@@ -39,6 +39,7 @@ import {
   parentTLD,
   zyfiSponsoredUrl,
   buildZyfiRegisterRequest,
+  nameServiceContracts,
 } from "./setup";
 import { getBatchInfo, fetchZyfiSponsored } from "./helpers";
 import reservedHashes from "./reservedHashes";
@@ -85,6 +86,7 @@ app.get("/health", async (req: Request, res: Response) => {
 app.get(
   "/expiryL2",
   query("name").isString().withMessage("Name is required and must be a string"),
+  query("subdomain").default("clk").isString(),
   async (req: Request, res: Response) => {
     try {
       const result = validationResult(req);
@@ -93,11 +95,12 @@ app.get(
         return;
       }
       const name = matchedData(req).name;
-
+      const subdomain = matchedData(req).subdomain;
+      const nameServiceContract = nameServiceContracts[subdomain];
       const nameHash = keccak256(toUtf8Bytes(name));
       const key = toBigInt(nameHash);
 
-      const epoch = await clickNameServiceContract.expires(nameHash);
+      const epoch = await nameServiceContract.expires(nameHash);
       const expires = new Date(Number(epoch) * 1000).toISOString();
 
       res.status(200).send({
@@ -114,6 +117,7 @@ app.get(
 app.get(
   "/resolveL2",
   query("name").isString().withMessage("Name is required and must be a string"),
+  query("subdomain").default("clk").isString(),
   async (req: Request, res: Response) => {
     try {
       const result = validationResult(req);
@@ -122,17 +126,17 @@ app.get(
         return;
       }
       const name = matchedData(req).name;
-
-      const owner = await clickNameServiceContract.resolve(name);
+      const subdomain = matchedData(req).subdomain;
+      console.log(`Subdomain: ${subdomain}`);
+      const nameServiceContract = nameServiceContracts[subdomain];
+      const owner = await nameServiceContract.resolve(name);
 
       res.status(200).send({
         owner,
       });
     } catch (error) {
       if (isParsableError(error)) {
-        const decodedError = NAME_SERVICE_INTERFACE.parseError(
-          error.data
-        );
+        const decodedError = NAME_SERVICE_INTERFACE.parseError(error.data);
         if (decodedError !== null && typeof decodedError.name === "string") {
           if (decodedError.name === "ERC721NonexistentToken") {
             res.status(404).send({ error: "Name not found" });
