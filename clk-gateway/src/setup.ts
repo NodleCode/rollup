@@ -31,8 +31,8 @@ const diamondContract = new Contract(
   ZKSYNC_DIAMOND_INTERFACE,
   l1Provider
 );
-const clickResolverAddress = process.env.CLICK_RESOLVER_ADDR!;
-const clickResolverContract = new Contract(
+const clickResolverAddress = process.env.RESOLVER_ADDR!;
+const resolverContract = new Contract(
   clickResolverAddress,
   CLICK_RESOLVER_INTERFACE,
   l1Provider
@@ -74,15 +74,20 @@ const zyfiRequestTemplate: ZyfiSponsoredRequest = {
   replayLimit: 5,
 };
 
-const nameServiceContracts = {
+const nameServiceAddresses = {
   [clickNSDomain]: clickNameServiceAddress,
   [nodleNSDomain]: nodleNameServiceAddress,
+};
+
+const nameServiceContracts = {
+  [clickNSDomain]: clickNameServiceContract,
+  [nodleNSDomain]: nodleNameServiceContract,
 };
 
 const buildZyfiRegisterRequest = (
   owner: string,
   name: string,
-  subdomain: keyof typeof nameServiceContracts
+  subdomain: keyof typeof nameServiceAddresses
 ) => {
   const encodedRegister = NAME_SERVICE_INTERFACE.encodeFunctionData(
     "register",
@@ -94,7 +99,7 @@ const buildZyfiRegisterRequest = (
     txData: {
       ...zyfiRequestTemplate.txData,
       data: encodedRegister,
-      to: nameServiceContracts[subdomain],
+      to: nameServiceAddresses[subdomain],
     },
   };
 
@@ -103,7 +108,7 @@ const buildZyfiRegisterRequest = (
 
 const buildZyfiSetTextRecordRequest = (
   name: string,
-  subdomain: keyof typeof nameServiceContracts,
+  subdomain: keyof typeof nameServiceAddresses,
   key: string,
   value: string
 ) => {
@@ -117,16 +122,11 @@ const buildZyfiSetTextRecordRequest = (
     txData: {
       ...zyfiRequestTemplate.txData,
       data: encodedSetTextRecord,
-      to: nameServiceContracts[subdomain],
+      to: nameServiceAddresses[subdomain],
     },
   };
 
   return zyfiRequest;
-};
-
-const nameServiceAddresses = {
-  [clickNSDomain]: clickNameServiceAddress,
-  [nodleNSDomain]: nodleNameServiceAddress,
 };
 
 export {
@@ -136,7 +136,7 @@ export {
   l2Wallet,
   diamondAddress,
   diamondContract,
-  clickResolverContract,
+  resolverContract,
   clickNameServiceAddress,
   clickNameServiceContract,
   nodleNameServiceAddress,
@@ -150,4 +150,5 @@ export {
   buildZyfiRegisterRequest,
   buildZyfiSetTextRecordRequest,
   nameServiceAddresses,
+  nameServiceContracts,
 };
