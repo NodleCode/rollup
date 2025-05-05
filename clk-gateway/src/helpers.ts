@@ -367,7 +367,7 @@ const defaultTypes = {
   ],
 };
 export function buildTypedData(
-  value: { name: string; email: string },
+  value: Record<string, string>,
   types: Record<string, { name: string; type: string }[]> = defaultTypes
 ) {
   /* Representative domain for the Name Service, this is a placeholder */

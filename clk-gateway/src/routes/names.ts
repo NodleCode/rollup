@@ -219,8 +219,9 @@ router.post(
 
     const typedData = buildTypedData(
       {
-        name: data.name,
-        email: data.email,
+        name,
+        key: data.key,
+        value: data.value,
       },
       {
         TextRecord: [
@@ -277,6 +278,93 @@ router.post(
 
     res.status(200).send({
       txHash: receipt.hash,
+    });
+  })
+);
+
+// POST /name/set-text-record/message
+router.post(
+  "/set-text-record/message",
+  [
+    body("name")
+      .isLowercase()
+      .withMessage("Name must be a lowercase string")
+      .isFQDN()
+      .withMessage("Name must be a fully qualified domain name")
+      .custom((name) => {
+        const [sub, domain, tld] = name.split(".");
+        if (
+          ![
+            `${clickNSDomain}.${parentTLD}`,
+            `${nodleNSDomain}.${parentTLD}`,
+          ].includes(`${domain}.${tld}`)
+        ) {
+          return false;
+        }
+
+        const subHash = keccak256(toUtf8Bytes(sub));
+        if (reservedHashes.includes(subHash)) {
+          return false;
+        }
+
+        return true;
+      })
+      .withMessage("Invalid domain or tld or reserved subdomain")
+      .custom((name) => {
+        const [sub] = name.split(".");
+        if (sub.length < 5) {
+          return false;
+        }
+        return true;
+      })
+      .withMessage(
+        "Current available subdomain names are limited to those with at least 5 characters"
+      ),
+    body("key")
+      .isString()
+      .isLength({ min: 4, max: 20 })
+      .withMessage("Key must be between 4 and 20 characters"),
+    body("value")
+      .isString()
+      .isLength({ min: 1, max: 256 })
+      .withMessage("Value must be between 1 and 256 characters"),
+    body("owner")
+  ],
+  asyncHandler(async (req, res) => {
+    const result = validationResult(req);
+    if (!result.isEmpty()) {
+      throw new HttpError(
+        result
+          .array()
+          .map((error) => error.msg)
+          .join(", "),
+        400
+      );
+    }
+    const data = matchedData(req);
+
+    const typedData = buildTypedData({
+      name: data.name,
+      key: data.key,
+      value: data.value,
+    }, {
+      TextRecord: [
+        {
+          name: "name",
+          type: "string",
+        },
+        {
+          name: "key",
+          type: "string",
+        },
+        {
+          name: "value",
+          type: "string",
+        },
+      ],
+    });
+    res.status(200).send({
+      typedData,
     });
   })
 );
