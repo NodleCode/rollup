@@ -274,7 +274,7 @@ export function validateSignature({
     const signerAddress = verifyTypedData(
       typedData.domain,
       typedData.types,
-      typedData.value,
+      typedData.message,
       signature
     );
 
@@ -372,7 +372,7 @@ const defaultTypes = {
   ],
 };
 export function buildTypedData(
-  value: Record<string, string>,
+  message: Record<string, string>,
   types: Record<string, { name: string; type: string }[]> = defaultTypes
 ) {
   /* Representative domain for the Name Service, this is a placeholder */
@@ -392,7 +392,7 @@ export function buildTypedData(
 
   const primaryType = Object.keys(types)?.[0] || "Transaction";
 
-  return { types: { ...domainTypes, ...types }, domain, value, primaryType };
+  return { types: { ...domainTypes, ...types }, domain, message, primaryType };
 }
 
 /**
