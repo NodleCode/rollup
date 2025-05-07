@@ -266,6 +266,11 @@ export function validateSignature({
   expectedSigner: string;
 }) {
   try {
+    if (typedData.types.EIP712Domain) {
+      // @ts-ignore
+      delete typedData.types.EIP712Domain;
+    }
+
     const signerAddress = verifyTypedData(
       typedData.domain,
       typedData.types,
