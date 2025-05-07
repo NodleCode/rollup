@@ -81,10 +81,10 @@ router.post(
         return isAddress(owner);
       })
       .withMessage("Owner must be a valid Ethereum address"),
-    body("email").isEmail().withMessage("Email must be a valid email address"),
+    body("email").isEmail().withMessage("Email must be a valid email address").optional().default(""),
   ],
   asyncHandler(async (req, res) => {
-    const decodedToken = await getDecodedToken(req);
+    // const decodedToken = await getDecodedToken(req);
 
     const result = validationResult(req);
     if (!result.isEmpty()) {
@@ -121,11 +121,11 @@ router.post(
       const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
       console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
 
-      await admin.auth().revokeRefreshTokens(decodedToken.uid);
+      // await admin.auth().revokeRefreshTokens(decodedToken.uid);
 
       response = await l2Wallet.sendTransaction(zyfiResponse.txData);
     } else {
-      await admin.auth().revokeRefreshTokens(decodedToken.uid);
+      // await admin.auth().revokeRefreshTokens(decodedToken.uid);
 
       response = await clickNameServiceContract.register(owner, sub);
     }
@@ -135,9 +135,9 @@ router.post(
       throw new Error("Transaction failed");
     }
 
-    await admin
+    /* await admin
       .auth()
-      .setCustomUserClaims(decodedToken.uid, { subDomain: sub });
+      .setCustomUserClaims(decodedToken.uid, { subDomain: sub }); */
     res.status(200).send({
       txHash: receipt.hash,
       name: `${name}.${sub}.${tld}`,
@@ -410,10 +410,10 @@ router.post(
       .withMessage(
         "Current available subdomain names are limited to those with at least 5 characters"
       ),
-    body("email").isEmail().withMessage("Email must be a valid email address"),
+    body("email").isEmail().withMessage("Email must be a valid email address").optional().default(""),
   ],
   asyncHandler(async (req, res) => {
-    await checkUserByEmail(req);
+    // await checkUserByEmail(req);
     const result = validationResult(req);
     if (!result.isEmpty()) {
       throw new HttpError(
