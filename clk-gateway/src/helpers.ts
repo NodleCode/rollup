@@ -377,7 +377,17 @@ export function buildTypedData(
     chainId: Number(process.env.L2_CHAIN_ID!),
   };
 
-  return { types, domain, value };
+  const domainTypes = {
+    EIP712Domain: [
+      { name: "name", type: "string" },
+      { name: "version", type: "string" },
+      { name: "chainId", type: "uint256" },
+    ],
+  };
+
+  const primaryType = Object.keys(types)?.[0] || "Transaction";
+
+  return { types: { ...domainTypes, ...types }, domain, value, primaryType };
 }
 
 /**
