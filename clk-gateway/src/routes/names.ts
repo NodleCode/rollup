@@ -97,12 +97,12 @@ router.post(
       );
     }
     const data = matchedData(req);
-    const [name, sub] = data.name.split(".");
+    const [name, sub, tld] = data.name.split(".");
     const owner = getAddress(data.owner);
 
     const typedData = buildTypedData({
       name: data.name,
-      email: data.email,
+      email: data.email || "example@not-valid.com",
     });
 
     const isValidSignature = validateSignature({
@@ -140,6 +140,7 @@ router.post(
       .setCustomUserClaims(decodedToken.uid, { subDomain: sub });
     res.status(200).send({
       txHash: receipt.hash,
+      name: `${name}.${sub}.${tld}`,
     });
   })
 );
@@ -278,6 +279,8 @@ router.post(
 
     res.status(200).send({
       txHash: receipt.hash,
+      key: data.key,
+      value: data.value,
     });
   })
 );
@@ -425,7 +428,7 @@ router.post(
 
     const typedData = buildTypedData({
       name: data.name,
-      email: data.email,
+      email: data.email || "example@not-valid.com",
     });
 
     res.status(200).send({
