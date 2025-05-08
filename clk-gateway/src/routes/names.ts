@@ -218,7 +218,7 @@ router.post(
 
     const typedData = buildTypedData(
       {
-        name,
+        name: data.name,
         key: data.key,
         value: data.value,
       },
