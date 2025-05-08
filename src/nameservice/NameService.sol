@@ -228,8 +228,9 @@ contract NameService is INameService, ERC721Burnable, AccessControl {
 
         bool isOwner = _ownerOf(tokenId) == msg.sender;
         bool isAdmin = hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        bool isRegistrar = hasRole(REGISTERER_ROLE, msg.sender);
 
-        if (!isOwner && !isAdmin) {
+        if (!isOwner && !isAdmin && !isRegistrar) {
             revert NotAuthorized();
         }
         if (expires[tokenId] <= block.timestamp) {
