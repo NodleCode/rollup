@@ -17,8 +17,6 @@ import {
 import {
   buildTypedData,
   validateSignature,
-  getDecodedToken,
-  checkUserByEmail,
   asyncHandler,
   fetchZyfiSponsored,
   isParsableError,
@@ -220,7 +218,7 @@ router.post(
 
     const typedData = buildTypedData(
       {
-        name,
+        name: data.name,
         key: data.key,
         value: data.value,
       },
@@ -366,9 +364,7 @@ router.post(
         },
       ],
     });
-    res.status(200).send({
-      typedData,
-    });
+    res.status(200).send(typedData);
   })
 );
 
@@ -431,9 +427,7 @@ router.post(
       email: data.email || "example@not-valid.com",
     });
 
-    res.status(200).send({
-      typedData,
-    });
+    res.status(200).send(typedData);
   })
 );
 
