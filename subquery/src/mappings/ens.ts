@@ -10,9 +10,9 @@ import { ethers } from "ethers";
 import { keccak256, toUtf8Bytes } from "ethers/lib/utils";
 
 const CLICK_NS_ADDR =
-  process.env.CLICK_NS_ADDR || "0xC84A95a3A012F25CdAa9922066427768Ef2186e5";
+  process.env.CLICK_NS_ADDR || "0xF3271B61291C128F9dA5aB208311d8CF8E2Ba5A9";
 const NODLE_NS_ADDR =
-  process.env.NODLE_NS_ADDR || "0x4a430a543Ab201307a5D33f5bab4056B5844DcA0";
+  process.env.NODLE_NS_ADDR || "0x9741565272C7B29574c88ed2eBDF15BFE9C04612";
 const whitelistKeys = {
   [keccak256(toUtf8Bytes("avatar"))]: "avatar",
   [keccak256(toUtf8Bytes("description"))]: "description",
