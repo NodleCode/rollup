@@ -7,7 +7,7 @@ import {
     StorageProofVerifier,
     IZkSyncDiamond
 } from "lib/zksync-storage-proofs/packages/zksync-storage-contracts/src/StorageProofVerifier.sol";
-import {ClickResolver} from "../src/nameservice/ClickResolver.sol";
+import {UniversalResolver} from "../src/nameservice/UniversalResolver.sol";
 
 interface IResolverSetter {
     function setResolver(bytes32 node, address resolver) external;
@@ -42,28 +42,28 @@ contract DeployL1Ens is Script {
             console.log("Using StorageProofVerifier at", spvAddress);
         }
 
-        address clickResolverAddress = vm.envOr("CLICK_RESOLVER_ADDR", address(0));
+        address resolverAddress = vm.envOr("NS_RESOLVER_ADDR", address(0));
 
-        if (clickResolverAddress == address(0)) {
-            console.log("Deploying ClickResolver...");
-            ClickResolver l1Resolver = new ClickResolver(
-                vm.envString("CNS_OFFCHAIN_RESOLVER_URL"),
-                vm.envAddress("CLK_OWNER_ADDR"),
-                vm.envAddress("CNS_ADDR"),
+        if (resolverAddress == address(0)) {
+            console.log("Deploying UniversalResolver...");
+            UniversalResolver l1Resolver = new UniversalResolver(
+                vm.envString("NS_OFFCHAIN_RESOLVER_URL"),
+                vm.envAddress("NS_OWNER_ADDR"),
+                vm.envAddress("NS_ADDR"),
                 StorageProofVerifier(spvAddress)
             );
-            clickResolverAddress = address(l1Resolver);
-            console.log("Deployed ClickResolver at", clickResolverAddress);
+            resolverAddress = address(l1Resolver);
+            console.log("Deployed UniversalResolver at", resolverAddress);
         }
 
-        string memory label = vm.envString("CNS_DOMAIN");
+        string memory label = vm.envString("NS_DOMAIN");
         bytes32 labelHash = keccak256(abi.encodePacked(label));
 
         bytes32 ETH_NODE = 0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae;
         bytes32 node = keccak256(abi.encodePacked(ETH_NODE, labelHash));
 
         IResolverSetter resolverSetter = IResolverSetter(vm.envAddress("NAME_WRAPPER_ADDR"));
-        resolverSetter.setResolver(node, clickResolverAddress);
+        resolverSetter.setResolver(node, resolverAddress);
 
         vm.stopBroadcast();
     }
