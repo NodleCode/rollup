@@ -2,12 +2,15 @@
 pragma solidity 0.8.23;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {NODL} from "./NODL.sol";
 
-contract NODLStaking is Ownable, ReentrancyGuard, Pausable {
+contract NODLStaking is AccessControl, ReentrancyGuard, Pausable {
+    bytes32 public constant REWARDS_MANAGER_ROLE = keccak256("REWARDS_MANAGER_ROLE");
+    bytes32 public constant EMERGENCY_MANAGER_ROLE = keccak256("EMERGENCY_MANAGER_ROLE");
+    
     NODL public immutable token;
 
     uint256 public immutable MIN_STAKE;
@@ -49,8 +52,6 @@ contract NODLStaking is Ownable, ReentrancyGuard, Pausable {
     event UnstakeAllowedUpdated(bool allowed);
     event Unstaked(address indexed user, uint256 amount);
     event RewardsFunded(uint256 amount);
-    event Paused(address account);
-    event Unpaused(address account);
 
     /* 
     @dev Constructor
@@ -72,6 +73,10 @@ contract NODLStaking is Ownable, ReentrancyGuard, Pausable {
         MIN_STAKE = _minStake * 1e18;
         MAX_TOTAL_STAKE = _maxTotalStake * 1e18;
         DURATION = _duration * 1 days;
+        
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(REWARDS_MANAGER_ROLE, msg.sender);
+        _grantRole(EMERGENCY_MANAGER_ROLE, msg.sender);
     }
 
     /* 
@@ -101,7 +106,7 @@ contract NODLStaking is Ownable, ReentrancyGuard, Pausable {
     @notice Only owner can fund rewards
     @notice Requires sufficient allowance from owner to contract
     */
-    function fundRewards(uint256 amount) external onlyOwner whenNotPaused {
+    function fundRewards(uint256 amount) external onlyRole(REWARDS_MANAGER_ROLE) whenNotPaused {
         uint256 allowance = token.allowance(msg.sender, address(this));
         if (allowance < amount) revert InsufficientAllowance();
         
@@ -137,17 +142,17 @@ contract NODLStaking is Ownable, ReentrancyGuard, Pausable {
     @dev Emergency withdraw
     @notice The owner can withdraw the tokens in case of emergency
     */
-    function emergencyWithdraw() external onlyOwner {
-        token.transfer(owner(), token.balanceOf(address(this)));
-
-        emit EmergencyWithdrawn(owner(), token.balanceOf(address(this)));
+    function emergencyWithdraw() external onlyRole(EMERGENCY_MANAGER_ROLE) {
+        uint256 balance = token.balanceOf(address(this));
+        token.transfer(msg.sender, balance);
+        emit EmergencyWithdrawn(msg.sender, balance);
     }
 
     /* 
     @dev Update the unstake allowed status
     @param allowed The new unstake allowed status
     */
-    function updateUnestakeAllowed(bool allowed) external onlyOwner whenNotPaused {
+    function updateUnestakeAllowed(bool allowed) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
         unstakeAllowed = allowed;
         emit UnstakeAllowedUpdated(allowed);
     }
@@ -220,7 +225,7 @@ contract NODLStaking is Ownable, ReentrancyGuard, Pausable {
     @dev Pause the contract
     @notice Only owner can pause the contract
     */
-    function pause() external onlyOwner {
+    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
     }
 
@@ -228,7 +233,7 @@ contract NODLStaking is Ownable, ReentrancyGuard, Pausable {
     @dev Unpause the contract
     @notice Only owner can unpause the contract
     */
-    function unpause() external onlyOwner {
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }
 }
