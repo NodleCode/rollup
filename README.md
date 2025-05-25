@@ -137,6 +137,40 @@ N_LEVELS_URI_2=example.com \
 forge script script/DeployMigrationNFT.s.sol --zksync --rpc-url https://sepolia.era.zksync.dev --zk-optimizer -i 1 --broadcast
 ```
 
+## Deploying Staking contract
+Allow users with at least 50,000 NODL (Dolphin level) to participate in a staking contract with the following characteristics:
+
+### Functional Requirements
+- Restricted access: Only users holding 50,000 NODL or more can stake.
+
+- Staking cap: The contract accepts a maximum total of 5 million NODL per staker. Additionally, the contract has a global staking cap MAX_POOL_STAKE.
+
+- Limited duration: Staking lasts the DURATION in seconds passed as a parameter.
+
+- Guaranteed yield: Users receive a fixed reward, predefined in the contract, at the end of the staking period.
+
+- Return: Once the staking period ends, both the staked tokens and the yield are returned to the user via a claim function.
+
+### Deployment
+
+```shell
+GOV_ADDR=0x2D1941280530027B6bA80Af0e7bD8c2135783368 \
+STAKE_TOKEN=0xb4B74C2BfeA877672B938E408Bae8894918fE41C \
+MIN_STAKE=50000 \
+MAX_TOTAL_STAKE=5000000 \
+DURATION=3600 \
+REWARD_RATE=12 \
+REQUIRED_HOLDING_TOKEN=50000 \
+npx hardhat deploy-zksync --script deploy_staking.dp.ts --network zkSyncSepoliaTestnet
+```
+- GOV_ADDR: Address of the governance contract.
+- STAKE_TOKEN: Address of the token to stake.
+- MIN_STAKE: Minimum amount of tokens a user can stake.
+- MAX_TOTAL_STAKE: Maximum amount of tokens a user can stake.
+- DURATION: Duration of the staking period in seconds.
+- REWARD_RATE: Reward rate of the staking contract.
+- REQUIRED_HOLDING_TOKEN: Minimum amount of tokens a user must hold to participate in the staking contract.
+
 ## Scripts
 
 ### Checking on bridging proposals
