@@ -178,7 +178,7 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
     @dev Update the unstake allowed status
     @param allowed The new unstake allowed status
     */
-    function updateUnestakeAllowed(bool allowed) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
+    function updateUnstakeAllowed(bool allowed) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
         unstakeAllowed = allowed;
         emit UnstakeAllowedUpdated(allowed);
     }

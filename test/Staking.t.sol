@@ -248,7 +248,7 @@ contract StakingTest is Test {
         // Enable unstake
         vm.stopPrank();
         vm.startPrank(admin);
-        staking.updateUnestakeAllowed(true);
+        staking.updateUnstakeAllowed(true);
         vm.stopPrank();
         
         // Unstake
@@ -352,7 +352,7 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    // Límites de Usuario
+    // User limits
     function testStakeAtMaxTotalStake() public {
         uint256 stakeAmount = MAX_TOTAL_STAKE;
         
@@ -386,7 +386,7 @@ contract StakingTest is Test {
         // Enable unstake
         vm.stopPrank();
         vm.startPrank(admin);
-        staking.updateUnestakeAllowed(true);
+        staking.updateUnstakeAllowed(true);
         vm.stopPrank();
         
         // Partial unstake
@@ -400,7 +400,7 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    // Estado del Contrato
+    // Contract state
     function testTotalStakedInPool() public {
         uint256 stakeAmount = MIN_STAKE;
         
@@ -443,7 +443,7 @@ contract StakingTest is Test {
         assertEq(potentialReward, 0);
     }
 
-    // Recompensas
+    // Rewards
     function testRewardCalculation() public {
         uint256 stakeAmount = 1000 ether;
         uint256 expectedReward = (stakeAmount * REWARD_RATE) / 100;
@@ -523,7 +523,7 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    // Validaciones de Tiempo
+    // Time validations
     function testClaimExactlyAtDuration() public {
         uint256 stakeAmount = MIN_STAKE;
         
@@ -582,7 +582,7 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    // Múltiples Operaciones
+    // Multiple operations
     function testMultipleStakesAndClaims() public {
         uint256 stakeAmount = MIN_STAKE;
         
@@ -627,7 +627,7 @@ contract StakingTest is Test {
         // Enable unstake
         vm.stopPrank();
         vm.startPrank(admin);
-        staking.updateUnestakeAllowed(true);
+        staking.updateUnstakeAllowed(true);
         vm.stopPrank();
         
         // Unstake both
@@ -676,7 +676,7 @@ contract StakingTest is Test {
         // Enable unstake
         vm.stopPrank();
         vm.startPrank(admin);
-        staking.updateUnestakeAllowed(true);
+        staking.updateUnstakeAllowed(true);
         vm.stopPrank();
         
         // Unstake
@@ -688,7 +688,7 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    // Límites del Pool
+    // Pool limits
     function testFailStakeExceedsMaxPoolStake() public {
         uint256 stakeAmount = staking.MAX_POOL_STAKE() + 1 ether;
         
