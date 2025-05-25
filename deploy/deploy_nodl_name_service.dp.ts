@@ -7,8 +7,11 @@ import "@matterlabs/hardhat-zksync-verify/dist/src/type-extensions";
 import * as dotenv from "dotenv";
 
 dotenv.config();
-const SHOULD_DEPLOY = false;
-let CONTRACT_ADDRESS = "";
+let CONTRACT_ADDRESS;
+
+if (!process.env.DEPLOYER_PRIVATE_KEY || !process.env.GOV_ADDR || !process.env.REGISTRAR_ADDR) {
+  throw new Error("DEPLOYER_PRIVATE_KEY, GOV_ADDR, and REGISTRAR_ADDR must be set");
+}
 
 module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const rpcUrl = hre.network.config.url;
@@ -27,22 +30,22 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   ];
   const artifact = await deployer.loadArtifact("NameService");
 
-  if (SHOULD_DEPLOY) {
-      const deploymentFee = await deployer.estimateDeployFee(
-        artifact,
-        constructorArgs
-      );
-      console.log(
-        "NameService deployment fee (ETH): ",
-        ethers.formatEther(deploymentFee)
-      );
-      const contract = await deployer.deploy(artifact, constructorArgs);
-      await contract.waitForDeployment();
-      CONTRACT_ADDRESS = await contract.getAddress();
-      console.log("Deployed NameService at", CONTRACT_ADDRESS);
+  if (!CONTRACT_ADDRESS) {
+    const deploymentFee = await deployer.estimateDeployFee(
+      artifact,
+      constructorArgs
+    );
+    console.log(
+      "NameService deployment fee (ETH): ",
+      ethers.formatEther(deploymentFee)
+    );
+    const contract = await deployer.deploy(artifact, constructorArgs);
+    await contract.waitForDeployment();
+    CONTRACT_ADDRESS = await contract.getAddress();
+    console.log("Deployed NameService at", CONTRACT_ADDRESS);
 
-      // Verify contract
-      console.log("Waiting for 5 confirmations...");
+    // Verify contract
+    console.log("Waiting for 5 confirmations...");
     await contract.deploymentTransaction()?.wait(5);
   }
 
