@@ -180,7 +180,27 @@ Verification on Etherscan is best done via the Solidity Json Input method as it 
 
 Use all these artifacts on the contract verification page on Etherscan for your given contract (open your contract on Etherscan, select `Contract` and the link starting with `Verify`). When prompted, enter the compiler versions, the license (we use BSD-3 Clause Clear). Then on the next page, enter your normalized JSON input file, and the contract constructor inputs.
 
+## Deploying Staking contract
+
+```shell
+npx hardhat run --network zkSync deploy/deploy_staking.dp.ts
+```
+
 ## Additional resources
 
 - [L1 contracts](https://docs.zksync.io/zksync-era/environment/l1-contracts)
 - [ZK stack addresses](https://docs.zksync.io/zk-stack/zk-chain-addresses)
+
+## ZkSync CLI useful commands
+
+# Approve
+
+```shell
+npx zksync-cli contract write --chain "zksync-sepolia" --contract "0xb4B74C2BfeA877672B938E408Bae8894918fE41C" --method "approve(address spender, uint256 amount)" --args "0x2D1941280530027B6bA80Af0e7bD8c2135783368" "1000000000000000000"
+```
+
+# Stake
+
+```shell
+npx zksync-cli contract write --chain "zksync-sepolia" --contract "0xb974a544128Bc7fAB3447D48cd6ad377D6F62EcF" --method "stake(uint256 amount)" --args "1000000000000000000"
+```
