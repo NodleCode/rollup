@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
 /**
- * @title ClickResolver for resolving ens subdomains based on names registered on L2
+ * @title UniversalResolver for resolving ens subdomains based on names registered on L2
  * @dev This contract is based on ClaveResolver that can be found in this repository:
  * https://github.com/getclave/zksync-storage-proofs
  */
@@ -20,7 +20,7 @@ interface IExtendedResolver {
     function resolve(bytes calldata name, bytes calldata data) external view returns (bytes memory);
 }
 
-contract ClickResolver is IExtendedResolver, IERC165, Ownable {
+contract UniversalResolver is IExtendedResolver, IERC165, Ownable {
     bytes4 private constant _EXTENDED_INTERFACE_ID = 0x9061b923; // ENSIP-10
 
     bytes4 private constant _ADDR_SELECTOR = 0x3b3b57de; // addr(bytes32)
@@ -158,7 +158,7 @@ contract ClickResolver is IExtendedResolver, IERC165, Ownable {
         string[] memory urls = new string[](1);
         urls[0] = url;
 
-        revert OffchainLookup(address(this), urls, callData, ClickResolver.resolveWithProof.selector, extraData);
+        revert OffchainLookup(address(this), urls, callData, UniversalResolver.resolveWithProof.selector, extraData);
     }
 
     /// @notice Callback used by CCIP read compatible clients to verify and parse the response.
