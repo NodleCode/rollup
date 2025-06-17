@@ -162,7 +162,6 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
     @dev Claim
     @notice The stake can only be claimed if the stake has not been claimed
     @notice The stake can only be claimed if the stake has not been unstaked
-    @notice The stake can only be claimed if the stake has not been claimed
     @notice The contract must have enough balance for both stake and reward
     */
     function claim(uint256 index) external nonReentrant whenNotPaused {
@@ -176,16 +175,17 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
         if (block.timestamp < s.start + DURATION) revert TooEarly();
 
         uint256 reward = _calculateReward(s.amount);
-        uint256 totalToTransfer = s.amount + reward;
-        if (totalToTransfer > availableRewards) revert InsufficientRewardBalance();
+        if (availableRewards < reward) revert InsufficientRewardBalance();
 
+        uint256 amountToTransfer = s.amount;
+        s.amount = 0;
         s.claimed = true;
-        totalStakedInPool -= s.amount;
-        totalStakedByUser[msg.sender] -= s.amount;
+        totalStakedInPool -= amountToTransfer;
+        totalStakedByUser[msg.sender] -= amountToTransfer;
         availableRewards -= reward;
-        token.transfer(msg.sender, totalToTransfer);
+        token.transfer(msg.sender, amountToTransfer + reward);
 
-        emit Claimed(msg.sender, s.amount, reward);
+        emit Claimed(msg.sender, amountToTransfer, reward);
     }
 
     /* 
