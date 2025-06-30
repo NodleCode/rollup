@@ -2,7 +2,7 @@ FROM mcr.microsoft.com/devcontainers/base:jammy
 
 USER vscode
 
-ENV NODE_VERSION=20.11.1
+ENV NODE_VERSION=20.18.1
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
     export NVM_DIR="$HOME/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && \
