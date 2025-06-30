@@ -54,6 +54,12 @@
     "Tokendecimals",
     "zyfi",
     "addrsSlot",
-    "NODLNS"
+    "NODLNS",
+    "unstake",
+    "unstakes",
+    "Unstaked",
+    "funder",
+    "Fundings",
+    "Reentrancy"
   ]
 }
