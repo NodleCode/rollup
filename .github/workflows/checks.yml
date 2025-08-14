@@ -32,6 +32,6 @@ jobs:
 
       - name: Lint
         run: yarn lint
-        
+
       - name: Run tests
         run: forge test --zksync

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
-pragma solidity ^0.8.23;
+pragma solidity ^0.8.26;
 
 interface IPaymasterTest {
     function register(address to, string memory name) external;
