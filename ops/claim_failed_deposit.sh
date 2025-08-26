@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Script to monitor a failed L2 transaction and automatically execute claimFailedDeposit once committed to L1
-# Usage: ./scripts/claim_failed_deposit.sh <L2_TX_HASH>
+# Usage: claim_failed_deposit.sh <L2_TX_HASH>
 
 set -euo pipefail
 

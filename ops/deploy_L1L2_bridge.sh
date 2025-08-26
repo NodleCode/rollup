@@ -7,7 +7,7 @@
 # - foundry and zkforge installed
 # - Private key available for interactive signing (-i flag)
 #
-# Usage: ./scripts/deploy_L1L2_bridge.sh
+# Usage: deploy_L1L2_bridge.sh
 
 set -euo pipefail
 

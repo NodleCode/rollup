@@ -9,7 +9,7 @@
 #  - _merkleProof → proof[] from zks_getL2ToL1LogProof
 #
 # Usage:
-#   ./scripts/finalize_withdrawal.sh <TX_HASH>
+#   finalize_withdrawal.sh <TX_HASH>
 #
 # Requirements: curl, jq, python3, and Foundry (cast) in PATH.
 

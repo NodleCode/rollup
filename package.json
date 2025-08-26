@@ -10,7 +10,7 @@
     "clean": "hardhat clean",
     "lint": "solhint 'src/**/*.sol'",
     "spellcheck": "cspell --config .cspell.json",
-    "register-names": "ts-node scripts/batch-register.ts"
+    "register-names": "ts-node utils/batch-register.ts"
   },
   "packageManager": "yarn@1.22.19",
   "engines": {
