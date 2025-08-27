@@ -63,7 +63,7 @@ contract L2Bridge is Ownable2Step, Pausable, IL2Bridge {
      * @param _l2Token The L2 NODL token contract address.
      */
     constructor(address _owner, address _l2Token) Ownable(_owner) {
-        if (_owner == address(0) || _l2Token == address(0)) {
+        if (_l2Token == address(0)) {
             revert ZeroAddress();
         }
         l1Bridge = address(0);
