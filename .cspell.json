@@ -54,6 +54,8 @@
     "Tokendecimals",
     "zyfi",
     "addrsSlot",
-    "NODLNS"
+    "NODLNS",
+    "solhint",
+    "mixedcase"
   ]
 }

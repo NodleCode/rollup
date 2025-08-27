@@ -20,7 +20,7 @@
  * We recommend revising the NFT minting process to allow unlimited NFT minting for lower 
  * levels.
  */
-pragma solidity 0.8.23;
+pragma solidity ^0.8.26;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {NODLMigration} from "./NODLMigration.sol";
