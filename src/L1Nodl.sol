@@ -12,7 +12,13 @@ import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 contract L1Nodl is ERC20, ERC20Burnable, AccessControl, ERC20Permit, ERC20Votes {
     bytes32 private constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
+    /// @dev Zero address supplied where non-zero is required.
+    error ZeroAddress();
+
     constructor(address admin, address minter) ERC20("Nodle Token", "NODL") ERC20Permit("Nodle Token") {
+        if (admin == address(0) || minter == address(0)) {
+            revert ZeroAddress();
+        }
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MINTER_ROLE, minter);
     }
