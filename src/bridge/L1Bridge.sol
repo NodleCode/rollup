@@ -101,6 +101,41 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
     }
 
     // =============================
+    // View helpers
+    // =============================
+
+    /**
+     * @notice Quotes the ETH required to cover the L2 execution cost for a deposit at the current tx.gasprice.
+     * @dev This is a convenience helper; the actual base cost is a function of the L1 gas price at inclusion time.
+     *      Frontends may prefer {quoteL2BaseCostAtGasPrice} for deterministic quoting.
+     * @param _l2TxGasLimit Maximum L2 gas the enqueued call can consume.
+     * @param _l2TxGasPerPubdataByte Gas per pubdata byte limit for the enqueued call.
+     * @return baseCost The ETH amount that needs to be supplied alongside {deposit}.
+     */
+    function quoteL2BaseCost(uint256 _l2TxGasLimit, uint256 _l2TxGasPerPubdataByte)
+        external
+        view
+        returns (uint256 baseCost)
+    {
+        baseCost = L1_MAILBOX.l2TransactionBaseCost(tx.gasprice, _l2TxGasLimit, _l2TxGasPerPubdataByte);
+    }
+
+    /**
+     * @notice Quotes the ETH required to cover the L2 execution cost for a deposit at a specified L1 gas price.
+     * @param _l1GasPrice The L1 gas price (wei) to use for the quote.
+     * @param _l2TxGasLimit Maximum L2 gas the enqueued call can consume.
+     * @param _l2TxGasPerPubdataByte Gas per pubdata byte limit for the enqueued call.
+     * @return baseCost The ETH amount that needs to be supplied alongside {deposit}.
+     */
+    function quoteL2BaseCostAtGasPrice(uint256 _l1GasPrice, uint256 _l2TxGasLimit, uint256 _l2TxGasPerPubdataByte)
+        external
+        view
+        returns (uint256 baseCost)
+    {
+        baseCost = L1_MAILBOX.l2TransactionBaseCost(_l1GasPrice, _l2TxGasLimit, _l2TxGasPerPubdataByte);
+    }
+
+    // =============================
     // External entrypoints
     // =============================
 
