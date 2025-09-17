@@ -241,7 +241,6 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         if (isWithdrawalFinalized[_l2BatchNumber][_l2MessageIndex]) {
             revert WithdrawalAlreadyFinalized();
         }
-        isWithdrawalFinalized[_l2BatchNumber][_l2MessageIndex] = true;
 
         (address l1Receiver, uint256 amount) = _parseL2WithdrawalMessage(_message);
         L2Message memory l2ToL1Message =
@@ -256,6 +255,9 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         if (!success) {
             revert InvalidProof();
         }
+
+        isWithdrawalFinalized[_l2BatchNumber][_l2MessageIndex] = true;
+
         L1_NODL.mint(l1Receiver, amount);
         emit WithdrawalFinalized(l1Receiver, _l2BatchNumber, _l2MessageIndex, _l2TxNumberInBatch, amount);
     }
