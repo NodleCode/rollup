@@ -156,6 +156,9 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         uint256 _l2TxGasPerPubdataByte,
         address _refundRecipient
     ) public payable override whenNotPaused returns (bytes32 txHash) {
+        if (_l2Receiver == address(0)) {
+            revert ZeroAddress();
+        }
         if (_amount == 0) {
             revert ZeroAmount();
         }
