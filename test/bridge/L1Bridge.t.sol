@@ -337,23 +337,31 @@ contract L1BridgeTest is Test {
     function test_QuoteL2BaseCost_UsesTxGasPrice() public {
         uint256 gasLimit = 500_000;
         uint256 gasPerPubdata = 800;
+        uint256 quotedValue = 123;
         vm.txGasPrice(42 gwei);
 
-        uint256 expected = 42 gwei + gasLimit + gasPerPubdata;
+        bytes memory callData =
+            abi.encodeWithSelector(IMailbox.l2TransactionBaseCost.selector, uint256(42 gwei), gasLimit, gasPerPubdata);
+        vm.mockCall(address(mailbox), callData, abi.encode(quotedValue));
+        vm.expectCall(address(mailbox), callData);
+
         uint256 quote = bridge.quoteL2BaseCost(gasLimit, gasPerPubdata);
 
-        assertEq(quote, expected, "quote uses current tx.gasprice");
+        assertEq(quote, quotedValue, "returns quoted base cost from mailbox");
     }
 
-    function test_QuoteL2BaseCostAtGasPrice() public view {
+    function test_QuoteL2BaseCostAtGasPrice() public {
         uint256 gasLimit = 250_000;
         uint256 gasPerPubdata = 900;
         uint256 gasPrice = 15 gwei;
-
-        uint256 expected = gasPrice + gasLimit + gasPerPubdata;
+        uint256 quotedValue = 456;
+        bytes memory callData =
+            abi.encodeWithSelector(IMailbox.l2TransactionBaseCost.selector, gasPrice, gasLimit, gasPerPubdata);
+        vm.mockCall(address(mailbox), callData, abi.encode(quotedValue));
+        vm.expectCall(address(mailbox), callData);
         uint256 quote = bridge.quoteL2BaseCostAtGasPrice(gasPrice, gasLimit, gasPerPubdata);
 
-        assertEq(quote, expected, "quote uses provided gas price");
+        assertEq(quote, quotedValue, "returns mailbox quote");
     }
 
     function test_Pause_Gates_Functions() public {
