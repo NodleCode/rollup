@@ -22,6 +22,7 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
 
     bytes32 public lastRequestedTxHash;
     address public lastRefundRecipient;
+    uint256 public baseCostReturn;
 
     // Allow tests to toggle outcomes
     function setL1ToL2Failed(bytes32 txHash, bool failed) external {
@@ -30,6 +31,10 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
 
     function setInclusion(uint256 batch, uint256 index, bool ok) external {
         l2InclusionOk[batch][index] = ok;
+    }
+
+    function setBaseCostReturn(uint256 value) external {
+        baseCostReturn = value;
     }
 
     // --- Methods used by L1Bridge ---
@@ -72,12 +77,8 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
         return l2InclusionOk[_batchNumber][_index];
     }
 
-    function l2TransactionBaseCost(uint256 _gasPrice, uint256 _l2GasLimit, uint256 _l2GasPerPubdataByte)
-        external
-        pure
-        returns (uint256)
-    {
-        return _gasPrice + _l2GasLimit + _l2GasPerPubdataByte;
+    function l2TransactionBaseCost(uint256, uint256, uint256) external view returns (uint256) {
+        return baseCostReturn;
     }
 }
 
@@ -342,7 +343,7 @@ contract L1BridgeTest is Test {
 
         bytes memory callData =
             abi.encodeWithSelector(IMailbox.l2TransactionBaseCost.selector, uint256(42 gwei), gasLimit, gasPerPubdata);
-        vm.mockCall(address(mailbox), callData, abi.encode(quotedValue));
+        mailbox.setBaseCostReturn(quotedValue);
         vm.expectCall(address(mailbox), callData);
 
         uint256 quote = bridge.quoteL2BaseCost(gasLimit, gasPerPubdata);
@@ -357,7 +358,7 @@ contract L1BridgeTest is Test {
         uint256 quotedValue = 456;
         bytes memory callData =
             abi.encodeWithSelector(IMailbox.l2TransactionBaseCost.selector, gasPrice, gasLimit, gasPerPubdata);
-        vm.mockCall(address(mailbox), callData, abi.encode(quotedValue));
+        mailbox.setBaseCostReturn(quotedValue);
         vm.expectCall(address(mailbox), callData);
         uint256 quote = bridge.quoteL2BaseCostAtGasPrice(gasPrice, gasLimit, gasPerPubdata);
 
