@@ -23,6 +23,9 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
     bytes32 public lastRequestedTxHash;
     address public lastRefundRecipient;
     uint256 public baseCostReturn;
+    uint256 public expectedBaseCostGasPrice;
+    uint256 public expectedBaseCostGasLimit;
+    uint256 public expectedBaseCostGasPerPubdata;
 
     // Allow tests to toggle outcomes
     function setL1ToL2Failed(bytes32 txHash, bool failed) external {
@@ -35,6 +38,12 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
 
     function setBaseCostReturn(uint256 value) external {
         baseCostReturn = value;
+    }
+
+    function expectBaseCostParams(uint256 gasPrice, uint256 gasLimit, uint256 gasPerPubdata) external {
+        expectedBaseCostGasPrice = gasPrice;
+        expectedBaseCostGasLimit = gasLimit;
+        expectedBaseCostGasPerPubdata = gasPerPubdata;
     }
 
     // --- Methods used by L1Bridge ---
@@ -77,7 +86,15 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
         return l2InclusionOk[_batchNumber][_index];
     }
 
-    function l2TransactionBaseCost(uint256, uint256, uint256) external view returns (uint256) {
+    function l2TransactionBaseCost(uint256 _l1GasPrice, uint256 _l2GasLimit, uint256 _l2GasPerPubdataByte)
+        external
+        view
+        returns (uint256)
+    {
+        // The gas price of zero is allowed as `forge test --zksync` sets it to zero
+        require(_l1GasPrice == expectedBaseCostGasPrice || _l1GasPrice == 0, "unexpected gas price");
+        require(_l2GasLimit == expectedBaseCostGasLimit, "unexpected gas limit");
+        require(_l2GasPerPubdataByte == expectedBaseCostGasPerPubdata, "unexpected gas per pubdata");
         return baseCostReturn;
     }
 }
@@ -340,11 +357,8 @@ contract L1BridgeTest is Test {
         uint256 gasPerPubdata = 800;
         uint256 quotedValue = 123;
         vm.txGasPrice(42 gwei);
-
-        bytes memory callData =
-            abi.encodeWithSelector(IMailbox.l2TransactionBaseCost.selector, uint256(42 gwei), gasLimit, gasPerPubdata);
         mailbox.setBaseCostReturn(quotedValue);
-        vm.expectCall(address(mailbox), callData);
+        mailbox.expectBaseCostParams(tx.gasprice, gasLimit, gasPerPubdata);
 
         uint256 quote = bridge.quoteL2BaseCost(gasLimit, gasPerPubdata);
 
@@ -356,10 +370,8 @@ contract L1BridgeTest is Test {
         uint256 gasPerPubdata = 900;
         uint256 gasPrice = 15 gwei;
         uint256 quotedValue = 456;
-        bytes memory callData =
-            abi.encodeWithSelector(IMailbox.l2TransactionBaseCost.selector, gasPrice, gasLimit, gasPerPubdata);
         mailbox.setBaseCostReturn(quotedValue);
-        vm.expectCall(address(mailbox), callData);
+        mailbox.expectBaseCostParams(gasPrice, gasLimit, gasPerPubdata);
         uint256 quote = bridge.quoteL2BaseCostAtGasPrice(gasPrice, gasLimit, gasPerPubdata);
 
         assertEq(quote, quotedValue, "returns mailbox quote");
