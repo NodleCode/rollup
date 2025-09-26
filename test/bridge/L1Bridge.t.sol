@@ -71,6 +71,14 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
     ) external view returns (bool) {
         return l2InclusionOk[_batchNumber][_index];
     }
+
+    function l2TransactionBaseCost(uint256 _gasPrice, uint256 _l2GasLimit, uint256 _l2GasPerPubdataByte)
+        external
+        pure
+        returns (uint256)
+    {
+        return _gasPrice + _l2GasLimit + _l2GasPerPubdataByte;
+    }
 }
 
 contract L1BridgeTest is Test {
@@ -159,6 +167,14 @@ contract L1BridgeTest is Test {
         vm.prank(USER);
         vm.expectRevert(abi.encodeWithSelector(L1Bridge.ZeroAmount.selector));
         bridge.deposit(address(0x1), 0, 100, 1000, USER);
+    }
+
+    function test_Deposit_Revert_L2ReceiverZero() public {
+        vm.startPrank(USER);
+        token.approve(address(bridge), 1 ether);
+        vm.expectRevert(abi.encodeWithSelector(L1Bridge.ZeroAddress.selector));
+        bridge.deposit(address(0), 1 ether, 100, 1000, USER);
+        vm.stopPrank();
     }
 
     function test_Deposit_Revert_InsufficientBalance() public {
@@ -316,6 +332,28 @@ contract L1BridgeTest is Test {
         bytes memory bad = abi.encodePacked(bytes4(0xDEADBEEF), OTHER, uint256(1));
         vm.expectRevert(abi.encodeWithSelector(L1Bridge.InvalidSelector.selector, bytes4(0xDEADBEEF)));
         bridge.finalizeWithdrawal(1, 1, 1, bad, new bytes32[](0));
+    }
+
+    function test_QuoteL2BaseCost_UsesTxGasPrice() public {
+        uint256 gasLimit = 500_000;
+        uint256 gasPerPubdata = 800;
+        vm.txGasPrice(42 gwei);
+
+        uint256 expected = 42 gwei + gasLimit + gasPerPubdata;
+        uint256 quote = bridge.quoteL2BaseCost(gasLimit, gasPerPubdata);
+
+        assertEq(quote, expected, "quote uses current tx.gasprice");
+    }
+
+    function test_QuoteL2BaseCostAtGasPrice() public view {
+        uint256 gasLimit = 250_000;
+        uint256 gasPerPubdata = 900;
+        uint256 gasPrice = 15 gwei;
+
+        uint256 expected = gasPrice + gasLimit + gasPerPubdata;
+        uint256 quote = bridge.quoteL2BaseCostAtGasPrice(gasPrice, gasLimit, gasPerPubdata);
+
+        assertEq(quote, expected, "quote uses provided gas price");
     }
 
     function test_Pause_Gates_Functions() public {
