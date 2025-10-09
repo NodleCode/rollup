@@ -1,62 +1,62 @@
-import { Provider as L2Provider, Wallet } from "zksync-ethers";
-import { Contract, JsonRpcProvider as L1Provider, parseEther } from "ethers";
+import { Provider as L2Provider, Wallet } from "zksync-ethers"
+import { Contract, JsonRpcProvider as L1Provider, parseEther } from "ethers"
 import {
   ZKSYNC_DIAMOND_INTERFACE,
   NAME_SERVICE_INTERFACE,
   CLICK_RESOLVER_INTERFACE,
-} from "./interfaces";
-import { ZyfiSponsoredRequest } from "./types";
-import admin from "firebase-admin";
-import { initializeApp } from "firebase-admin/app";
+} from "./interfaces"
+import { ZyfiSponsoredRequest } from "./types"
+import admin from "firebase-admin"
+import { initializeApp } from "firebase-admin/app"
 
-import dotenv from "dotenv";
+import dotenv from "dotenv"
 
-dotenv.config();
+dotenv.config()
 
-const port = process.env.PORT || 8080;
-const privateKey = process.env.REGISTRAR_PRIVATE_KEY!;
-const l2Provider = new L2Provider(process.env.L2_RPC_URL!);
-const l2Wallet = new Wallet(privateKey, l2Provider);
-const l1Provider = new L1Provider(process.env.L1_RPC_URL!);
-const diamondAddress = process.env.DIAMOND_PROXY_ADDR!;
+const port = process.env.PORT || 8080
+const privateKey = process.env.REGISTRAR_PRIVATE_KEY!
+const l2Provider = new L2Provider(process.env.L2_RPC_URL!)
+const l2Wallet = new Wallet(privateKey, l2Provider)
+const l1Provider = new L1Provider(process.env.L1_RPC_URL!)
+const diamondAddress = process.env.DIAMOND_PROXY_ADDR!
 
-const serviceAccountKey = process.env.SERVICE_ACCOUNT_KEY!;
-const serviceAccount = JSON.parse(serviceAccountKey);
+const serviceAccountKey = process.env.SERVICE_ACCOUNT_KEY!
+const serviceAccount = JSON.parse(serviceAccountKey)
 initializeApp({
   credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-});
+})
 
 const diamondContract = new Contract(
   diamondAddress,
   ZKSYNC_DIAMOND_INTERFACE,
   l1Provider
-);
-const clickResolverAddress = process.env.RESOLVER_ADDR!;
+)
+const clickResolverAddress = process.env.RESOLVER_ADDR!
 const resolverContract = new Contract(
   clickResolverAddress,
   CLICK_RESOLVER_INTERFACE,
   l1Provider
-);
-const clickNameServiceAddress = process.env.CLICK_NS_ADDR!;
+)
+const clickNameServiceAddress = process.env.CLICK_NS_ADDR!
 const clickNameServiceContract = new Contract(
   clickNameServiceAddress,
   NAME_SERVICE_INTERFACE,
   l2Wallet
-);
-const nodleNameServiceAddress = process.env.NODLE_NS_ADDR!;
+)
+const nodleNameServiceAddress = process.env.NODLE_NS_ADDR!
 const nodleNameServiceContract = new Contract(
   nodleNameServiceAddress,
   NAME_SERVICE_INTERFACE,
   l2Wallet
-);
-const batchQueryOffset = Number(process.env.SAFE_BATCH_QUERY_OFFSET!);
+)
+const batchQueryOffset = Number(process.env.SAFE_BATCH_QUERY_OFFSET!)
 
-const clickNSDomain = process.env.CLICK_NS_DOMAIN!;
-const nodleNSDomain = process.env.NODLE_NS_DOMAIN!;
-const parentTLD = process.env.PARENT_TLD!;
+const clickNSDomain = process.env.CLICK_NS_DOMAIN!
+const nodleNSDomain = process.env.NODLE_NS_DOMAIN!
+const parentTLD = process.env.PARENT_TLD!
 const zyfiSponsoredUrl = process.env.ZYFI_BASE_URL
   ? new URL(process.env.ZYFI_SPONSORED!, process.env.ZYFI_BASE_URL)
-  : null;
+  : null
 
 const zyfiRequestTemplate: ZyfiSponsoredRequest = {
   chainId: Number(process.env.L2_CHAIN_ID!),
@@ -72,17 +72,17 @@ const zyfiRequestTemplate: ZyfiSponsoredRequest = {
   },
   sponsorshipRatio: 100,
   replayLimit: 5,
-};
+}
 
 const nameServiceAddresses = {
   [clickNSDomain]: clickNameServiceAddress,
   [nodleNSDomain]: nodleNameServiceAddress,
-};
+}
 
 const nameServiceContracts = {
   [clickNSDomain]: clickNameServiceContract,
   [nodleNSDomain]: nodleNameServiceContract,
-};
+}
 
 const buildZyfiRegisterRequest = (
   owner: string,
@@ -92,7 +92,7 @@ const buildZyfiRegisterRequest = (
   const encodedRegister = NAME_SERVICE_INTERFACE.encodeFunctionData(
     "register",
     [owner, name]
-  );
+  )
 
   const zyfiRequest: ZyfiSponsoredRequest = {
     ...zyfiRequestTemplate,
@@ -101,10 +101,10 @@ const buildZyfiRegisterRequest = (
       data: encodedRegister,
       to: nameServiceAddresses[subdomain],
     },
-  };
+  }
 
-  return zyfiRequest;
-};
+  return zyfiRequest
+}
 
 const buildZyfiSetTextRecordRequest = (
   name: string,
@@ -115,7 +115,7 @@ const buildZyfiSetTextRecordRequest = (
   const encodedSetTextRecord = NAME_SERVICE_INTERFACE.encodeFunctionData(
     "setTextRecord",
     [name, key, value]
-  );
+  )
 
   const zyfiRequest: ZyfiSponsoredRequest = {
     ...zyfiRequestTemplate,
@@ -124,10 +124,23 @@ const buildZyfiSetTextRecordRequest = (
       data: encodedSetTextRecord,
       to: nameServiceAddresses[subdomain],
     },
-  };
+  }
 
-  return zyfiRequest;
-};
+  return zyfiRequest
+}
+
+// Redis key patterns for social claims
+export const REDIS_KEYS = {
+  PENDING_CLAIM: 'pending_claim:',
+  ACTIVE_CLAIM: 'active_claim:',
+  USER_CLAIMS: 'user_claims:',
+}
+
+// Claim expiration times (in seconds)
+export const CLAIM_EXPIRY = {
+  PENDING: 300, // 5 minutes for pending verification
+  RESERVATION: 3600, // 1 hour for confirmed but not yet on-chain
+}
 
 export {
   port,
@@ -151,4 +164,4 @@ export {
   buildZyfiSetTextRecordRequest,
   nameServiceAddresses,
   nameServiceContracts,
-};
+}

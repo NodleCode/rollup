@@ -1,31 +1,36 @@
+import {
+  getAddress,
+  isAddress,
+  isHexString,
+  keccak256,
+  toUtf8Bytes,
+} from "ethers";
 import { Router } from "express";
 import { body, matchedData, validationResult } from "express-validator";
-import { isAddress, isHexString, getAddress } from "ethers";
-import { HttpError } from "../types";
 import {
+  asyncHandler,
+  buildTypedData,
+  fetchZyfiSponsored,
+  isOffchainLookupError,
+  isParsableError,
+  validateSignature,
+} from "../helpers";
+import { CLICK_RESOLVER_INTERFACE } from "../interfaces";
+import reservedHashes from "../reservedHashes";
+import { SocialValidationService } from "../services/socialValidation";
+import {
+  buildZyfiRegisterRequest,
+  buildZyfiSetTextRecordRequest,
   clickNameServiceContract,
-  nodleNameServiceContract,
-  l1Provider,
   clickNSDomain,
+  l1Provider,
+  l2Wallet,
+  nodleNameServiceContract,
   nodleNSDomain,
   parentTLD,
   zyfiSponsoredUrl,
-  l2Wallet,
-  buildZyfiRegisterRequest,
-  buildZyfiSetTextRecordRequest,
 } from "../setup";
-import {
-  buildTypedData,
-  validateSignature,
-  asyncHandler,
-  fetchZyfiSponsored,
-  isParsableError,
-  isOffchainLookupError,
-} from "../helpers";
-import admin from "firebase-admin";
-import { keccak256, toUtf8Bytes } from "ethers";
-import reservedHashes from "../reservedHashes";
-import { CLICK_RESOLVER_INTERFACE } from "../interfaces";
+import { HttpError } from "../types";
 
 const router = Router();
 
@@ -65,7 +70,7 @@ router.post(
         return true;
       })
       .withMessage(
-        "Current available subdomain names are limited to those with at least 5 characters"
+        "Current available subdomain names are limited to those with at least 5 characters",
       ),
     body("signature")
       .isString()
@@ -79,7 +84,11 @@ router.post(
         return isAddress(owner);
       })
       .withMessage("Owner must be a valid Ethereum address"),
-    body("email").isEmail().withMessage("Email must be a valid email address").optional().default(""),
+    body("email")
+      .isEmail()
+      .withMessage("Email must be a valid email address")
+      .optional()
+      .default(""),
   ],
   asyncHandler(async (req, res) => {
     // const decodedToken = await getDecodedToken(req);
@@ -91,7 +100,7 @@ router.post(
           .array()
           .map((error) => error.msg)
           .join(", "),
-        400
+        400,
       );
     }
     const data = matchedData(req);
@@ -140,7 +149,7 @@ router.post(
       txHash: receipt.hash,
       name: `${name}.${sub}.${tld}`,
     });
-  })
+  }),
 );
 
 // POST /name/set-text-record
@@ -179,7 +188,7 @@ router.post(
         return true;
       })
       .withMessage(
-        "Current available subdomain names are limited to those with at least 5 characters"
+        "Current available subdomain names are limited to those with at least 5 characters",
       ),
     body("key")
       .isString()
@@ -209,7 +218,7 @@ router.post(
           .array()
           .map((error) => error.msg)
           .join(", "),
-        400
+        400,
       );
     }
     const data = matchedData(req);
@@ -237,7 +246,7 @@ router.post(
             type: "string",
           },
         ],
-      }
+      },
     );
 
     const isValidSignature = validateSignature({
@@ -250,13 +259,56 @@ router.post(
       throw new HttpError("Invalid signature", 403);
     }
 
+    // Special validation for social platform records
+    if (data.key === "com.twitter") {
+      // Check if this handle is reserved for this ENS name
+      const isValidReservation =
+        await SocialValidationService.validateReservation(
+          data.key,
+          data.value,
+          data.name,
+          owner,
+        );
+
+      if (!isValidReservation) {
+        throw new HttpError(
+          "Social handle must be reserved for this ENS name before setting text record. Please use /social/reserve first.",
+          400,
+        );
+      }
+
+      // Check if handle is claimed by another ENS name
+      const claimStatus = await SocialValidationService.isHandleClaimed(
+        data.key,
+        data.value,
+      );
+      if (claimStatus.claimed && claimStatus.ensName !== data.name) {
+        throw new HttpError(
+          `Social handle already claimed by ${claimStatus.ensName}`,
+          409,
+        );
+      }
+
+      // Confirm the claim before proceeding with the transaction
+      const confirmed = await SocialValidationService.confirmClaim(
+        data.key,
+        data.value,
+        data.name,
+        owner,
+      );
+
+      if (!confirmed) {
+        throw new HttpError("Failed to confirm social claim", 500);
+      }
+    }
+
     let response;
     if (zyfiSponsoredUrl) {
       const zyfiRequest = buildZyfiSetTextRecordRequest(
         name,
         sub,
         data.key,
-        data.value
+        data.value,
       );
       const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
       console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
@@ -266,7 +318,7 @@ router.post(
       response = await clickNameServiceContract.setTextRecord(
         name,
         data.key,
-        data.value
+        data.value,
       );
     }
 
@@ -275,12 +327,21 @@ router.post(
       throw new Error("Transaction failed");
     }
 
+    // Mark social claim as on-chain after successful transaction
+    if (data.key === "com.twitter") {
+      await SocialValidationService.markOnChain(
+        data.key,
+        data.value,
+        receipt.hash,
+      );
+    }
+
     res.status(200).send({
       txHash: receipt.hash,
       key: data.key,
       value: data.value,
     });
-  })
+  }),
 );
 
 // POST /name/set-text-record/message
@@ -319,7 +380,7 @@ router.post(
         return true;
       })
       .withMessage(
-        "Current available subdomain names are limited to those with at least 5 characters"
+        "Current available subdomain names are limited to those with at least 5 characters",
       ),
     body("key")
       .isString()
@@ -329,7 +390,7 @@ router.post(
       .isString()
       .isLength({ min: 1, max: 256 })
       .withMessage("Value must be between 1 and 256 characters"),
-    body("owner")
+    body("owner"),
   ],
   asyncHandler(async (req, res) => {
     const result = validationResult(req);
@@ -339,33 +400,36 @@ router.post(
           .array()
           .map((error) => error.msg)
           .join(", "),
-        400
+        400,
       );
     }
     const data = matchedData(req);
 
-    const typedData = buildTypedData({
-      name: data.name,
-      key: data.key,
-      value: data.value,
-    }, {
-      TextRecord: [
-        {
-          name: "name",
-          type: "string",
-        },
-        {
-          name: "key",
-          type: "string",
-        },
-        {
-          name: "value",
-          type: "string",
-        },
-      ],
-    });
+    const typedData = buildTypedData(
+      {
+        name: data.name,
+        key: data.key,
+        value: data.value,
+      },
+      {
+        TextRecord: [
+          {
+            name: "name",
+            type: "string",
+          },
+          {
+            name: "key",
+            type: "string",
+          },
+          {
+            name: "value",
+            type: "string",
+          },
+        ],
+      },
+    );
     res.status(200).send(typedData);
-  })
+  }),
 );
 
 // POST /name/register/message
@@ -404,9 +468,13 @@ router.post(
         return true;
       })
       .withMessage(
-        "Current available subdomain names are limited to those with at least 5 characters"
+        "Current available subdomain names are limited to those with at least 5 characters",
       ),
-    body("email").isEmail().withMessage("Email must be a valid email address").optional().default(""),
+    body("email")
+      .isEmail()
+      .withMessage("Email must be a valid email address")
+      .optional()
+      .default(""),
   ],
   asyncHandler(async (req, res) => {
     // await checkUserByEmail(req);
@@ -417,7 +485,7 @@ router.post(
           .array()
           .map((error) => error.msg)
           .join(", "),
-        400
+        400,
       );
     }
     const data = matchedData(req);
@@ -428,7 +496,7 @@ router.post(
     });
 
     res.status(200).send(typedData);
-  })
+  }),
 );
 
 // POST /name/resolve
@@ -460,7 +528,7 @@ router.post(
             .array()
             .map((error) => error.msg)
             .join(", "),
-          400
+          400,
         );
       }
       const name = matchedData(req).name;
@@ -501,7 +569,7 @@ router.post(
 
       throw error;
     }
-  }
+  },
 );
 
 export default router;
