@@ -22,6 +22,10 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
 
     bytes32 public lastRequestedTxHash;
     address public lastRefundRecipient;
+    uint256 public baseCostReturn;
+    uint256 public expectedBaseCostGasPrice;
+    uint256 public expectedBaseCostGasLimit;
+    uint256 public expectedBaseCostGasPerPubdata;
 
     // Allow tests to toggle outcomes
     function setL1ToL2Failed(bytes32 txHash, bool failed) external {
@@ -30,6 +34,16 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
 
     function setInclusion(uint256 batch, uint256 index, bool ok) external {
         l2InclusionOk[batch][index] = ok;
+    }
+
+    function setBaseCostReturn(uint256 value) external {
+        baseCostReturn = value;
+    }
+
+    function expectBaseCostParams(uint256 gasPrice, uint256 gasLimit, uint256 gasPerPubdata) external {
+        expectedBaseCostGasPrice = gasPrice;
+        expectedBaseCostGasLimit = gasLimit;
+        expectedBaseCostGasPerPubdata = gasPerPubdata;
     }
 
     // --- Methods used by L1Bridge ---
@@ -70,6 +84,18 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
         bytes32[] calldata /*_proof*/
     ) external view returns (bool) {
         return l2InclusionOk[_batchNumber][_index];
+    }
+
+    function l2TransactionBaseCost(uint256 _l1GasPrice, uint256 _l2GasLimit, uint256 _l2GasPerPubdataByte)
+        external
+        view
+        returns (uint256)
+    {
+        // The gas price of zero is allowed as `forge test --zksync` sets it to zero
+        require(_l1GasPrice == expectedBaseCostGasPrice || _l1GasPrice == 0, "unexpected gas price");
+        require(_l2GasLimit == expectedBaseCostGasLimit, "unexpected gas limit");
+        require(_l2GasPerPubdataByte == expectedBaseCostGasPerPubdata, "unexpected gas per pubdata");
+        return baseCostReturn;
     }
 }
 
@@ -159,6 +185,14 @@ contract L1BridgeTest is Test {
         vm.prank(USER);
         vm.expectRevert(abi.encodeWithSelector(L1Bridge.ZeroAmount.selector));
         bridge.deposit(address(0x1), 0, 100, 1000, USER);
+    }
+
+    function test_Deposit_Revert_L2ReceiverZero() public {
+        vm.startPrank(USER);
+        token.approve(address(bridge), 1 ether);
+        vm.expectRevert(abi.encodeWithSelector(L1Bridge.ZeroAddress.selector));
+        bridge.deposit(address(0), 1 ether, 100, 1000, USER);
+        vm.stopPrank();
     }
 
     function test_Deposit_Revert_InsufficientBalance() public {
@@ -316,6 +350,31 @@ contract L1BridgeTest is Test {
         bytes memory bad = abi.encodePacked(bytes4(0xDEADBEEF), OTHER, uint256(1));
         vm.expectRevert(abi.encodeWithSelector(L1Bridge.InvalidSelector.selector, bytes4(0xDEADBEEF)));
         bridge.finalizeWithdrawal(1, 1, 1, bad, new bytes32[](0));
+    }
+
+    function test_QuoteL2BaseCost_UsesTxGasPrice() public {
+        uint256 gasLimit = 500_000;
+        uint256 gasPerPubdata = 800;
+        uint256 quotedValue = 123;
+        vm.txGasPrice(42 gwei);
+        mailbox.setBaseCostReturn(quotedValue);
+        mailbox.expectBaseCostParams(tx.gasprice, gasLimit, gasPerPubdata);
+
+        uint256 quote = bridge.quoteL2BaseCost(gasLimit, gasPerPubdata);
+
+        assertEq(quote, quotedValue, "returns quoted base cost from mailbox");
+    }
+
+    function test_QuoteL2BaseCostAtGasPrice() public {
+        uint256 gasLimit = 250_000;
+        uint256 gasPerPubdata = 900;
+        uint256 gasPrice = 15 gwei;
+        uint256 quotedValue = 456;
+        mailbox.setBaseCostReturn(quotedValue);
+        mailbox.expectBaseCostParams(gasPrice, gasLimit, gasPerPubdata);
+        uint256 quote = bridge.quoteL2BaseCostAtGasPrice(gasPrice, gasLimit, gasPerPubdata);
+
+        assertEq(quote, quotedValue, "returns mailbox quote");
     }
 
     function test_Pause_Gates_Functions() public {

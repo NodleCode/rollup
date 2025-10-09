@@ -101,6 +101,41 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
     }
 
     // =============================
+    // View helpers
+    // =============================
+
+    /**
+     * @notice Quotes the ETH required to cover the L2 execution cost for a deposit at the current tx.gasprice.
+     * @dev This is a convenience helper; the actual base cost is a function of the L1 gas price at inclusion time.
+     *      Frontends may prefer {quoteL2BaseCostAtGasPrice} for deterministic quoting.
+     * @param _l2TxGasLimit Maximum L2 gas the enqueued call can consume.
+     * @param _l2TxGasPerPubdataByte Gas per pubdata byte limit for the enqueued call.
+     * @return baseCost The ETH amount that needs to be supplied alongside {deposit}.
+     */
+    function quoteL2BaseCost(uint256 _l2TxGasLimit, uint256 _l2TxGasPerPubdataByte)
+        external
+        view
+        returns (uint256 baseCost)
+    {
+        baseCost = L1_MAILBOX.l2TransactionBaseCost(tx.gasprice, _l2TxGasLimit, _l2TxGasPerPubdataByte);
+    }
+
+    /**
+     * @notice Quotes the ETH required to cover the L2 execution cost for a deposit at a specified L1 gas price.
+     * @param _l1GasPrice The L1 gas price (wei) to use for the quote.
+     * @param _l2TxGasLimit Maximum L2 gas the enqueued call can consume.
+     * @param _l2TxGasPerPubdataByte Gas per pubdata byte limit for the enqueued call.
+     * @return baseCost The ETH amount that needs to be supplied alongside {deposit}.
+     */
+    function quoteL2BaseCostAtGasPrice(uint256 _l1GasPrice, uint256 _l2TxGasLimit, uint256 _l2TxGasPerPubdataByte)
+        external
+        view
+        returns (uint256 baseCost)
+    {
+        baseCost = L1_MAILBOX.l2TransactionBaseCost(_l1GasPrice, _l2TxGasLimit, _l2TxGasPerPubdataByte);
+    }
+
+    // =============================
     // External entrypoints
     // =============================
 
@@ -121,6 +156,9 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         uint256 _l2TxGasPerPubdataByte,
         address _refundRecipient
     ) public payable override whenNotPaused returns (bytes32 txHash) {
+        if (_l2Receiver == address(0)) {
+            revert ZeroAddress();
+        }
         if (_amount == 0) {
             revert ZeroAmount();
         }
@@ -203,7 +241,6 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         if (isWithdrawalFinalized[_l2BatchNumber][_l2MessageIndex]) {
             revert WithdrawalAlreadyFinalized();
         }
-        isWithdrawalFinalized[_l2BatchNumber][_l2MessageIndex] = true;
 
         (address l1Receiver, uint256 amount) = _parseL2WithdrawalMessage(_message);
         L2Message memory l2ToL1Message =
@@ -218,6 +255,9 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         if (!success) {
             revert InvalidProof();
         }
+
+        isWithdrawalFinalized[_l2BatchNumber][_l2MessageIndex] = true;
+
         L1_NODL.mint(l1Receiver, amount);
         emit WithdrawalFinalized(l1Receiver, _l2BatchNumber, _l2MessageIndex, _l2TxNumberInBatch, amount);
     }
