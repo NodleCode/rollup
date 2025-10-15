@@ -1,0 +1,677 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "ENS Handle Guard API",
+        "version": "1.0.0",
+        "description": "API for preventing duplicate social-handle claims for ENS profiles by combining an eventually-consistent indexer with a short-lived Redis reservation system.",
+        "contact": {
+            "name": "Nodle Protocol",
+            "url": "https://nodle.com"
+        },
+        "license": {
+            "name": "BSD-3-Clause",
+            "url": "https://opensource.org/licenses/BSD-3-Clause"
+        }
+    },
+    "servers": [
+        {
+            "url": "https://api.example.com",
+            "description": "Production server"
+        },
+        {
+            "url": "http://localhost:8080",
+            "description": "Development server"
+        }
+    ],
+    "paths": {
+        "/handles/validate": {
+            "post": {
+                "summary": "Validate and reserve a handle",
+                "description": "Validates a handle format and attempts to reserve it for a specific ENS name and owner. Returns a reservation if successful or conflict details if the handle is already taken or reserved.",
+                "operationId": "validateHandle",
+                "tags": [
+                    "Handle Management"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ValidateHandleRequest"
+                            },
+                            "example": {
+                                "handle": "@alice",
+                                "ensName": "alice.eth",
+                                "owner": "0x742DEA4F5F8Ca120B5c2B6C38C0CCE567e96B352",
+                                "signature": "0x1234...",
+                                "ttlSec": 300,
+                                "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Handle successfully reserved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidateHandleResponse"
+                                },
+                                "example": {
+                                    "status": "reserved",
+                                    "expiresInSec": 300,
+                                    "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                },
+                                "example": {
+                                    "error": "Handle must be at least 3 characters long"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Invalid signature",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                },
+                                "example": {
+                                    "error": "Invalid signature"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Handle already taken or reserved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConflictResponse"
+                                },
+                                "examples": {
+                                    "taken": {
+                                        "summary": "Handle already taken",
+                                        "value": {
+                                            "error": "Handle is already taken",
+                                            "status": "taken"
+                                        }
+                                    },
+                                    "reserved": {
+                                        "summary": "Handle already reserved",
+                                        "value": {
+                                            "error": "Handle is already reserved",
+                                            "status": "reserved",
+                                            "expiresInSec": 250
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/handles/confirm": {
+            "post": {
+                "summary": "Confirm handle reservation with transaction hash",
+                "description": "Confirms a handle reservation by providing the transaction hash of the on-chain text record update. Extends the reservation TTL and marks it as pending on-chain confirmation.",
+                "operationId": "confirmHandle",
+                "tags": [
+                    "Handle Management"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConfirmHandleRequest"
+                            },
+                            "example": {
+                                "handle": "@alice",
+                                "txHash": "0x8b4c78e5f8ca120b5c2b6c38c0cce567e96b352742dea4f5f8ca120b5c2b6c38",
+                                "owner": "0x742DEA4F5F8Ca120B5c2B6C38C0CCE567e96B352",
+                                "signature": "0x1234...",
+                                "extendTtlSec": 600
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Handle confirmation successful",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConfirmHandleResponse"
+                                },
+                                "example": {
+                                    "status": "pending_onchain",
+                                    "expiresInSec": 600
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Invalid signature",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Reservation not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                },
+                                "example": {
+                                    "error": "Reservation not found"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Not the owner of the reservation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                },
+                                "example": {
+                                    "error": "Not the owner of this reservation"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/handles/release": {
+            "post": {
+                "summary": "Release a handle reservation",
+                "description": "Releases a handle reservation, making it available for others to reserve.",
+                "operationId": "releaseHandle",
+                "tags": [
+                    "Handle Management"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReleaseHandleRequest"
+                            },
+                            "example": {
+                                "handle": "@alice",
+                                "owner": "0x742DEA4F5F8Ca120B5c2B6C38C0CCE567e96B352",
+                                "signature": "0x1234..."
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Handle successfully released",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReleaseHandleResponse"
+                                },
+                                "example": {
+                                    "status": "released"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Invalid signature",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Not the owner of the reservation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/handles/status": {
+            "get": {
+                "summary": "Get handle status",
+                "description": "Returns the current status of a handle - whether it's available, reserved, pending on-chain confirmation, or already taken.",
+                "operationId": "getHandleStatus",
+                "tags": [
+                    "Handle Management"
+                ],
+                "parameters": [
+                    {
+                        "name": "handle",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "@alice"
+                        },
+                        "description": "The handle to check status for"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Handle status retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HandleStatusResponse"
+                                },
+                                "examples": {
+                                    "available": {
+                                        "summary": "Handle is available",
+                                        "value": {
+                                            "status": "available"
+                                        }
+                                    },
+                                    "reserved": {
+                                        "summary": "Handle is reserved",
+                                        "value": {
+                                            "status": "reserved",
+                                            "expiresInSec": 250,
+                                            "reservation": {
+                                                "ensName": "alice.eth",
+                                                "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000",
+                                                "state": "reserved",
+                                                "createdAt": 1672531200
+                                            }
+                                        }
+                                    },
+                                    "taken": {
+                                        "summary": "Handle is already taken",
+                                        "value": {
+                                            "status": "taken",
+                                            "by": {
+                                                "ensName": "alice.eth",
+                                                "owner": "0x742DEA4F5F8Ca120B5c2B6C38C0CCE567e96B352"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid handle format",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "ValidateHandleRequest": {
+                "type": "object",
+                "required": [
+                    "handle",
+                    "ensName",
+                    "owner",
+                    "signature"
+                ],
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "The handle to validate and reserve (with or without @ prefix)",
+                        "example": "@alice",
+                        "pattern": "^@?[a-zA-Z0-9_]{3,30}$"
+                    },
+                    "ensName": {
+                        "type": "string",
+                        "description": "The ENS name that will be associated with this handle",
+                        "example": "alice.eth",
+                        "pattern": "^[a-z0-9-]+\\.eth$"
+                    },
+                    "owner": {
+                        "type": "string",
+                        "description": "Ethereum address of the ENS name owner",
+                        "example": "0x742DEA4F5F8Ca120B5c2B6C38C0CCE567e96B352",
+                        "pattern": "^0x[a-fA-F0-9]{40}$"
+                    },
+                    "signature": {
+                        "type": "string",
+                        "description": "EIP-712 signature proving ownership",
+                        "example": "0x1234567890abcdef...",
+                        "pattern": "^0x[a-fA-F0-9]+$"
+                    },
+                    "ttlSec": {
+                        "type": "integer",
+                        "description": "Reservation TTL in seconds (60-3600)",
+                        "minimum": 60,
+                        "maximum": 3600,
+                        "default": 300,
+                        "example": 300
+                    },
+                    "idempotencyKey": {
+                        "type": "string",
+                        "description": "Optional idempotency key for duplicate request handling",
+                        "example": "550e8400-e29b-41d4-a716-446655440000",
+                        "maxLength": 64
+                    }
+                }
+            },
+            "ValidateHandleResponse": {
+                "type": "object",
+                "required": [
+                    "status",
+                    "expiresInSec",
+                    "idempotencyKey"
+                ],
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "reserved"
+                        ],
+                        "description": "Reservation status"
+                    },
+                    "expiresInSec": {
+                        "type": "integer",
+                        "description": "Seconds until reservation expires",
+                        "example": 300
+                    },
+                    "idempotencyKey": {
+                        "type": "string",
+                        "description": "Idempotency key for this reservation",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    }
+                }
+            },
+            "ConfirmHandleRequest": {
+                "type": "object",
+                "required": [
+                    "handle",
+                    "txHash",
+                    "owner",
+                    "signature"
+                ],
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "The handle to confirm",
+                        "example": "@alice"
+                    },
+                    "txHash": {
+                        "type": "string",
+                        "description": "Transaction hash of the on-chain text record update",
+                        "example": "0x8b4c78e5f8ca120b5c2b6c38c0cce567e96b352742dea4f5f8ca120b5c2b6c38",
+                        "pattern": "^0x[a-fA-F0-9]{64}$"
+                    },
+                    "owner": {
+                        "type": "string",
+                        "description": "Ethereum address of the reservation owner",
+                        "example": "0x742DEA4F5F8Ca120B5c2B6C38C0CCE567e96B352",
+                        "pattern": "^0x[a-fA-F0-9]{40}$"
+                    },
+                    "signature": {
+                        "type": "string",
+                        "description": "EIP-712 signature proving ownership",
+                        "example": "0x1234567890abcdef...",
+                        "pattern": "^0x[a-fA-F0-9]+$"
+                    },
+                    "extendTtlSec": {
+                        "type": "integer",
+                        "description": "Extended TTL in seconds (300-7200)",
+                        "minimum": 300,
+                        "maximum": 7200,
+                        "default": 600,
+                        "example": 600
+                    }
+                }
+            },
+            "ConfirmHandleResponse": {
+                "type": "object",
+                "required": [
+                    "status",
+                    "expiresInSec"
+                ],
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "pending_onchain"
+                        ],
+                        "description": "Confirmation status"
+                    },
+                    "expiresInSec": {
+                        "type": "integer",
+                        "description": "Seconds until reservation expires",
+                        "example": 600
+                    }
+                }
+            },
+            "ReleaseHandleRequest": {
+                "type": "object",
+                "required": [
+                    "handle",
+                    "owner",
+                    "signature"
+                ],
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "The handle to release",
+                        "example": "@alice"
+                    },
+                    "owner": {
+                        "type": "string",
+                        "description": "Ethereum address of the reservation owner",
+                        "example": "0x742DEA4F5F8Ca120B5c2B6C38C0CCE567e96B352",
+                        "pattern": "^0x[a-fA-F0-9]{40}$"
+                    },
+                    "signature": {
+                        "type": "string",
+                        "description": "EIP-712 signature proving ownership",
+                        "example": "0x1234567890abcdef...",
+                        "pattern": "^0x[a-fA-F0-9]+$"
+                    }
+                }
+            },
+            "ReleaseHandleResponse": {
+                "type": "object",
+                "required": [
+                    "status"
+                ],
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "released"
+                        ],
+                        "description": "Release status"
+                    }
+                }
+            },
+            "HandleStatusResponse": {
+                "type": "object",
+                "required": [
+                    "status"
+                ],
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "available",
+                            "reserved",
+                            "pending_onchain",
+                            "taken"
+                        ],
+                        "description": "Current handle status"
+                    },
+                    "expiresInSec": {
+                        "type": "integer",
+                        "description": "Seconds until reservation expires (for reserved/pending_onchain status)",
+                        "example": 250
+                    },
+                    "by": {
+                        "type": "object",
+                        "description": "Owner information (for taken status)",
+                        "properties": {
+                            "ensName": {
+                                "type": "string",
+                                "example": "alice.eth"
+                            },
+                            "owner": {
+                                "type": "string",
+                                "example": "0x742DEA4F5F8Ca120B5c2B6C38C0CCE567e96B352"
+                            }
+                        }
+                    },
+                    "reservation": {
+                        "type": "object",
+                        "description": "Reservation details (for reserved/pending_onchain status)",
+                        "properties": {
+                            "ensName": {
+                                "type": "string",
+                                "example": "alice.eth"
+                            },
+                            "idempotencyKey": {
+                                "type": "string",
+                                "example": "550e8400-e29b-41d4-a716-446655440000"
+                            },
+                            "txHash": {
+                                "type": "string",
+                                "description": "Transaction hash (for pending_onchain status)",
+                                "example": "0x8b4c78e5f8ca120b5c2b6c38c0cce567e96b352742dea4f5f8ca120b5c2b6c38"
+                            },
+                            "state": {
+                                "type": "string",
+                                "enum": [
+                                    "reserved",
+                                    "pending_onchain"
+                                ]
+                            },
+                            "createdAt": {
+                                "type": "integer",
+                                "description": "Unix timestamp when reservation was created",
+                                "example": 1672531200
+                            }
+                        }
+                    }
+                }
+            },
+            "ErrorResponse": {
+                "type": "object",
+                "required": [
+                    "error"
+                ],
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "description": "Error message",
+                        "example": "Invalid handle format"
+                    }
+                }
+            },
+            "ConflictResponse": {
+                "type": "object",
+                "required": [
+                    "error",
+                    "status"
+                ],
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "description": "Error message",
+                        "example": "Handle is already taken"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "taken",
+                            "reserved"
+                        ],
+                        "description": "Conflict status"
+                    },
+                    "expiresInSec": {
+                        "type": "integer",
+                        "description": "Seconds until reservation expires (for reserved status)",
+                        "example": 250
+                    }
+                }
+            }
+        },
+        "securitySchemes": {
+            "EIP712Signature": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-Signature",
+                "description": "EIP-712 signature for request authentication"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Handle Management",
+            "description": "Operations for managing social handle reservations"
+        }
+    ]
+}

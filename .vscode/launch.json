@@ -1,0 +1,60 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Run Tests (yarn test)",
+            "cwd": "${workspaceFolder}/clk-gateway",
+            "runtimeExecutable": "yarn",
+            "runtimeArgs": [
+                "test",
+                "--testTimeout=1800000"
+            ],
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Tests (yarn test --runInBand)",
+            "cwd": "${workspaceFolder}/clk-gateway",
+            "runtimeExecutable": "yarn",
+            "runtimeArgs": [
+                "test",
+                "--runInBand",
+                "--no-coverage",
+                "--testTimeout=1800000"
+            ],
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Specific Test File",
+            "cwd": "${workspaceFolder}/clk-gateway",
+            "runtimeExecutable": "yarn",
+            "runtimeArgs": [
+                "test",
+                "--runInBand",
+                "--no-coverage",
+                "${relativeFile}"
+            ],
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen"
+        }
+    ]
+}

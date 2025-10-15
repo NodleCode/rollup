@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - handle-guard-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - REDIS_URL=redis://redis:6379
+      - INDEXER_URL=${INDEXER_URL:-https://indexer.nodleprotocol.io}
+      - HANDLE_RESERVE_TTL=${HANDLE_RESERVE_TTL:-300}
+      - HANDLE_CONFIRM_TTL=${HANDLE_CONFIRM_TTL:-900}
+      - RATE_LIMIT_PER_MIN=${RATE_LIMIT_PER_MIN:-60}
+      - L2_RPC_URL=${L2_RPC_URL}
+      - L1_RPC_URL=${L1_RPC_URL}
+      - L2_CHAIN_ID=${L2_CHAIN_ID}
+      - REGISTRAR_PRIVATE_KEY=${REGISTRAR_PRIVATE_KEY}
+      - DIAMOND_PROXY_ADDR=${DIAMOND_PROXY_ADDR}
+      - RESOLVER_ADDR=${RESOLVER_ADDR}
+      - CLICK_NS_ADDR=${CLICK_NS_ADDR}
+      - NODLE_NS_ADDR=${NODLE_NS_ADDR}
+      - CLICK_NS_DOMAIN=${CLICK_NS_DOMAIN}
+      - NODLE_NS_DOMAIN=${NODLE_NS_DOMAIN}
+      - PARENT_TLD=${PARENT_TLD}
+      - SERVICE_ACCOUNT_KEY=${SERVICE_ACCOUNT_KEY}
+      - SAFE_BATCH_QUERY_OFFSET=${SAFE_BATCH_QUERY_OFFSET}
+      - FEE_TOKEN_ADDR=${FEE_TOKEN_ADDR}
+      - GAS_LIMIT=${GAS_LIMIT}
+      - ZYFI_BASE_URL=${ZYFI_BASE_URL}
+      - ZYFI_SPONSORED=${ZYFI_SPONSORED}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - handle-guard-network
+    volumes:
+      - ./logs:/usr/src/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis_data:
+
+networks:
+  handle-guard-network:
+    driver: bridge

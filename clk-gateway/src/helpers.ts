@@ -1,47 +1,47 @@
-import admin from "firebase-admin";
-import { NextFunction, Request, Response } from "express";
 import {
-  toUtf8Bytes,
-  ErrorDescription,
-  keccak256,
   AbiCoder,
+  ErrorDescription,
   ethers,
+  keccak256,
+  toUtf8Bytes,
   verifyTypedData,
-} from "ethers";
-import {
-  CommitBatchInfo,
-  StoredBatchInfo as BatchInfo,
-  ZyfiSponsoredRequest,
-  ZyfiSponsoredResponse,
-  HttpError,
-} from "./types";
+} from "ethers"
+import { NextFunction, Request, Response } from "express"
+import admin from "firebase-admin"
+import { DecodedIdToken } from "firebase-admin/lib/auth/token-verifier"
+import { COMMIT_BATCH_INFO_ABI_STRING, STORED_BATCH_INFO_ABI_STRING, ZKSYNC_DIAMOND_INTERFACE } from "./interfaces"
 import {
   diamondAddress,
   diamondContract,
   l1Provider,
   l2Provider,
   nameServiceAddresses,
-} from "./setup";
-import { COMMIT_BATCH_INFO_ABI_STRING, STORED_BATCH_INFO_ABI_STRING, ZKSYNC_DIAMOND_INTERFACE } from "./interfaces";
-import { zyfiSponsoredUrl } from "./setup";
-import { DecodedIdToken } from "firebase-admin/lib/auth/token-verifier";
+  zyfiSponsoredUrl,
+} from "./setup"
+import {
+  StoredBatchInfo as BatchInfo,
+  CommitBatchInfo,
+  HttpError,
+  ZyfiSponsoredRequest,
+  ZyfiSponsoredResponse,
+} from "./types"
 
 export function toLengthPrefixedBytes(
   sub: string,
   domain: string,
   top: string
 ): Uint8Array {
-  const totalLength = sub.length + domain.length + top.length + 3;
-  const buffer = new Uint8Array(totalLength);
+  const totalLength = sub.length + domain.length + top.length + 3
+  const buffer = new Uint8Array(totalLength)
 
-  let offset = 0;
+  let offset = 0
   for (const part of [sub, domain, top]) {
-    buffer.set([part.length], offset);
-    buffer.set(toUtf8Bytes(part), offset + 1);
-    offset += part.length + 1;
+    buffer.set([part.length], offset)
+    buffer.set(toUtf8Bytes(part), offset + 1)
+    offset += part.length + 1
   }
 
-  return buffer;
+  return buffer
 }
 
 export function isParsableError(
@@ -53,16 +53,16 @@ export function isParsableError(
     "data" in error &&
     error.data &&
     (typeof error.data === "string" || error.data instanceof Uint8Array)
-  );
+  )
 }
 
 export type OffchainLookupArgs = {
-  sender: string;
-  urls: string[];
-  callData: string;
-  callbackFunction: string;
-  extraData: string;
-};
+  sender: string
+  urls: string[]
+  callData: string
+  callbackFunction: string
+  extraData: string
+}
 
 export function isOffchainLookupError(
   errorDisc: null | ErrorDescription
@@ -78,7 +78,7 @@ export function isOffchainLookupError(
     typeof errorDisc.args[2] === "string" &&
     typeof errorDisc.args[3] === "string" &&
     typeof errorDisc.args[4] === "string"
-  );
+  )
 }
 
 /** Parses the transaction where batch is committed and returns commit info */
@@ -86,27 +86,27 @@ export async function parseCommitTransaction(
   txHash: string,
   batchNumber: number
 ): Promise<{ commitBatchInfo: CommitBatchInfo; commitment: string }> {
-  const transactionData = await l1Provider.getTransaction(txHash);
+  const transactionData = await l1Provider.getTransaction(txHash)
 
   if (transactionData == undefined) {
-    throw new Error(`Transaction data for batch ${batchNumber} not found`);
+    throw new Error(`Transaction data for batch ${batchNumber} not found`)
   }
 
   const commitBatchesSharedBridge = ZKSYNC_DIAMOND_INTERFACE.decodeFunctionData(
     "commitBatchesSharedBridge",
     transactionData!.data
-  );
+  )
 
-  const [, , , commitData] = commitBatchesSharedBridge;
+  const [, , , commitData] = commitBatchesSharedBridge
 
   const { commitBatchInfos } =
-    decodeCommitData(commitData);
+    decodeCommitData(commitData)
 
   const batch = commitBatchInfos.find((batch: any) => {
-    return batch[0] === BigInt(batchNumber);
-  });
+    return batch[0] === BigInt(batchNumber)
+  })
   if (batch == undefined) {
-    throw new Error(`Batch ${batchNumber} not found in calldata`);
+    throw new Error(`Batch ${batchNumber} not found in calldata`)
   }
 
   const commitBatchInfo: CommitBatchInfo = {
@@ -120,39 +120,39 @@ export async function parseCommitTransaction(
     eventsQueueStateHash: batch[7],
     systemLogs: batch[8],
     totalL2ToL1Pubdata: batch[9],
-  };
+  }
 
-  const receipt = await l1Provider.getTransactionReceipt(txHash);
+  const receipt = await l1Provider.getTransactionReceipt(txHash)
   if (receipt == undefined) {
-    throw new Error(`Receipt for commit tx ${txHash} not found`);
+    throw new Error(`Receipt for commit tx ${txHash} not found`)
   }
 
   // Parse event logs of the transaction to find commitment
   const blockCommitFilter = ZKSYNC_DIAMOND_INTERFACE.encodeFilterTopics(
     "BlockCommit",
     [batchNumber]
-  );
+  )
   const commitLog = receipt.logs.find(
     (log) =>
       log.address === diamondAddress &&
       blockCommitFilter.every((topic, i) => topic === log.topics[i])
-  );
+  )
   if (commitLog == undefined) {
-    throw new Error(`Commit log for batch ${batchNumber} not found`);
+    throw new Error(`Commit log for batch ${batchNumber} not found`)
   }
 
   const { commitment } = ZKSYNC_DIAMOND_INTERFACE.decodeEventLog(
     "BlockCommit",
     commitLog.data,
     commitLog.topics
-  );
+  )
 
-  return { commitBatchInfo, commitment };
+  return { commitBatchInfo, commitment }
 }
 /** Returns logs root hash stored in L1 contract */
 export async function getL2LogsRootHash(batchNumber: number): Promise<string> {
-  const l2RootsHash = await diamondContract.l2LogsRootHash(batchNumber);
-  return String(l2RootsHash);
+  const l2RootsHash = await diamondContract.l2LogsRootHash(batchNumber)
+  return String(l2RootsHash)
 }
 
 /**
@@ -162,22 +162,22 @@ export async function getL2LogsRootHash(batchNumber: number): Promise<string> {
  */
 export async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
   const { commitTxHash, proveTxHash } =
-    await l2Provider.getL1BatchDetails(batchNumber);
+    await l2Provider.getL1BatchDetails(batchNumber)
 
   // If batch is not committed or proved, return null
   if (commitTxHash == undefined) {
-    throw new Error(`Batch ${batchNumber} is not committed`);
+    throw new Error(`Batch ${batchNumber} is not committed`)
   } else if (proveTxHash == undefined) {
-    throw new Error(`Batch ${batchNumber} is not proved`);
+    throw new Error(`Batch ${batchNumber} is not proved`)
   }
 
   // Parse commit calldata from commit transaction
   const { commitBatchInfo, commitment } = await parseCommitTransaction(
     commitTxHash,
     batchNumber
-  );
+  )
 
-  const l2LogsTreeRoot = await getL2LogsRootHash(batchNumber);
+  const l2LogsTreeRoot = await getL2LogsRootHash(batchNumber)
 
   const storedBatchInfo: BatchInfo = {
     batchNumber: commitBatchInfo.batchNumber,
@@ -188,14 +188,14 @@ export async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
     l2LogsTreeRoot,
     timestamp: commitBatchInfo.timestamp,
     commitment,
-  };
-  return storedBatchInfo;
+  }
+  return storedBatchInfo
 }
 
 export async function fetchZyfiSponsored(
   request: ZyfiSponsoredRequest
 ): Promise<ZyfiSponsoredResponse> {
-  console.log(`zyfiSponsoredUrl: ${zyfiSponsoredUrl}`);
+  console.log(`zyfiSponsoredUrl: ${zyfiSponsoredUrl}`)
   const response = await fetch(zyfiSponsoredUrl!, {
     method: "POST",
     headers: {
@@ -203,30 +203,30 @@ export async function fetchZyfiSponsored(
       "X-API-KEY": process.env.ZYFI_API_KEY!,
     },
     body: JSON.stringify(request),
-  });
+  })
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch zyfi sponsored`);
+    throw new Error(`Failed to fetch zyfi sponsored`)
   }
-  const sponsoredResponse = (await response.json()) as ZyfiSponsoredResponse;
+  const sponsoredResponse = (await response.json()) as ZyfiSponsoredResponse
 
-  return sponsoredResponse;
+  return sponsoredResponse
 }
 
 function decodeCommitData(commitData: string) {
   // Remove the version prefix (0x00)
-  const encodedDataWithoutVersion = commitData.slice(4);
+  const encodedDataWithoutVersion = commitData.slice(4)
 
   // Decode the data
   const decoded = AbiCoder.defaultAbiCoder().decode(
     [STORED_BATCH_INFO_ABI_STRING, `${COMMIT_BATCH_INFO_ABI_STRING}[]`],
     "0x" + encodedDataWithoutVersion
-  );
+  )
 
   return {
     storedBatchInfo: decoded[0],
     commitBatchInfos: decoded[1],
-  };
+  }
 }
 
 /**
@@ -235,17 +235,17 @@ function decodeCommitData(commitData: string) {
  * @returns
  */
 export function safeUtf8Decode(hexString: string): string {
-  let hex = hexString.startsWith("0x") ? hexString.slice(2) : hexString;
+  let hex = hexString.startsWith("0x") ? hexString.slice(2) : hexString
 
   // Look for the first occurrence of '00' (null byte)
   for (let i = 0; i < hex.length; i += 2) {
     if (hex.slice(i, i + 2) === "00") {
-      hex = hex.slice(0, i);
-      break;
+      hex = hex.slice(0, i)
+      break
     }
   }
 
-  return ethers.toUtf8String("0x" + hex);
+  return ethers.toUtf8String("0x" + hex)
 }
 
 /**
@@ -261,14 +261,14 @@ export function validateSignature({
   signature,
   expectedSigner,
 }: {
-  typedData: ReturnType<typeof buildTypedData>;
-  signature: string;
-  expectedSigner: string;
+  typedData: ReturnType<typeof buildTypedData>
+  signature: string
+  expectedSigner: string
 }) {
   try {
     if (typedData.types.EIP712Domain) {
       // @ts-ignore
-      delete typedData.types.EIP712Domain;
+      delete typedData.types.EIP712Domain
     }
 
     const signerAddress = verifyTypedData(
@@ -276,12 +276,15 @@ export function validateSignature({
       typedData.types,
       typedData.message,
       signature
-    );
+    )
 
-    return signerAddress.toLowerCase() === expectedSigner.toLowerCase();
+    return signerAddress.toLowerCase() === expectedSigner.toLowerCase()
   } catch (error) {
-    console.error("Signature validation error:", error);
-    return false;
+    // Only log unexpected errors, not signature validation failures
+    if (error instanceof Error && !error.message.includes('invalid v') && !error.message.includes('invalid signature')) {
+      console.error("Unexpected signature validation error:", error)
+    }
+    return false
   }
 }
 
@@ -295,10 +298,10 @@ export function validateSignature({
 export function getMessageHash(data: {
   name: string,
 }) {
-  const message = data;
-  const messageHash = keccak256(toUtf8Bytes(JSON.stringify(message)));
+  const message = data
+  const messageHash = keccak256(toUtf8Bytes(JSON.stringify(message)))
 
-  return messageHash;
+  return messageHash
 }
 
 /**
@@ -307,26 +310,26 @@ export function getMessageHash(data: {
  * @returns {DecodedIdToken} - The decoded token
 */
 export async function getDecodedToken(req: Request): Promise<DecodedIdToken> {
-  const authHeader = req.headers.authorization;
+  const authHeader = req.headers.authorization
   if (!authHeader) {
-    throw new HttpError("Authorization header is missing", 401);
+    throw new HttpError("Authorization header is missing", 401)
   }
-  const idToken = authHeader.split("Bearer ")[1];
+  const idToken = authHeader.split("Bearer ")[1]
   if (!idToken) {
-    throw new HttpError("Bearer token is missing", 401);
+    throw new HttpError("Bearer token is missing", 401)
   }
-  const decodedToken = await admin.auth().verifyIdToken(idToken, true);
+  const decodedToken = await admin.auth().verifyIdToken(idToken, true)
   if (!decodedToken.email_verified) {
-    throw new HttpError("Email not verified", 403);
+    throw new HttpError("Email not verified", 403)
   }
   if (decodedToken.subDomain) {
     throw new HttpError(
       "One subdomain already claimed with this email address",
       403
-    );
+    )
   }
 
-  return decodedToken;
+  return decodedToken
 }
 
 /**
@@ -337,15 +340,15 @@ export async function getDecodedToken(req: Request): Promise<DecodedIdToken> {
 export async function checkUserByEmail(req: Request): Promise<void> {
   const user = await admin.auth().getUserByEmail(req.body.email).catch(reason => {
     if (reason.code === "auth/user-not-found") {
-      return null;
+      return null
     }
-    throw new HttpError(reason.message, 403);
-  });
+    throw new HttpError(reason.message, 403)
+  })
   if (user?.customClaims?.subDomain) {
     throw new HttpError(
       "One subdomain already claimed with this email address",
       403
-    );
+    )
   }
 }
 
@@ -358,19 +361,19 @@ export const asyncHandler = (
 ) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await handler(req, res, next);
+      await handler(req, res, next)
     } catch (error) {
-      next(error);
+      next(error)
     }
-  };
-};
+  }
+}
 
 const defaultTypes = {
   Transaction: [
     { name: "name", type: "string" },
     { name: "email", type: "string" },
   ],
-};
+}
 export function buildTypedData(
   message: Record<string, string>,
   types: Record<string, { name: string; type: string }[]> = defaultTypes
@@ -380,7 +383,7 @@ export function buildTypedData(
     name: "Nodle Name Service",
     version: "1",
     chainId: Number(process.env.L2_CHAIN_ID!),
-  };
+  }
 
   const domainTypes = {
     EIP712Domain: [
@@ -388,11 +391,11 @@ export function buildTypedData(
       { name: "version", type: "string" },
       { name: "chainId", type: "uint256" },
     ],
-  };
+  }
 
-  const primaryType = Object.keys(types)?.[0] || "Transaction";
+  const primaryType = Object.keys(types)?.[0] || "Transaction"
 
-  return { types: { ...domainTypes, ...types }, domain, message, primaryType };
+  return { types: { ...domainTypes, ...types }, domain, message, primaryType }
 }
 
 /**
@@ -401,5 +404,5 @@ export function buildTypedData(
  * @returns {string} - The address of the Name Service
 */
 export function getNameServiceAddressByDomain(domain: "nodl" | "clk") {
-  return nameServiceAddresses[domain];
+  return nameServiceAddresses[domain]
 }
