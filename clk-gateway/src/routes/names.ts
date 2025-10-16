@@ -563,7 +563,7 @@ router.post(
       .isString()
       .isLength({ min: 4, max: 20 })
       .withMessage("Key must be between 4 and 20 characters")
-      .isIn(["com.twitter"])
+      .isIn(["com.twitter", "com.x"])
       .withMessage("Unsupported service"),
     body("handle")
       .isString()

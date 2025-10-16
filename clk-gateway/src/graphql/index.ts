@@ -5,12 +5,12 @@ export const FIND_HANDLE_OWNERSHIP = (
 ) => `
     query FindHandleOwnership {
         eNs(filter: {
-            name: {
+            completeName: {
             equalTo : "${name.toLowerCase()}"
             }
         }, first: 1) {
             nodes {
-                name
+                completeName
                 textRecords(filter: {
                     key: {
                         equalTo: "${service.toLowerCase()}"

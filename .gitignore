@@ -37,3 +37,20 @@ deployments-zk/
 
 artifacts-zk-1.4.1/
 cache_hardhat-zk/
+clk-gateway/coverage/clover.xml
+clk-gateway/coverage/coverage-final.json
+clk-gateway/coverage/lcov.info
+clk-gateway/coverage/lcov-report/base.css
+clk-gateway/coverage/lcov-report/block-navigation.js
+clk-gateway/coverage/lcov-report/favicon.png
+clk-gateway/coverage/lcov-report/index.html
+clk-gateway/coverage/lcov-report/prettify.css
+clk-gateway/coverage/lcov-report/prettify.js
+clk-gateway/coverage/lcov-report/sort-arrow-sprite.png
+clk-gateway/coverage/lcov-report/sorter.js
+clk-gateway/coverage/lcov-report/src/index.html
+clk-gateway/coverage/lcov-report/src/types.ts.html
+clk-gateway/coverage/lcov-report/src/graphql/index.html
+clk-gateway/coverage/lcov-report/src/graphql/index.ts.html
+clk-gateway/coverage/lcov-report/src/routes/index.html
+clk-gateway/coverage/lcov-report/src/routes/names.ts.html
