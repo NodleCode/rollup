@@ -1,4 +1,8 @@
-export const FIND_HANDLE_OWNERSHIP = (name: string, handle: string, service: string) => `
+export const FIND_HANDLE_OWNERSHIP = (
+  name: string,
+  handle: string,
+  service: string,
+) => `
     query FindHandleOwnership {
         eNs(filter: {
             name: {
@@ -23,19 +27,19 @@ export const FIND_HANDLE_OWNERSHIP = (name: string, handle: string, service: str
             }
         }
     }
-`
+`;
 export type FindHandleOwnershipResponse = {
-    data: {
-        eNs: {
-            nodes: {
-                name: string
-                textRecords: {
-                    nodes: {
-                        key: string
-                        value: string
-                    }[]
-                }
-            }[]
-        }
-    }
-} 
+  data: {
+    eNs: {
+      nodes: {
+        name: string;
+        textRecords: {
+          nodes: {
+            key: string;
+            value: string;
+          }[];
+        };
+      }[];
+    };
+  };
+};
