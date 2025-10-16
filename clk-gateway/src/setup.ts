@@ -60,7 +60,7 @@ const zyfiSponsoredUrl = process.env.ZYFI_BASE_URL
   : null
 
 // Redis setup
-const redisUrl = process.env.REDIS_URL || "redis://localhost:6379"
+const redisUrl = process.env.REDIS_URL || "redis://localhost:6380"
 const redisClient = createClient({
   url: redisUrl,
 })

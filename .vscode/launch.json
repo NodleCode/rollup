@@ -30,7 +30,7 @@
                 "test",
                 "--runInBand",
                 "--no-coverage",
-                "--testTimeout=1800000"
+                "--testTimeout=100000"
             ],
             "skipFiles": [
                 "<node_internals>/**"
@@ -49,6 +49,22 @@
                 "--runInBand",
                 "--no-coverage",
                 "${relativeFile}"
+            ],
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Run integration test script",
+            "cwd": "${workspaceFolder}/clk-gateway",
+            "runtimeExecutable": "yarn",
+            "runtimeArgs": [
+                "run",
+                "test:integration"
             ],
             "skipFiles": [
                 "<node_internals>/**"

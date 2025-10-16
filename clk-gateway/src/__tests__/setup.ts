@@ -1,7 +1,7 @@
 // Test environment setup
 process.env.NODE_ENV = 'test'
 process.env.PORT = '8080'
-process.env.REDIS_URL = 'redis://localhost:6379'
+process.env.REDIS_URL = 'redis://localhost:6380'
 process.env.INDEXER_URL = 'https://test-indexer.example.com'
 process.env.HANDLE_RESERVE_TTL = '300'
 process.env.HANDLE_CONFIRM_TTL = '900'

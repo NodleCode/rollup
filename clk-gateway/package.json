@@ -37,6 +37,7 @@
   "scripts": {
     "fmt": "prettier --write src/**/*.ts",
     "test": "jest",
+    "test:integration": "./scripts/test-integration.sh",
     "start": "ts-node src/index.ts",
     "dev": "nodemon src/index.ts",
     "build": "tsc",

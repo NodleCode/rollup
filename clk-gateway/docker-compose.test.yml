@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  redis-test:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # Use different port to avoid conflicts with main redis
+    command: redis-server --appendonly no --save ""  # Disable persistence for tests
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    tmpfs:
+      - /data  # Use tmpfs for faster testing
