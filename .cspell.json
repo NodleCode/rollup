@@ -57,6 +57,9 @@
     "NODLNS",
     "solhint",
     "mixedcase",
-    "Frontends"
+    "Frontends",
+    "testuser",
+    "testhandle",
+    "douglasacost"
   ]
 }
