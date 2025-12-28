@@ -495,6 +495,41 @@ const project: EthereumProject = {
         ],
       },
     },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 0, // TODO: Replace with actual L2Bridge deployment block
+      options: {
+        abi: "BridgeL2",
+        address: "0x0000000000000000000000000000000000000000", // TODO: Replace with actual L2Bridge address
+      },
+      assets: new Map([
+        [
+          "BridgeL2",
+          {
+            file: "./abis/BridgeL2.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleDepositFinalized",
+            filter: {
+              topics: ["DepositFinalized(address,address,uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleWithdrawalInitiated",
+            filter: {
+              topics: ["WithdrawalInitiated(address,address,uint256)"],
+            },
+          },
+        ],
+      },
+    },
   ],
 };
 

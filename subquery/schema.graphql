@@ -31,6 +31,10 @@ type Account @entity {
   name: String
   primaryName: String
   ENS: ENS @derivedFrom(field: "owner") @index
+  bridgeWithdrawalsAsL2Sender: [BridgeWithdrawal!]! @derivedFrom(field: "l2Sender")
+  bridgeWithdrawalsAsL1Receiver: [BridgeWithdrawal!]! @derivedFrom(field: "l1Receiver")
+  bridgeDepositsAsL1Sender: [BridgeDeposit!]! @derivedFrom(field: "l1Sender")
+  bridgeDepositsAsL2Receiver: [BridgeDeposit!]! @derivedFrom(field: "l2Receiver")
 }
 
 type Wallet @entity {
@@ -384,4 +388,31 @@ type TextRecord @entity {
   ens: ENS!
   key: String!
   value: String!
+}
+
+# Bridge
+
+type BridgeWithdrawal implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt! @index
+  l2Sender: Account! @index
+  l1Receiver: Account! @index
+  amount: BigInt!
+  hash: String @index
+  finalized: Boolean!
+  finalizedAt: BigInt
+  finalizedTransaction: Transaction
+}
+
+type BridgeDeposit implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt! @index
+  l1Sender: Account! @index
+  l2Receiver: Account! @index
+  amount: BigInt!
+  hash: String @index
 }

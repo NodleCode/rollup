@@ -9,3 +9,4 @@ export * from "./mappings/grants-migration";
 
 export * from "./mappings/rewards";
 export * from "./mappings/ens";
+export * from "./mappings/bridge";
