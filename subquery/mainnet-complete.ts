@@ -497,10 +497,10 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 0, // TODO: Replace with actual L2Bridge deployment block
+      startBlock: 65260492, // TODO: Replace with actual L2Bridge deployment block
       options: {
         abi: "BridgeL2",
-        address: "0x0000000000000000000000000000000000000000", // TODO: Replace with actual L2Bridge address
+        address: "0x2c1B65dA72d5Cf19b41dE6eDcCFB7DD83d1B529E",
       },
       assets: new Map([
         [
