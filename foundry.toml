@@ -8,3 +8,8 @@ solc = "0.8.26"
 
 # necessary as some of the zksync contracts are big
 via_ir = true
+
+remappings = [
+    "@openzeppelin/contracts-upgradeable/=lib/era-contracts/lib/openzeppelin-contracts-upgradeable-v4/contracts/",
+    "@openzeppelin/=lib/openzeppelin-contracts/"
+]

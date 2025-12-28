@@ -93,6 +93,7 @@ export const nodleContracts = [
   "0x9Fed2d216DBE36928613812400Fd1B812f118438",
   "0x999368030Ba79898E83EaAE0E49E89B7f6410940",
   "0x6FE81f2fDE5775355962B7F3CC9b0E1c83970E15", // vivendi
+  "0xaF4D027599D1d74844505d1Cb029be0e8EEd31bF", // BatchMintNFT proxy
 ].map((address) => address.toLowerCase());
 
 export const contractForSnapshot = [
