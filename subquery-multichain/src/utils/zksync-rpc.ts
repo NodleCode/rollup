@@ -57,13 +57,55 @@ async function rpcCall(
   );
 }
 
-/**
- * Get L2 transaction hash by batch number and transaction index
- * Follows the logic from the Python script:
- * 1. Get block range for the batch
- * 2. Iterate through blocks to find where the index lands
- * 3. Get the transaction hash by block number and relative index
- */
+/* Helper functions to get block transaction count and transaction by block number and index */
+export async function getBlockTransactionCountByNumber(
+  blockNumber: number,
+  rpcUrl: string
+): Promise<number> {
+  const blockHex = `0x${blockNumber.toString(16).toLowerCase()}`;
+  const txCountHex = await rpcCall("eth_getBlockTransactionCountByNumber", [blockHex], rpcUrl);
+  return parseInt(txCountHex, 16);
+}
+
+/* Helper function to get transaction by block number and index */
+export async function getTransactionByBlockNumberAndIndex(
+  blockNumber: number,
+  index: number,
+  rpcUrl: string
+): Promise<string | null> {
+  const blockHex = `0x${blockNumber.toString(16).toLowerCase()}`;
+  const indexHex = `0x${index.toString(16).toLowerCase()}`;
+
+  const tx = await rpcCall(
+    "eth_getTransactionByBlockNumberAndIndex",
+    [blockHex, indexHex],
+    rpcUrl
+  );
+  return tx?.hash || null;
+}
+
+/* Helper function to check if a block has transactions */
+export async function hasTransactions(
+  blockNumber: number,
+  rpcUrl: string
+): Promise<boolean> {
+  const txCount = await getBlockTransactionCountByNumber(blockNumber, rpcUrl);
+  return txCount > 0;
+}
+
+/* Helper function to get the transaction if the index is within the block */
+export async function getTransactionIfIndexIsWithinBlock(
+  blockNumber: number,
+  index: number,
+  rpcUrl: string
+): Promise<string | null> {
+  const txCount = await getBlockTransactionCountByNumber(blockNumber, rpcUrl);
+  if (index <= txCount) {
+    return getTransactionByBlockNumberAndIndex(blockNumber, index, rpcUrl);
+  }
+  return null;
+}
+
 export async function getL2TransactionHashByBatchAndIndex(
   batchNumber: number,
   txIndex: number,
@@ -111,141 +153,45 @@ export async function getL2TransactionHashByBatchAndIndex(
           possibleBlocksInRange.length
         } possible blocks first: ${possibleBlocksInRange.join(", ")}`
       );
-    }
 
-    let currentOffset = 0;
-    const checkedBlocks = new Set<number>();
-
-    // 2a. First, check possible blocks if provided
-    if (possibleBlocksInRange.length > 0) {
-      for (let blockNum = startBlock; blockNum <= endBlock; blockNum++) {
-        const blockHex = `0x${blockNum.toString(16).toLowerCase()}`;
-        const txCountHex = await rpcCall(
-          "eth_getBlockTransactionCountByNumber",
-          [blockHex],
-          rpcUrl,
-          retries
+      for (const blockNum of possibleBlocksInRange) {
+        const tx = await getTransactionIfIndexIsWithinBlock(
+          blockNum,
+          txIndex,
+          rpcUrl
         );
-        const txCount = parseInt(txCountHex, 16);
-
-        // If this is a possible block, check it first
-        if (possibleBlocksInRange.includes(blockNum)) {
-          logger.debug(
-            `Checking possible block ${blockNum} (${blockHex}): ${txCount} transactions, currentOffset: ${currentOffset}, targetIndex: ${txIndex}`
-          );
-
-          // Check if our target index falls within this block's range
-          if (currentOffset + txCount > txIndex) {
-            const relativeIndex = txIndex - currentOffset;
-            logger.info(
-              `Match found in possible L2 Block ${blockNum} (Hex: ${blockHex}), relative index: ${relativeIndex}`
-            );
-
-            // Fetch the specific transaction hash
-            const indexHex = `0x${relativeIndex.toString(16).toLowerCase()}`;
-            const tx = await rpcCall(
-              "eth_getTransactionByBlockNumberAndIndex",
-              [blockHex, indexHex],
-              rpcUrl,
-              retries
-            );
-
-            if (tx && tx.hash) {
-              logger.info(
-                `Found transaction hash: ${tx.hash} at possible block ${blockNum}, index ${relativeIndex}`
-              );
-              return tx.hash;
-            }
-          }
+        if (tx) {
+          return tx;
         }
-
-        currentOffset += txCount;
-        checkedBlocks.add(blockNum);
       }
-
-      // If found in possible blocks, we would have returned already
-      // Reset offset for normal iteration
-      currentOffset = 0;
     }
 
-    // 2b. If not found in possible blocks, continue with normal iteration
     for (let blockNum = startBlock; blockNum <= endBlock; blockNum++) {
-      if (checkedBlocks.has(blockNum)) {
-        // Skip already checked blocks, but update offset
-        const blockHex = `0x${blockNum.toString(16).toLowerCase()}`;
-        const txCountHex = await rpcCall(
-          "eth_getBlockTransactionCountByNumber",
-          [blockHex],
-          rpcUrl,
-          retries
-        );
-        const txCount = parseInt(txCountHex, 16);
-        currentOffset += txCount;
+      if (possibleBlocksInRange.includes(blockNum)) {
         continue;
       }
-      // Format block number as hex (same as Python's hex() function)
-      const blockHex = `0x${blockNum.toString(16)}`;
-
       // Get count of transactions in this specific block
-      const txCountHex = await rpcCall(
-        "eth_getBlockTransactionCountByNumber",
-        [blockHex],
-        rpcUrl,
-        retries
-      );
-      const txCount = parseInt(txCountHex, 16);
-
-      logger.debug(
-        `Block ${blockNum} (${blockHex}): ${txCount} transactions, currentOffset: ${currentOffset}, targetIndex: ${txIndex}`
-      );
+      const txCount = await getBlockTransactionCountByNumber(blockNum, rpcUrl);
 
       // Check if our target index falls within this block's range
-      if (currentOffset + txCount > txIndex) {
-        const relativeIndex = txIndex - currentOffset;
-        logger.info(
-          `Match found in L2 Block ${blockNum} (Hex: ${blockHex}), relative index: ${relativeIndex}`
+      if (txCount >= txIndex) {
+        const tx = await getTransactionIfIndexIsWithinBlock(
+          blockNum,
+          txIndex,
+          rpcUrl
         );
-
-        // 3. Fetch the specific transaction hash
-        // Format index as hex (same as Python's hex() function)
-        // Ensure lowercase hex like Python's hex() function
-        const indexHex = `0x${relativeIndex.toString(16).toLowerCase()}`;
-        logger.debug(
-          `Fetching transaction at block ${blockHex}, index ${indexHex} (relative: ${relativeIndex})`
-        );
-        const tx = await rpcCall(
-          "eth_getTransactionByBlockNumberAndIndex",
-          [blockHex, indexHex],
-          rpcUrl,
-          retries
-        );
-
-        if (tx && tx.hash) {
-          logger.info(
-            `Found transaction hash: ${tx.hash} at block ${blockNum}, index ${relativeIndex}`
-          );
-          return tx.hash;
-        } else {
-          logger.warn(
-            `Transaction not found at block ${blockNum}, index ${relativeIndex}. TX response: ${JSON.stringify(
-              tx
-            )}`
-          );
-          return null;
+        if (tx) {
+          return tx;
         }
       }
-
-      currentOffset += txCount;
     }
 
-    logger.warn(
-      `Transaction index ${txIndex} out of range for batch ${batchNumber}. Total transactions processed: ${currentOffset}`
-    );
     return null;
   } catch (error) {
     logger.warn(
       `Failed to get L2 transaction hash for batch ${batchNumber}, index ${txIndex}: ${error}`
     );
+
     return null;
   }
 }

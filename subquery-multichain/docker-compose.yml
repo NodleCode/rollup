@@ -94,9 +94,9 @@ services:
       postgres:
         condition: service_healthy
       subquery-node-ethereum:
-        condition: service_started
+        condition: service_healthy
       subquery-node-zksync:
-        condition: service_started
+        condition: service_healthy
     restart: always
     environment:
       DB_USER: postgres
@@ -114,4 +114,4 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 60s
