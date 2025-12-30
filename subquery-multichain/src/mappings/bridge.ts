@@ -10,32 +10,6 @@ import {
   WithdrawalInitiatedLog,
 } from "../types/abi-interfaces/BridgeL2Abi";
 
-const updateCacheValues = async (receiverId: string, blockNumber: number) => {
-  // set of blocknumbers from initiated withdrawals by receiver
-  let blockNumbers: Set<number> = await cache.get(receiverId);
-  if (blockNumbers) {
-    blockNumbers.add(blockNumber);
-  } else {
-    blockNumbers = new Set([blockNumber]);
-  }
-  await cache.set(receiverId, blockNumbers);
-};
-
-const removeBlockNumberFromCache = async (
-  receiverId: string,
-  blockNumber: number
-) => {
-  let blockNumbers: Set<number> = await cache.get(receiverId);
-  if (blockNumbers) {
-    blockNumbers.delete(blockNumber);
-  }
-  await cache.set(receiverId, blockNumbers);
-};
-
-const getCacheValues = async (receiverId: string) => {
-  return await cache.get(receiverId);
-};
-
 export async function handleDepositFinalized(
   event: DepositFinalizedLog
 ): Promise<void> {
@@ -170,7 +144,6 @@ export async function handleWithdrawalInitiated(
     withdrawal.save(),
     l2SenderAccount.save(),
     l1ReceiverAccount.save(),
-    updateCacheValues(l1ReceiverAccount.id, event.block.number),
   ]);
 }
 
@@ -270,14 +243,29 @@ export async function handleWithdrawalFinalized(
 
   // Get initiated withdrawals for this receiver
   // Query database directly to avoid SubQuery index validation issues
-  const blockNumbersSet = await getCacheValues(receiverAccount.id);
-  const blockNumbersToCheck: number[] = blockNumbersSet
-    ? Array.from(blockNumbersSet)
-    : [];
+  const entities = (await store.getByFields(
+    "BridgeWithdrawal",
+    [
+      ["l1_receiver_id" as keyof BridgeWithdrawal, "=", receiverAccount.id],
+      ["status", "=", "initiated"],
+    ],
+    {
+      limit: 100,
+    }
+  )) as BridgeWithdrawal[];
 
-  logger.error(
+  const blockNumbersToCheck = entities.map((entity) => ({
+    blockNumber: Number(entity.l2BlockNumber),
+    txHash: entity.l2TransactionHash,
+  }));
+
+  logger.info(
     `Will check ${blockNumbersToCheck.length} possible blocks first: ${
-      blockNumbersToCheck.length > 0 ? blockNumbersToCheck.join(", ") : "none"
+      blockNumbersToCheck.length > 0
+        ? blockNumbersToCheck
+            .map((block) => `${block.blockNumber}:${block.txHash}`)
+            .join(", ")
+        : "none"
     }`
   );
 
@@ -312,21 +300,8 @@ export async function handleWithdrawalFinalized(
   let withdrawal = await BridgeWithdrawal.get(withdrawalId);
 
   if (!withdrawal) {
-    // Create new withdrawal (edge case: L1 indexes before L2)
-    withdrawal = new BridgeWithdrawal(
-      withdrawalId,
-      emitter.id,
-      transaction.id,
-      timestamp,
-      receiverAccount.id, // l2Sender unknown, will be updated from L2 if available
-      receiverAccount.id, // l1Receiver
-      amount.toBigInt(),
-      l2TransactionHash || "", // l2TransactionHash
-      network,
-      "finalized", // status
-      BigInt(0) // l2BlockNumber - unknown when L1 indexes first, will be updated from L2 if available
-    );
-    withdrawal.hash = event.transaction.hash;
+    logger.error(`Withdrawal ${withdrawalId} not found`);
+    throw new Error(`Withdrawal ${withdrawalId} not found`);
   } else {
     // Update existing withdrawal with L1 finalization data
     withdrawal.l1ReceiverId = receiverAccount.id;
@@ -347,8 +322,6 @@ export async function handleWithdrawalFinalized(
 
   if (l2TransactionHash) {
     withdrawal.l2TransactionHash = l2TransactionHash;
-    // remove the block number from the cache
-    await removeBlockNumberFromCache(receiverAccount.id, event.block.number);
   }
 
   await Promise.all([withdrawal.save(), receiverAccount.save()]);

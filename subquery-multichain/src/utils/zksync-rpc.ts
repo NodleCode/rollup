@@ -75,7 +75,9 @@ export async function getTransactionByBlockNumberAndIndex(
 ): Promise<string | null> {
   const blockHex = `0x${blockNumber.toString(16).toLowerCase()}`;
   const indexHex = `0x${index.toString(16).toLowerCase()}`;
-
+  logger.info(
+    `Getting transaction by block number ${blockNumber} and index ${index}`
+  );
   const tx = await rpcCall(
     "eth_getTransactionByBlockNumberAndIndex",
     [blockHex, indexHex],
@@ -84,34 +86,15 @@ export async function getTransactionByBlockNumberAndIndex(
   return tx?.hash || null;
 }
 
-/* Helper function to check if a block has transactions */
-export async function hasTransactions(
-  blockNumber: number,
-  rpcUrl: string
-): Promise<boolean> {
-  const txCount = await getBlockTransactionCountByNumber(blockNumber, rpcUrl);
-  return txCount > 0;
-}
-
-/* Helper function to get the transaction if the index is within the block */
-export async function getTransactionIfIndexIsWithinBlock(
-  blockNumber: number,
-  index: number,
-  rpcUrl: string
-): Promise<string | null> {
-  const txCount = await getBlockTransactionCountByNumber(blockNumber, rpcUrl);
-  if (index <= txCount) {
-    return getTransactionByBlockNumberAndIndex(blockNumber, index, rpcUrl);
-  }
-  return null;
-}
-
 export async function getL2TransactionHashByBatchAndIndex(
   batchNumber: number,
   txIndex: number,
   rpcUrl: string,
   retries: number = 3,
-  possibleBlockNumbers: number[] = []
+  possibleBlockNumbers: {
+    blockNumber: number;
+    txHash: string;
+  }[] = []
 ): Promise<string | null> {
   try {
     logger.info(
@@ -144,47 +127,71 @@ export async function getL2TransactionHashByBatchAndIndex(
 
     // Filter possible blocks to only those within the batch range and sort them
     const possibleBlocksInRange = possibleBlockNumbers
-      .filter((blockNum) => blockNum >= startBlock && blockNum <= endBlock)
-      .sort((a, b) => a - b);
+      .filter(
+        (block) =>
+          block.blockNumber >= startBlock && block.blockNumber <= endBlock
+      )
+      .sort((a, b) => a.blockNumber - b.blockNumber);
 
     if (possibleBlocksInRange.length > 0) {
       logger.info(
         `Checking ${
           possibleBlocksInRange.length
-        } possible blocks first: ${possibleBlocksInRange.join(", ")}`
+        } possible blocks first: ${possibleBlocksInRange
+          .map((b) => b.blockNumber)
+          .join(", ")}`
       );
-
-      for (const blockNum of possibleBlocksInRange) {
-        const tx = await getTransactionIfIndexIsWithinBlock(
-          blockNum,
-          txIndex,
+      for (const block of possibleBlocksInRange) {
+        const txCount = await getBlockTransactionCountByNumber(
+          block.blockNumber,
           rpcUrl
         );
-        if (tx) {
-          return tx;
+        for (let i = 0; i < txCount; i++) {
+          const txHash = await getTransactionByBlockNumberAndIndex(
+            block.blockNumber,
+            i,
+            rpcUrl
+          );
+          if (txHash === block.txHash) {
+            logger.info(
+              `Found transaction hash ${txHash} in block ${block.blockNumber} at index ${i}`
+            );
+            return txHash;
+          }
         }
       }
     }
 
+    // If not found in possible blocks, continue with normal sequential search
+    let currentOffset = 0;
     for (let blockNum = startBlock; blockNum <= endBlock; blockNum++) {
-      if (possibleBlocksInRange.includes(blockNum)) {
-        continue;
-      }
       // Get count of transactions in this specific block
       const txCount = await getBlockTransactionCountByNumber(blockNum, rpcUrl);
 
       // Check if our target index falls within this block's range
-      if (txCount >= txIndex) {
-        const tx = await getTransactionIfIndexIsWithinBlock(
+      if (currentOffset + txCount > txIndex) {
+        const relativeIndex = txIndex - currentOffset;
+        logger.info(
+          `Checking block ${blockNum} at index ${txIndex} - ${currentOffset} = ${relativeIndex}`
+        );
+        const txHash = await getTransactionByBlockNumberAndIndex(
           blockNum,
-          txIndex,
+          relativeIndex,
           rpcUrl
         );
-        if (tx) {
-          return tx;
+        if (txHash) {
+          logger.info(
+            `Found transaction hash ${txHash} in block ${blockNum} at index ${relativeIndex}`
+          );
+          return txHash;
         }
       }
+      currentOffset += txCount;
     }
+
+    logger.warn(
+      `Transaction index ${txIndex} out of range for batch ${batchNumber}. Total transactions processed: ${currentOffset}`
+    );
 
     return null;
   } catch (error) {

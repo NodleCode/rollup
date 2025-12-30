@@ -53,8 +53,9 @@ describe("Bridge Mappings", () => {
 
   describe("handleWithdrawalFinalized (L1)", () => {
     it("should update existing withdrawal when finalized on L1", async () => {
-      const l2TxHash = "0x1111111111111111111111111111111111111111111111111111111111111111";
-      
+      const l2TxHash =
+        "0x1111111111111111111111111111111111111111111111111111111111111111";
+
       // Existing withdrawal created on L2 (dependency)
       const existingWithdrawal = {
         id: l2TxHash,
@@ -63,6 +64,7 @@ describe("Bridge Mappings", () => {
         l2TransactionHash: l2TxHash,
         amount: "500000000000000000",
         l2BlockNumber: "65260493",
+        l1ReceiverId: "0x2222222222222222222222222222222222222222", // Required for store.getByFields query
       };
 
       // Expected withdrawal after L1 finalization
@@ -73,6 +75,7 @@ describe("Bridge Mappings", () => {
         l2TransactionHash: l2TxHash,
         amount: "500000000000000000",
         l2BlockNumber: "65260493",
+        l1ReceiverId: "0x2222222222222222222222222222222222222222", // Required field
         batchNumber: "503366",
         messageIndex: "17",
         txNumberInBatch: "1025",
@@ -87,6 +90,10 @@ describe("Bridge Mappings", () => {
         "handleWithdrawalFinalized" // handler name
       );
     });
+
+    // Note: Testing error case where withdrawal is not found is complex
+    // because it requires mocking RPC calls and store.getByFields.
+    // This scenario should be handled in integration tests or E2E tests.
   });
 
   describe("handleDepositInitiated (L1)", () => {
