@@ -30,6 +30,14 @@ subquery/project.yaml
 subquery/mainnet*.yaml
 subquery/testnet*.yaml
 
+# Subquery-multichain files
+subquery-multichain/dist/
+subquery-multichain/.data/
+subquery-multichain/**/types/
+subquery-multichain/project.yaml
+subquery-multichain/mainnet*.yaml
+subquery-multichain/testnet*.yaml
+
 # ZKSync files
 artifacts-zk/
 cache-zk/

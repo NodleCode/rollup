@@ -1,0 +1,75 @@
+type Event @entity {
+  id: ID!
+  transaction: Transaction!
+  emitter: Account!
+  timestamp: BigInt!
+}
+
+type Account @entity {
+  id: ID!
+  timestamp: BigInt
+  balance: BigInt @index
+  bridgeWithdrawalsAsL2Sender: [BridgeWithdrawal!]!
+    @derivedFrom(field: "l2Sender")
+  bridgeWithdrawalsAsL1Receiver: [BridgeWithdrawal!]!
+    @derivedFrom(field: "l1Receiver")
+  bridgeDepositsAsL1Sender: [BridgeDeposit!]! @derivedFrom(field: "l1Sender")
+  bridgeDepositsAsL2Receiver: [BridgeDeposit!]!
+    @derivedFrom(field: "l2Receiver")
+  bridgeFailedDepositClaimsAsReceiver: [BridgeFailedDepositClaim!]!
+    @derivedFrom(field: "receiver")
+  events: [Event!]! @derivedFrom(field: "emitter")
+}
+
+type Transaction @entity {
+  id: ID!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  events: [Event!]! @derivedFrom(field: "transaction")
+}
+
+# Bridge
+
+type BridgeWithdrawal implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt! @index
+  l2Sender: Account! @index
+  l1Receiver: Account! @index
+  amount: BigInt!
+  hash: String
+  l2TransactionHash: String! @index
+  network: String!
+  status: String! @index
+  l2BlockNumber: BigInt! @index
+  batchNumber: BigInt
+  messageIndex: BigInt
+  txNumberInBatch: BigInt
+  finalizedAt: BigInt
+  finalizedTransaction: Transaction
+}
+
+type BridgeDeposit implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt! @index
+  l1Sender: Account! @index
+  l2Receiver: Account! @index
+  amount: BigInt!
+  hash: String @index
+  network: String! @index
+  l2DepositTxHash: String
+}
+
+type BridgeFailedDepositClaim implements Event @entity {
+  id: ID!
+  emitter: Account!
+  transaction: Transaction!
+  timestamp: BigInt! @index
+  receiver: Account! @index
+  amount: BigInt!
+  network: String! @index
+}
+

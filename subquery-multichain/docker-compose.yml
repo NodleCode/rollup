@@ -1,0 +1,117 @@
+version: "3"
+
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: ./docker/pg-Dockerfile
+    ports:
+      - 5432:5432
+    volumes:
+      - .data/postgres:/var/lib/postgresql/data
+      - ./docker/pg.conf:/usr/share/postgresql/postgresql.conf
+    command: ["postgres", "-c", "config_file=/usr/share/postgresql/postgresql.conf"]
+    environment:
+      POSTGRES_PASSWORD: postgres
+    shm_size: '1gb'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  subquery-node-ethereum:
+    image: subquerynetwork/subql-node-ethereum:latest
+    depends_on:
+      "postgres":
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_DATABASE: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+    volumes:
+      - ./:/app
+    command:
+      - -f=/app/project-ethereum.yaml
+      - --multi-chain
+      - --db-schema=bridge-multichain
+      - --workers=2
+      - --batch-size=20
+      - --unfinalized-blocks=false
+      - --unsafe
+      - --block-confirmations=8
+      - --timeout=3600
+      - --allow-schema-migration
+      - --proof-of-index=false
+      - --disable-historical
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://subquery-node-ethereum:3000/ready"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  subquery-node-zksync:
+    image: subquerynetwork/subql-node-ethereum:latest
+    depends_on:
+      "postgres":
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_DATABASE: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+    volumes:
+      - ./:/app
+    command:
+      - -f=/app/project-zksync.yaml
+      - --multi-chain
+      - --db-schema=bridge-multichain
+      - --workers=2
+      - --batch-size=20
+      - --unfinalized-blocks=false
+      - --unsafe
+      - --block-confirmations=0
+      - --timeout=3600
+      - --allow-schema-migration
+      - --proof-of-index=false
+      - --disable-historical
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://subquery-node-zksync:3000/ready"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  graphql-engine:
+    image: subquerynetwork/subql-query:latest
+    ports:
+      - 3000:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      subquery-node-ethereum:
+        condition: service_started
+      subquery-node-zksync:
+        condition: service_started
+    restart: always
+    environment:
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_DATABASE: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+    command:
+      - --name=bridge-multichain
+      - --playground
+      - --indexer=http://subquery-node-ethereum:3000,http://subquery-node-zksync:3000
+      - --db-schema=bridge-multichain
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
