@@ -21,22 +21,21 @@ export async function handleDepositFinalized(
   const timestamp = BigInt(event.block.timestamp) * BigInt(1000);
   const { l1Sender, l2Receiver, amount } = event.args;
 
-  const l1SenderAccount = await fetchAccount(l1Sender.toLowerCase(), timestamp);
-  const l2ReceiverAccount = await fetchAccount(
+  const senderAccount = await fetchAccount(l1Sender.toLowerCase(), timestamp);
+  const receiverAccount = await fetchAccount(
     l2Receiver.toLowerCase(),
     timestamp
   );
   const emitter = await fetchAccount(event.address.toLowerCase(), timestamp);
 
-  const transaction = await fetchTransaction(
+  const l2Transaction = await fetchTransaction(
     event.transaction.hash,
     timestamp,
     BigInt(event.block.number)
   );
 
-  // Use l2DepositTxHash as common ID between L1 and L2
-  // In L2, event.transaction.hash IS the l2DepositTxHash that was emitted in L1
-  const network = "zksync"; // L2 network
+  // Use l2TransactionHash as common ID between L1 and L2
+  // In L2, event.transaction.hash IS the l2TransactionHash that was emitted in L1
   const depositId = `deposit-${event.transaction.hash}`;
 
   // Try to find existing deposit from L1, or create new one
@@ -47,30 +46,28 @@ export async function handleDepositFinalized(
     deposit = new BridgeDeposit(
       depositId,
       emitter.id,
-      transaction.id,
+      l2Transaction.id,
       timestamp,
-      l1SenderAccount.id,
-      l2ReceiverAccount.id,
-      amount.toBigInt(),
-      network
+      senderAccount.id,
+      receiverAccount.id,
+      amount.toBigInt()
     );
+    deposit.l2TransactionId = l2Transaction.id;
+    deposit.l2TransactionHash = event.transaction.hash;
   } else {
     // Update existing deposit from L1 with L2 data
     // L2 data takes precedence for receiver and amount
-    deposit.l2ReceiverId = l2ReceiverAccount.id;
+    deposit.receiverId = receiverAccount.id;
     deposit.amount = amount.toBigInt();
     deposit.timestamp = timestamp;
-    deposit.transactionId = transaction.id;
+    deposit.transactionId = l2Transaction.id;
+    deposit.l2TransactionId = l2Transaction.id;
+    deposit.l2TransactionHash = event.transaction.hash;
   }
 
   deposit.hash = event.transaction.hash;
-  deposit.l2DepositTxHash = event.transaction.hash;
 
-  await Promise.all([
-    deposit.save(),
-    l1SenderAccount.save(),
-    l2ReceiverAccount.save(),
-  ]);
+  return deposit.save();
 }
 
 export async function handleWithdrawalInitiated(
@@ -84,67 +81,42 @@ export async function handleWithdrawalInitiated(
   const timestamp = BigInt(event.block.timestamp) * BigInt(1000);
   const { l2Sender, l1Receiver, amount } = event.args;
 
-  const l2SenderAccount = await fetchAccount(l2Sender.toLowerCase(), timestamp);
-  const l1ReceiverAccount = await fetchAccount(
+  const senderAccount = await fetchAccount(l2Sender.toLowerCase(), timestamp);
+  const receiverAccount = await fetchAccount(
     l1Receiver.toLowerCase(),
     timestamp
   );
   const emitter = await fetchAccount(event.address.toLowerCase(), timestamp);
 
-  const transaction = await fetchTransaction(
+  const l2Transaction = await fetchTransaction(
     event.transaction.hash,
     timestamp,
     BigInt(event.block.number)
   );
 
-  const network = "zksync"; // L2 network
-
   // ID is the L2 transaction hash (unique identifier from L2)
   const withdrawalId = event.transaction.hash;
   const l2TransactionHash = event.transaction.hash;
 
-  // Check if withdrawal already exists
-  let withdrawal = await BridgeWithdrawal.get(withdrawalId);
-
-  if (!withdrawal) {
-    withdrawal = new BridgeWithdrawal(
-      withdrawalId,
-      emitter.id,
-      transaction.id,
-      timestamp,
-      l2SenderAccount.id,
-      l1ReceiverAccount.id,
-      amount.toBigInt(),
-      l2TransactionHash,
-      network,
-      "initiated", // status
-      BigInt(event.block.number) // l2BlockNumber
-    );
-    withdrawal.hash = event.transaction.hash;
-  } else {
-    // Update existing withdrawal with latest L2 data
-    withdrawal.l2SenderId = l2SenderAccount.id;
-    withdrawal.l1ReceiverId = l1ReceiverAccount.id;
-    withdrawal.amount = amount.toBigInt();
-    withdrawal.timestamp = timestamp;
-    withdrawal.transactionId = transaction.id;
-    withdrawal.hash = event.transaction.hash;
-    withdrawal.l2TransactionHash = l2TransactionHash;
-    withdrawal.l2BlockNumber = BigInt(event.block.number);
-    // Keep status as is (don't override if already finalized)
-    if (withdrawal.status !== "finalized") {
-      withdrawal.status = "initiated";
-    }
-  }
+  const withdrawal = new BridgeWithdrawal(
+    withdrawalId,
+    emitter.id,
+    l2Transaction.id,
+    timestamp,
+    senderAccount.id,
+    receiverAccount.id,
+    amount.toBigInt(),
+    l2TransactionHash,
+    "initiated", // status
+    BigInt(event.block.number) // l2BlockNumber
+  );
+  withdrawal.hash = event.transaction.hash;
+  withdrawal.l2TransactionId = l2Transaction.id;
 
   // batchNumber and messageIndex are not available yet, will be set in L1 handler
   // Leave them as null
 
-  await Promise.all([
-    withdrawal.save(),
-    l2SenderAccount.save(),
-    l1ReceiverAccount.save(),
-  ]);
+  return withdrawal.save();
 }
 
 // L1 Bridge Handlers
@@ -165,18 +137,17 @@ export async function handleDepositInitiated(
   const timestamp = BigInt(event.block.timestamp) * BigInt(1000);
   const { l2DepositTxHash, from, to, amount } = event.args;
 
-  const fromAccount = await fetchAccount(from.toLowerCase(), timestamp);
-  const toAccount = await fetchAccount(to.toLowerCase(), timestamp);
+  const senderAccount = await fetchAccount(from.toLowerCase(), timestamp);
+  const receiverAccount = await fetchAccount(to.toLowerCase(), timestamp);
   const emitter = await fetchAccount(event.address.toLowerCase(), timestamp);
 
-  const transaction = await fetchTransaction(
+  const l1Transaction = await fetchTransaction(
     event.transaction.hash,
     timestamp,
     BigInt(event.block.number)
   );
 
-  // Use l2DepositTxHash as common ID between L1 and L2
-  const network = "ethereum"; // L1 network
+  // Use l2TransactionHash as common ID between L1 and L2
   const depositId = `deposit-${l2DepositTxHash}`;
 
   // Try to find existing deposit from L2, or create new one
@@ -187,26 +158,30 @@ export async function handleDepositInitiated(
     deposit = new BridgeDeposit(
       depositId,
       emitter.id,
-      transaction.id,
+      l1Transaction.id,
       timestamp,
-      fromAccount.id,
-      toAccount.id,
-      amount.toBigInt(),
-      network
+      senderAccount.id,
+      receiverAccount.id,
+      amount.toBigInt()
     );
+    deposit.l1TransactionId = l1Transaction.id;
+    deposit.l1TransactionHash = event.transaction.hash;
+    deposit.l2TransactionHash = l2DepositTxHash;
   } else {
     // Update existing deposit from L2 with L1 data
     // L1 data takes precedence for sender and amount
-    deposit.l1SenderId = fromAccount.id;
+    deposit.senderId = senderAccount.id;
     deposit.amount = amount.toBigInt();
     deposit.timestamp = timestamp;
-    deposit.transactionId = transaction.id;
+    deposit.transactionId = l1Transaction.id;
+    deposit.l1TransactionId = l1Transaction.id;
+    deposit.l1TransactionHash = event.transaction.hash;
+    deposit.l2TransactionHash = l2DepositTxHash;
   }
 
   deposit.hash = event.transaction.hash;
-  deposit.l2DepositTxHash = l2DepositTxHash;
 
-  await Promise.all([deposit.save(), fromAccount.save(), toAccount.save()]);
+  return deposit.save();
 }
 
 export async function handleWithdrawalFinalized(
@@ -227,15 +202,11 @@ export async function handleWithdrawalFinalized(
       : BigInt(txNumberInBatch);
 
   const receiverAccount = await fetchAccount(to.toLowerCase(), timestamp);
-  const emitter = await fetchAccount(event.address.toLowerCase(), timestamp);
-
-  const transaction = await fetchTransaction(
+  const l1Transaction = await fetchTransaction(
     event.transaction.hash,
     timestamp,
     BigInt(event.block.number)
   );
-
-  const network = "ethereum"; // L1 network
 
   // Get L2 transaction hash using zks_getL1BatchBlockRange and eth_getTransactionByBlockNumberAndIndex
   // Use batchNumber and txNumberInBatch (which is the transaction index in the batch) to find the L2 transaction hash
@@ -246,13 +217,22 @@ export async function handleWithdrawalFinalized(
   const entities = (await store.getByFields(
     "BridgeWithdrawal",
     [
-      ["l1_receiver_id" as keyof BridgeWithdrawal, "=", receiverAccount.id],
+      ["receiver_id" as keyof BridgeWithdrawal, "=", receiverAccount.id],
       ["status", "=", "initiated"],
     ],
     {
       limit: 100,
     }
   )) as BridgeWithdrawal[];
+
+  if (entities.length === 0) {
+    logger.error(
+      `No initiated withdrawals found for receiver ${receiverAccount.id}`
+    );
+    throw new Error(
+      `No initiated withdrawals found for receiver ${receiverAccount.id}`
+    );
+  }
 
   const blockNumbersToCheck = entities.map((entity) => ({
     blockNumber: Number(entity.l2BlockNumber),
@@ -302,29 +282,32 @@ export async function handleWithdrawalFinalized(
   if (!withdrawal) {
     logger.error(`Withdrawal ${withdrawalId} not found`);
     throw new Error(`Withdrawal ${withdrawalId} not found`);
-  } else {
-    // Update existing withdrawal with L1 finalization data
-    withdrawal.l1ReceiverId = receiverAccount.id;
-    withdrawal.amount = amount.toBigInt();
-    withdrawal.timestamp = timestamp;
-    withdrawal.transactionId = transaction.id;
-    withdrawal.hash = event.transaction.hash;
-    withdrawal.status = "finalized";
   }
+
+  // Update existing withdrawal with L1 finalization data
+  withdrawal.receiverId = receiverAccount.id;
+  withdrawal.amount = amount.toBigInt();
+  withdrawal.timestamp = timestamp;
+  withdrawal.transactionId = l1Transaction.id;
+  withdrawal.hash = event.transaction.hash;
+  withdrawal.status = "finalized";
 
   // Update batch details and finalization info
   withdrawal.batchNumber = batchNumber.toBigInt();
   withdrawal.messageIndex = messageIndex.toBigInt();
   withdrawal.txNumberInBatch = txNumberInBatchBigInt;
   withdrawal.finalizedAt = timestamp;
-  withdrawal.finalizedTransactionId = transaction.id;
-  withdrawal.network = network;
+  withdrawal.finalizedTransactionId = l1Transaction.id;
+  withdrawal.l1TransactionId = l1Transaction.id;
+  withdrawal.l1TransactionHash = event.transaction.hash;
 
   if (l2TransactionHash) {
     withdrawal.l2TransactionHash = l2TransactionHash;
+    // l2Transaction should have been set by handleWithdrawalInitiated
+    // If it wasn't, we keep the hash which is sufficient for reference
   }
 
-  await Promise.all([withdrawal.save(), receiverAccount.save()]);
+  return withdrawal.save();
 }
 
 export async function handleClaimedFailedDeposit(
@@ -347,8 +330,6 @@ export async function handleClaimedFailedDeposit(
     BigInt(event.block.number)
   );
 
-  const network = "ethereum"; // L1 network
-
   // ID is the transaction hash (unique identifier)
   const claimId = event.transaction.hash;
 
@@ -362,8 +343,7 @@ export async function handleClaimedFailedDeposit(
       transaction.id,
       timestamp,
       receiverAccount.id,
-      amount.toBigInt(),
-      network
+      amount.toBigInt()
     );
   } else {
     // Update existing claim with latest data
@@ -373,9 +353,5 @@ export async function handleClaimedFailedDeposit(
     failedDepositClaim.transactionId = transaction.id;
   }
 
-  await Promise.all([
-    failedDepositClaim.save(),
-    receiverAccount.save(),
-    transaction.save(),
-  ]);
+  return failedDepositClaim.save();
 }

@@ -25,6 +25,8 @@ services:
     depends_on:
       "postgres":
         condition: service_healthy
+      "subquery-node-zksync":
+        condition: service_healthy
     restart: unless-stopped
     environment:
       DB_USER: postgres
@@ -42,7 +44,7 @@ services:
       - --batch-size=20
       - --unfinalized-blocks=false
       - --unsafe
-      - --block-confirmations=8
+      - --block-confirmations=3
       - --timeout=3600
       - --allow-schema-migration
       - --proof-of-index=false
@@ -73,13 +75,11 @@ services:
       - --db-schema=bridge-multichain
       - --workers=2
       - --batch-size=20
-      - --unfinalized-blocks=false
+      - --unfinalized-blocks
       - --unsafe
-      - --block-confirmations=0
       - --timeout=3600
       - --allow-schema-migration
       - --proof-of-index=false
-      - --disable-historical
     healthcheck:
       test: ["CMD", "curl", "-f", "http://subquery-node-zksync:3000/ready"]
       interval: 3s

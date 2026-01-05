@@ -15,8 +15,7 @@ describe("Bridge Mappings", () => {
     it("should create a new BridgeDeposit when deposit is finalized on L2", async () => {
       const expectedDeposit = {
         id: "deposit-0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-        network: "zksync",
-        l2DepositTxHash: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        l2TransactionHash: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
         amount: "1000000000000000000",
       };
 
@@ -34,7 +33,6 @@ describe("Bridge Mappings", () => {
     it("should create a new BridgeWithdrawal when withdrawal is initiated on L2", async () => {
       const expectedWithdrawal = {
         id: "0x1111111111111111111111111111111111111111111111111111111111111111",
-        network: "zksync",
         status: "initiated",
         l2TransactionHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
         amount: "500000000000000000",
@@ -59,23 +57,21 @@ describe("Bridge Mappings", () => {
       // Existing withdrawal created on L2 (dependency)
       const existingWithdrawal = {
         id: l2TxHash,
-        network: "zksync",
         status: "initiated",
         l2TransactionHash: l2TxHash,
         amount: "500000000000000000",
         l2BlockNumber: "65260493",
-        l1ReceiverId: "0x2222222222222222222222222222222222222222", // Required for store.getByFields query
+        receiverId: "0x2222222222222222222222222222222222222222", // Required for store.getByFields query
       };
 
       // Expected withdrawal after L1 finalization
       const expectedWithdrawal = {
         id: l2TxHash,
-        network: "ethereum",
         status: "finalized",
         l2TransactionHash: l2TxHash,
         amount: "500000000000000000",
         l2BlockNumber: "65260493",
-        l1ReceiverId: "0x2222222222222222222222222222222222222222", // Required field
+        receiverId: "0x2222222222222222222222222222222222222222", // Required field
         batchNumber: "503366",
         messageIndex: "17",
         txNumberInBatch: "1025",
@@ -100,7 +96,6 @@ describe("Bridge Mappings", () => {
     it("should create a new BridgeDeposit when deposit is initiated on L1", async () => {
       const expectedDeposit = {
         id: "deposit-0x4444444444444444444444444444444444444444444444444444444444444444",
-        network: "ethereum",
         amount: "2000000000000000000",
       };
 
@@ -118,7 +113,6 @@ describe("Bridge Mappings", () => {
     it("should create a new BridgeFailedDepositClaim when failed deposit is claimed", async () => {
       const expectedClaim = {
         id: "0x5555555555555555555555555555555555555555555555555555555555555555",
-        network: "ethereum",
         amount: "1500000000000000000",
       };
 
