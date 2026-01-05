@@ -43,6 +43,7 @@ services:
       - --workers=2
       - --batch-size=20
       - --unfinalized-blocks
+      - --block-confirmations=3
       - --unsafe
       - --timeout=3600
       - --proof-of-index=false
