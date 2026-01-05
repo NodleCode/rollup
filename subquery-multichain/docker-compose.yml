@@ -78,7 +78,6 @@ services:
       - --unfinalized-blocks
       - --unsafe
       - --timeout=3600
-      - --allow-schema-migration
       - --proof-of-index=false
     healthcheck:
       test: ["CMD", "curl", "-f", "http://subquery-node-zksync:3000/ready"]
