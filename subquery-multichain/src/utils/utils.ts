@@ -1,4 +1,4 @@
-import { Account, Transaction } from "../types";
+import { Account } from "../types";
 
 export async function fetchAccount(
   address: string,
@@ -16,20 +16,3 @@ export async function fetchAccount(
 
   return account;
 }
-
-export const fetchTransaction = async (
-  txHash: string,
-  timestamp: bigint,
-  blocknumber: bigint
-): Promise<Transaction> => {
-  const tx = await Transaction.get(txHash);
-
-  if (!tx) {
-    const newTx = new Transaction(txHash, timestamp, blocknumber);
-    newTx.save();
-
-    return newTx;
-  }
-
-  return tx;
-};
