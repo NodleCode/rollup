@@ -1,7 +1,108 @@
 import fetch from "node-fetch";
 
+const RETRY_URL = "https://mainnet.era.zksync.io";
+
+/**
+ * Check if an error is a rate limit error
+ */
+function isRateLimitError(error: Error | string): boolean {
+  const errorMessage = error instanceof Error ? error.message : error;
+  const lowerMessage = errorMessage.toLowerCase();
+
+  return (
+    lowerMessage.includes("rate limit") ||
+    lowerMessage.includes("too many requests") ||
+    lowerMessage.includes("429") ||
+    lowerMessage.includes("quota exceeded") ||
+    lowerMessage.includes("too many rpc calls")
+  );
+}
+
+/**
+ * Make an RPC request with retry logic and automatic URL fallback on rate limit errors
+ * Handles retries, rate limit detection, and URL switching internally
+ */
+async function makeRpcRequest(
+  rpcUrl: string,
+  payload: any,
+  retries: number = 3,
+  context: string = "RPC call"
+): Promise<any> {
+  let lastError: Error | null = null;
+  let currentUrl = rpcUrl;
+  let switchedUrl = false;
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(currentUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const responseData = await response.json();
+
+      // Check for RPC errors in response
+      if (responseData?.error) {
+        const errorMessage =
+          responseData.error.message || JSON.stringify(responseData.error);
+        const error = new Error(`RPC error: ${errorMessage}`);
+
+        // Handle rate limit error - switch to RETRY_URL
+        if (
+          isRateLimitError(errorMessage) &&
+          !switchedUrl &&
+          currentUrl !== RETRY_URL
+        ) {
+          logger.warn(
+            `Rate limit detected in ${context}, switching to fallback URL: ${RETRY_URL}`
+          );
+          currentUrl = RETRY_URL;
+          switchedUrl = true;
+          continue; // Retry immediately with new URL
+        }
+
+        throw error;
+      }
+
+      return responseData;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Handle rate limit error - switch to RETRY_URL
+      if (
+        isRateLimitError(lastError) &&
+        !switchedUrl &&
+        currentUrl !== RETRY_URL
+      ) {
+        logger.warn(
+          `Rate limit detected in ${context}, switching to fallback URL: ${RETRY_URL}`
+        );
+        currentUrl = RETRY_URL;
+        switchedUrl = true;
+        continue; // Retry immediately with new URL (no delay)
+      }
+
+      // For other errors, wait before retrying
+      if (attempt < retries) {
+        logger.warn(
+          `Attempt ${attempt}/${retries} failed for ${context}, retrying...`
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.pow(2, attempt - 1) * 1000)
+        );
+      }
+    }
+  }
+
+  throw lastError || new Error(`Failed ${context} after ${retries} attempts`);
+}
+
 /**
  * Helper function to make RPC calls with retries
+ * Retry logic and URL fallback are handled by makeRpcRequest
  */
 async function rpcCall(
   method: string,
@@ -9,117 +110,61 @@ async function rpcCall(
   rpcUrl: string,
   retries: number = 3
 ): Promise<any> {
-  let lastError: Error | null = null;
+  const payload = {
+    jsonrpc: "2.0",
+    method: method,
+    params: params,
+    id: 1,
+  };
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const payload = {
-        jsonrpc: "2.0",
-        method: method,
-        params: params,
-        id: 1,
-      };
-
-      const response = await fetch(rpcUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const responseData = await response.json();
-
-      if (responseData?.error) {
-        throw new Error(
-          `RPC error: ${
-            responseData.error.message || JSON.stringify(responseData.error)
-          }`
-        );
-      }
-
-      return responseData?.result;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt < retries) {
-        logger.warn(
-          `Attempt ${attempt}/${retries} failed for RPC call ${method}, retrying...`
-        );
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.pow(2, attempt - 1) * 1000)
-        );
-      }
-    }
-  }
-
-  throw (
-    lastError || new Error(`Failed to call ${method} after ${retries} attempts`)
+  const responseData = await makeRpcRequest(
+    rpcUrl,
+    payload,
+    retries,
+    `RPC call ${method}`
   );
+
+  return responseData?.result;
 }
 
 /**
  * Helper function to make batch RPC calls
  * Accepts an array of requests and returns an array of results in the same order
+ * Retry logic and URL fallback are handled by makeRpcRequest
  */
 async function rpcBatchCall(
   requests: Array<{ method: string; params: any[] }>,
   rpcUrl: string,
   retries: number = 3
 ): Promise<any[]> {
-  let lastError: Error | null = null;
+  const payload = requests.map((req, index) => ({
+    jsonrpc: "2.0",
+    method: req.method,
+    params: req.params,
+    id: index + 1,
+  }));
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const payload = requests.map((req, index) => ({
-        jsonrpc: "2.0",
-        method: req.method,
-        params: req.params,
-        id: index + 1,
-      }));
+  const responseData = await makeRpcRequest(
+    rpcUrl,
+    payload,
+    retries,
+    "RPC batch call"
+  );
 
-      const response = await fetch(rpcUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+  // Handle both single response object and array of responses
+  const responses = Array.isArray(responseData) ? responseData : [responseData];
 
-      const responseData = await response.json();
-
-      // Handle both single response object and array of responses
-      const responses = Array.isArray(responseData) ? responseData : [responseData];
-
-      // Check for errors in any response
-      for (const resp of responses) {
-        if (resp?.error) {
-          throw new Error(
-            `RPC batch error: ${
-              resp.error.message || JSON.stringify(resp.error)
-            }`
-          );
-        }
-      }
-
-      // Sort responses by id to maintain order
-      const sortedResponses = responses.sort((a, b) => (a.id || 0) - (b.id || 0));
-      return sortedResponses.map((resp) => resp.result);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt < retries) {
-        logger.warn(
-          `Attempt ${attempt}/${retries} failed for RPC batch call, retrying...`
-        );
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.pow(2, attempt - 1) * 1000)
-        );
-      }
+  // Check for errors in any response (shouldn't happen after makeRpcRequest, but double-check)
+  for (const resp of responses) {
+    if (resp?.error) {
+      const errorMessage = resp.error.message || JSON.stringify(resp.error);
+      throw new Error(`RPC batch error: ${errorMessage}`);
     }
   }
 
-  throw (
-    lastError || new Error(`Failed to call batch RPC after ${retries} attempts`)
-  );
+  // Sort responses by id to maintain order
+  const sortedResponses = responses.sort((a, b) => (a.id || 0) - (b.id || 0));
+  return sortedResponses.map((resp) => resp.result);
 }
 
 /* Helper functions to get block transaction count and transaction by block number and index */
@@ -128,7 +173,11 @@ export async function getBlockTransactionCountByNumber(
   rpcUrl: string
 ): Promise<number> {
   const blockHex = `0x${blockNumber.toString(16).toLowerCase()}`;
-  const txCountHex = await rpcCall("eth_getBlockTransactionCountByNumber", [blockHex], rpcUrl);
+  const txCountHex = await rpcCall(
+    "eth_getBlockTransactionCountByNumber",
+    [blockHex],
+    rpcUrl
+  );
   return parseInt(txCountHex, 16);
 }
 
@@ -136,6 +185,7 @@ export async function getBlockTransactionCountByNumber(
  * Get transaction counts for multiple blocks in batch RPC calls
  * This is much more efficient than calling getBlockTransactionCountByNumber multiple times
  * Splits into chunks to avoid RPC provider limits (typically 100-200 requests per batch)
+ * If rate limit error occurs, switches to RETRY_URL for subsequent chunks
  */
 export async function getBlockTransactionCountsByNumbers(
   blockNumbers: number[],
@@ -147,6 +197,7 @@ export async function getBlockTransactionCountsByNumbers(
   }
 
   const results: number[] = [];
+  let currentUrl = rpcUrl;
 
   // Split into chunks to avoid RPC provider limits
   for (let i = 0; i < blockNumbers.length; i += chunkSize) {
@@ -159,11 +210,34 @@ export async function getBlockTransactionCountsByNumbers(
       };
     });
 
-    const chunkResults = await rpcBatchCall(requests, rpcUrl);
-    const parsedResults = chunkResults.map((txCountHex: string) =>
-      parseInt(txCountHex, 16)
-    );
-    results.push(...parsedResults);
+    try {
+      const chunkResults = await rpcBatchCall(requests, currentUrl);
+      const parsedResults = chunkResults.map((txCountHex: string) =>
+        parseInt(txCountHex, 16)
+      );
+      results.push(...parsedResults);
+    } catch (error) {
+      // If rate limit error and we haven't switched yet, switch URL and retry this chunk
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
+      if (isRateLimitError(errorObj) && currentUrl !== RETRY_URL) {
+        logger.warn(
+          `Rate limit detected in chunk ${
+            i / chunkSize + 1
+          }, switching to fallback URL for remaining chunks`
+        );
+        currentUrl = RETRY_URL;
+        // Retry this chunk with new URL
+        const chunkResults = await rpcBatchCall(requests, currentUrl);
+        const parsedResults = chunkResults.map((txCountHex: string) =>
+          parseInt(txCountHex, 16)
+        );
+        results.push(...parsedResults);
+      } else {
+        // Re-throw if it's not a rate limit or we already switched
+        throw error;
+      }
+    }
   }
 
   return results;
