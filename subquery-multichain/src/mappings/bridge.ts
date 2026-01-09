@@ -19,13 +19,6 @@ export async function handleDepositFinalized(
   }
 
   const timestamp = BigInt(event.block.timestamp) * BigInt(1000);
-  const { l1Sender, l2Receiver, amount } = event.args;
-
-  const senderAccount = await fetchAccount(l1Sender.toLowerCase(), timestamp);
-  const receiverAccount = await fetchAccount(
-    l2Receiver.toLowerCase(),
-    timestamp
-  );
 
   // Use l2TransactionHash as common ID between L1 and L2
   // In L2, event.transaction.hash IS the l2TransactionHash that was emitted in L1
@@ -35,22 +28,13 @@ export async function handleDepositFinalized(
   let deposit = await BridgeDeposit.get(depositId);
 
   if (!deposit) {
-    // Create new deposit if not found from L1
-    deposit = new BridgeDeposit(
-      depositId,
-      timestamp,
-      senderAccount.id,
-      receiverAccount.id,
-      amount.toBigInt()
-    );
-    deposit.l2TransactionHash = event.transaction.hash;
+    throw new Error(`Deposit ${depositId} not found`);
   } else {
     // Update existing deposit from L1 with L2 data
     // L2 data takes precedence for receiver and amount
-    deposit.receiverId = receiverAccount.id;
-    deposit.amount = amount.toBigInt();
-    deposit.timestamp = timestamp;
     deposit.l2TransactionHash = event.transaction.hash;
+    deposit.status = "finalized";
+    deposit.finalizedAt = timestamp;
   }
 
   return deposit.save();
@@ -121,24 +105,16 @@ export async function handleDepositInitiated(
   // Try to find existing deposit from L2, or create new one
   let deposit = await BridgeDeposit.get(depositId);
 
-  if (!deposit) {
-    // Create new deposit if not found from L2
-    deposit = new BridgeDeposit(
-      depositId,
-      timestamp,
-      senderAccount.id,
-      receiverAccount.id,
-      amount.toBigInt()
-    );
-    deposit.l1TransactionHash = event.transaction.hash;
-  } else {
-    // Update existing deposit from L2 with L1 data
-    // L1 data takes precedence for sender and amount
-    deposit.senderId = senderAccount.id;
-    deposit.amount = amount.toBigInt();
-    deposit.timestamp = timestamp;
-    deposit.l1TransactionHash = event.transaction.hash;
-  }
+  // Create new deposit if not found from L2
+  deposit = new BridgeDeposit(
+    depositId,
+    timestamp,
+    senderAccount.id,
+    receiverAccount.id,
+    amount.toBigInt(),
+    event.transaction.hash,
+    "initiated"
+  );
 
   return deposit.save();
 }
@@ -267,19 +243,12 @@ export async function handleClaimedFailedDeposit(
   // Check if claim already exists
   let failedDepositClaim = await BridgeFailedDepositClaim.get(claimId);
 
-  if (!failedDepositClaim) {
-    failedDepositClaim = new BridgeFailedDepositClaim(
-      claimId,
-      timestamp,
-      receiverAccount.id,
-      amount.toBigInt()
-    );
-  } else {
-    // Update existing claim with latest data
-    failedDepositClaim.receiverId = receiverAccount.id;
-    failedDepositClaim.amount = amount.toBigInt();
-    failedDepositClaim.timestamp = timestamp;
-  }
+  failedDepositClaim = new BridgeFailedDepositClaim(
+    claimId,
+    timestamp,
+    receiverAccount.id,
+    amount.toBigInt()
+  );
 
   return failedDepositClaim.save();
 }

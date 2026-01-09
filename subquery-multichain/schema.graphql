@@ -35,8 +35,10 @@ type BridgeDeposit @entity {
   sender: Account! @index
   receiver: Account! @index
   amount: BigInt!
-  l1TransactionHash: String @index
+  l1TransactionHash: String! @index
   l2TransactionHash: String @index
+  status: String! @index
+  finalizedAt: BigInt
 }
 
 type BridgeFailedDepositClaim @entity {
