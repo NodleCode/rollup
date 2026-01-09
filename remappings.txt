@@ -1,1 +1,2 @@
 @openzeppelin=lib/openzeppelin-contracts/
+@openzeppelin/contracts-upgradeable/=lib/era-contracts/lib/openzeppelin-contracts-upgradeable-v4/contracts/

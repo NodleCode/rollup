@@ -385,6 +385,34 @@ const project: EthereumProject = {
     },
     {
       kind: EthereumDatasourceKind.Runtime,
+      startBlock: 67286803, // This is the block that the contract was deployed on
+      options: {
+        abi: "ClickContentSign",
+        address: "0xaF4D027599D1d74844505d1Cb029be0e8EEd31bF",
+      },
+      assets: new Map([
+        [
+          "ClickContentSign",
+          {
+            file: "./abis/ClickContentSign.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleTransfer",
+            filter: {
+              topics: ["Transfer(address from,address to,uint256 tokenId)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
       startBlock: 51533910, // This is the block that the contract was deployed on
       options: {
         abi: "ENS",
@@ -462,6 +490,41 @@ const project: EthereumProject = {
             handler: "handleENSTextRecord",
             filter: {
               topics: ["TextRecordSet(uint256,string,string)"],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: EthereumDatasourceKind.Runtime,
+      startBlock: 65260492, // TODO: Replace with actual L2Bridge deployment block
+      options: {
+        abi: "BridgeL2",
+        address: "0x2c1B65dA72d5Cf19b41dE6eDcCFB7DD83d1B529E",
+      },
+      assets: new Map([
+        [
+          "BridgeL2",
+          {
+            file: "./abis/BridgeL2.abi.json",
+          },
+        ],
+      ]),
+      mapping: {
+        file: "./dist/index.js",
+        handlers: [
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleDepositFinalized",
+            filter: {
+              topics: ["DepositFinalized(address,address,uint256)"],
+            },
+          },
+          {
+            kind: EthereumHandlerKind.Event,
+            handler: "handleWithdrawalInitiated",
+            filter: {
+              topics: ["WithdrawalInitiated(address,address,uint256)"],
             },
           },
         ],

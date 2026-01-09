@@ -1,0 +1,49 @@
+type Account @entity {
+  id: ID!
+  timestamp: BigInt
+  balance: BigInt @index
+  bridgeWithdrawalsAsSender: [BridgeWithdrawal!]! @derivedFrom(field: "sender")
+  bridgeWithdrawalsAsReceiver: [BridgeWithdrawal!]!
+    @derivedFrom(field: "receiver")
+  bridgeDepositsAsSender: [BridgeDeposit!]! @derivedFrom(field: "sender")
+  bridgeDepositsAsReceiver: [BridgeDeposit!]! @derivedFrom(field: "receiver")
+  bridgeFailedDepositClaimsAsReceiver: [BridgeFailedDepositClaim!]!
+    @derivedFrom(field: "receiver")
+}
+
+# Bridge
+
+type BridgeWithdrawal @entity {
+  id: ID!
+  timestamp: BigInt! @index
+  sender: Account! @index
+  receiver: Account! @index
+  amount: BigInt!
+  l1TransactionHash: String @index
+  l2TransactionHash: String! @index
+  status: String! @index
+  l2BlockNumber: BigInt! @index
+  batchNumber: BigInt
+  messageIndex: BigInt
+  txNumberInBatch: BigInt
+  finalizedAt: BigInt
+}
+
+type BridgeDeposit @entity {
+  id: ID!
+  timestamp: BigInt! @index
+  sender: Account! @index
+  receiver: Account! @index
+  amount: BigInt!
+  l1TransactionHash: String! @index
+  l2TransactionHash: String @index
+  status: String! @index
+  finalizedAt: BigInt
+}
+
+type BridgeFailedDepositClaim @entity {
+  id: ID!
+  timestamp: BigInt! @index
+  receiver: Account! @index
+  amount: BigInt!
+}
