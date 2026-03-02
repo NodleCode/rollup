@@ -35,3 +35,52 @@ jobs:
 
       - name: Run tests
         run: forge test
+
+  Coverage:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    container:
+      image: ghcr.io/nodlecode/devcontainer-rollup
+      options: --user root
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: yarn
+
+      - name: Run coverage
+        run: forge coverage --ir-minimum --report lcov --report-file coverage.lcov
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.lcov
+          retention-days: 30
+
+      - name: Check line coverage threshold
+        run: |
+          # Extract line coverage from lcov report
+          LINES_FOUND=$(grep -E "^LF:" coverage.lcov | awk -F: '{sum += $2} END {print sum}')
+          LINES_HIT=$(grep -E "^LH:" coverage.lcov | awk -F: '{sum += $2} END {print sum}')
+          
+          if [ "$LINES_FOUND" -eq 0 ]; then
+            echo "Error: No lines found in coverage report"
+            exit 1
+          fi
+          
+          COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($LINES_HIT / $LINES_FOUND) * 100}")
+          echo "Line coverage: $COVERAGE% ($LINES_HIT / $LINES_FOUND lines)"
+          
+          # Check if coverage is below 95%
+          THRESHOLD=95
+          if awk "BEGIN {exit !($COVERAGE < $THRESHOLD)}"; then
+            echo "Error: Line coverage ($COVERAGE%) is below the required threshold ($THRESHOLD%)"
+            exit 1
+          fi
+          
+          echo "Coverage check passed: $COVERAGE% >= $THRESHOLD%"

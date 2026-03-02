@@ -275,6 +275,24 @@ contract SwarmRegistryUniversalTest is Test {
     // registerSwarm — reverts
     // ==============================
 
+    function test_RevertIf_registerSwarm_zeroUuid() public {
+        uint256 providerId = _registerProvider(providerOwner, "url1");
+
+        vm.prank(fleetOwner);
+        vm.expectRevert(SwarmRegistryUniversal.InvalidUuid.selector);
+        swarmRegistry.registerSwarm(bytes16(0), providerId, new bytes(32), 8, SwarmRegistryUniversal.TagType.GENERIC);
+    }
+
+    function test_RevertIf_registerSwarm_providerDoesNotExist() public {
+        uint256 fleetId = _registerFleet(fleetOwner, "f1");
+        uint256 nonExistentProvider = 12345;
+
+        vm.prank(fleetOwner);
+        // ERC721.ownerOf reverts for non-existent tokens before our ProviderDoesNotExist check
+        vm.expectRevert();
+        swarmRegistry.registerSwarm(_getFleetUuid(fleetId), nonExistentProvider, new bytes(32), 8, SwarmRegistryUniversal.TagType.GENERIC);
+    }
+
     function test_RevertIf_registerSwarm_notFleetOwner() public {
         uint256 fleetId = _registerFleet(fleetOwner, "my-fleet");
 

@@ -260,6 +260,24 @@ contract SwarmRegistryL1Test is Test {
         swarmRegistry.registerSwarm(_getFleetUuid(fleetId), 1, new bytes(10), 16, SwarmRegistryL1.TagType.GENERIC);
     }
 
+    function test_RevertIf_registerSwarm_zeroUuid() public {
+        uint256 providerId = _registerProvider(providerOwner, "url1");
+
+        vm.prank(fleetOwner);
+        vm.expectRevert(SwarmRegistryL1.InvalidUuid.selector);
+        swarmRegistry.registerSwarm(bytes16(0), providerId, new bytes(32), 8, SwarmRegistryL1.TagType.GENERIC);
+    }
+
+    function test_RevertIf_registerSwarm_providerDoesNotExist() public {
+        uint256 fleetId = _registerFleet(fleetOwner, "f1");
+        uint256 nonExistentProvider = 12345;
+
+        vm.prank(fleetOwner);
+        // ERC721.ownerOf reverts for non-existent tokens before our ProviderDoesNotExist check
+        vm.expectRevert();
+        swarmRegistry.registerSwarm(_getFleetUuid(fleetId), nonExistentProvider, new bytes(32), 8, SwarmRegistryL1.TagType.GENERIC);
+    }
+
     function test_RevertIf_registerSwarm_fingerprintSizeZero() public {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
@@ -472,6 +490,18 @@ contract SwarmRegistryL1Test is Test {
         // The point is it doesn't revert
         swarmRegistry.checkMembership(swarmId, keccak256("test1"));
         swarmRegistry.checkMembership(swarmId, keccak256("test2"));
+    }
+
+    function test_checkMembership_tinyFilter_returnsFalse() public {
+        uint256 fleetId = _registerFleet(fleetOwner, "f1");
+        uint256 providerId = _registerProvider(providerOwner, "u1");
+
+        // 1-byte filter with 16-bit fingerprint: m = (1*8)/16 = 0, returns false immediately
+        bytes memory filter = new bytes(1);
+        uint256 swarmId = _registerSwarm(fleetOwner, fleetId, providerId, filter, 16, SwarmRegistryL1.TagType.GENERIC);
+
+        // Should return false (not revert) because m == 0
+        assertFalse(swarmRegistry.checkMembership(swarmId, keccak256("test")), "m=0 should return false");
     }
 
     // ==============================

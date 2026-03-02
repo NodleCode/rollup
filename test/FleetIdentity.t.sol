@@ -811,6 +811,53 @@ contract FleetIdentityTest is Test {
         assertEq(fleet.getActiveAdminAreas().length, 0);
     }
 
+    function test_activeAdminAreas_multipleCountries() public {
+        // Register admin areas in multiple countries
+        vm.prank(alice);
+        fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
+        vm.prank(bob);
+        fleet.registerFleetLocal(UUID_2, DE, ADMIN_CA, 0);
+
+        uint32[] memory areas = fleet.getActiveAdminAreas();
+        assertEq(areas.length, 2);
+    }
+
+    function test_adminAreaSwapAndPop_whenNotLastArea() public {
+        // Register two admin areas in the same country
+        vm.prank(alice);
+        uint256 id1 = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
+        vm.prank(bob);
+        fleet.registerFleetLocal(UUID_2, US, ADMIN_NY, 0);
+
+        // Burn the first one (not the last in the array) to trigger swap-and-pop
+        vm.prank(alice);
+        fleet.burn(id1);
+
+        // Should still have one admin area
+        uint32[] memory areas = fleet.getActiveAdminAreas();
+        assertEq(areas.length, 1);
+        // The remaining area should be ADMIN_NY
+        assertEq(areas[0], fleet.makeAdminRegion(US, ADMIN_NY));
+    }
+
+    function test_countrySwapAndPop_whenNotLastCountry() public {
+        // Register admin areas in multiple countries
+        vm.prank(alice);
+        uint256 id1 = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
+        vm.prank(bob);
+        fleet.registerFleetLocal(UUID_2, DE, ADMIN_CA, 0);
+        vm.prank(carol);
+        fleet.registerFleetLocal(UUID_3, FR, ADMIN_CA, 0);
+
+        // Burn the first country's fleet (not the last country in the array) to trigger swap-and-pop
+        vm.prank(alice);
+        fleet.burn(id1);
+
+        // Should still have two countries
+        uint16[] memory countries = fleet.getActiveCountries();
+        assertEq(countries.length, 2);
+    }
+
     // --- Region key helpers ---
 
     function test_makeAdminRegion() public view {
