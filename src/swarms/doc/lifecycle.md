@@ -10,15 +10,17 @@ stateDiagram-v2
     None --> Local : registerFleetLocal()
     None --> Country : registerFleetCountry()
 
-    Owned --> Local : registerFleetLocal()
-    Owned --> Country : registerFleetCountry()
-    Owned --> [*] : releaseUuid() / burn()
+    Owned --> Local : registerFleetLocal() [operator]
+    Owned --> Country : registerFleetCountry() [operator]
+    Owned --> [*] : burn() [owner]
 
-    Local --> Owned : unregisterToOwned()
-    Local --> [*] : burn() all tokens
+    Local --> Owned : burn() [operator, last token]
+    Local --> Local : burn() [operator, not last]
+    Local --> [*] : burn() [owner, after owned-only]
 
-    Country --> Owned : unregisterToOwned()
-    Country --> [*] : burn() all tokens
+    Country --> Owned : burn() [operator, last token]
+    Country --> Country : burn() [operator, not last]
+    Country --> [*] : burn() [owner, after owned-only]
 
     note right of Owned : regionKey = 0
     note right of Local : regionKey ≥ 1024
@@ -27,16 +29,16 @@ stateDiagram-v2
 
 ### State Transitions
 
-| From          | To      | Function                   | Bond Effect                                                    |
-| :------------ | :------ | :------------------------- | :------------------------------------------------------------- |
-| None          | Owned   | `claimUuid()`              | Pull BASE_BOND from owner                                      |
-| None          | Local   | `registerFleetLocal()`     | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
-| None          | Country | `registerFleetCountry()`   | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
-| Owned         | Local   | `registerFleetLocal()`     | Pull tierBond from operator (only operator can call)           |
-| Owned         | Country | `registerFleetCountry()`   | Pull tierBond from operator (only operator can call)           |
-| Local/Country | Owned   | `unregisterToOwned()`      | Refund tierBond to operator                                    |
-| Owned         | None    | `releaseUuid()` / `burn()` | Refund BASE_BOND to owner                                      |
-| Local/Country | None    | `burn()`                   | Refund tierBond to operator; BASE_BOND to owner on last burn   |
+| From          | To      | Function                   | Who Calls | Bond Effect                                                    |
+| :------------ | :------ | :------------------------- | :-------- | :------------------------------------------------------------- |
+| None          | Owned   | `claimUuid()`              | Anyone    | Pull BASE_BOND from caller (becomes owner)                     |
+| None          | Local   | `registerFleetLocal()`     | Anyone    | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
+| None          | Country | `registerFleetCountry()`   | Anyone    | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
+| Owned         | Local   | `registerFleetLocal()`     | Operator  | Pull tierBond from operator                                    |
+| Owned         | Country | `registerFleetCountry()`   | Operator  | Pull tierBond from operator                                    |
+| Local/Country | Owned   | `burn()`                   | Operator  | Refund tierBond to operator (last token mints owned-only)      |
+| Owned         | None    | `burn()`                   | Owner     | Refund BASE_BOND to owner                                      |
+| Local/Country | -       | `burn()`                   | Operator  | Refund tierBond to operator (not last token, stays registered) |
 
 ## Swarm Status States
 
@@ -91,15 +93,16 @@ sequenceDiagram
     FI->>TOKEN: transferFrom(newOperator, this, totalTierBonds)
     FI->>TOKEN: transfer(oldOperator, totalTierBonds)
 
-    Note over FI: Unregister to Owned
+    Note over FI: Burn registered token (operator)
     FI->>TOKEN: transfer(operator, tierBond)
 
-    Note over FI: Burn (non-last token)
+    Note over FI: Burn last registered token (operator)
+    Note over FI: Mints owned-only token to owner
     FI->>TOKEN: transfer(operator, tierBond)
 
-    Note over FI: Burn (last token)
-    FI->>TOKEN: transfer(operator, tierBond)
+    Note over FI: Burn owned-only token (owner)
     FI->>TOKEN: transfer(owner, BASE_BOND)
+```
 ```
 
 ## Orphan Lifecycle

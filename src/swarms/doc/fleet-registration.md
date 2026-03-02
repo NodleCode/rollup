@@ -159,36 +159,40 @@ Country fleets pay 16× but appear in **all** admin-area bundles. Locals have co
 
 ### Promote
 
+Only the operator (or owner if no operator set) can promote:
+
 ```solidity
-// Approve additional bond
+// Approve additional bond (as operator)
 fleetIdentity.promote(tokenId);
 // Moves to currentTier + 1
 ```
 
 ### Reassign
 
+Only the operator (or owner if no operator set) can reassign:
+
 ```solidity
 // Move to any tier
 fleetIdentity.reassignTier(tokenId, targetTier);
-// Promotion: pulls difference
-// Demotion: refunds difference
+// Promotion: pulls difference from operator
+// Demotion: refunds difference to operator
 ```
 
 ```mermaid
 sequenceDiagram
-    actor FO as Fleet Owner
+    actor OP as Operator
     participant FI as FleetIdentity
     participant TOKEN as BOND_TOKEN
 
     alt Promote
-        FO->>TOKEN: approve(additionalBond)
-        FO->>+FI: reassignTier(tokenId, higherTier)
-        FI->>TOKEN: transferFrom(owner, this, diff)
-        FI-->>-FO: FleetPromoted
+        OP->>TOKEN: approve(additionalBond)
+        OP->>+FI: reassignTier(tokenId, higherTier)
+        FI->>TOKEN: transferFrom(operator, this, diff)
+        FI-->>-OP: FleetPromoted
     else Demote
-        FO->>+FI: reassignTier(tokenId, lowerTier)
-        FI->>TOKEN: transfer(owner, refund)
-        FI-->>-FO: FleetDemoted
+        OP->>+FI: reassignTier(tokenId, lowerTier)
+        FI->>TOKEN: transfer(operator, refund)
+        FI-->>-OP: FleetDemoted
     end
 ```
 

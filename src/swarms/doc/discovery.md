@@ -144,7 +144,8 @@ function discoverService(
             } catch { break; }
 
             // 3. Get swarm data
-            (,uint256 providerId,,,SwarmStatus status, TagType tagType) =
+            (bytes16 storedUuid, uint256 providerId, uint32 filterLen, uint8 fpSize,
+             SwarmRegistryUniversal.TagType tagType, SwarmRegistryUniversal.SwarmStatus status) =
                 swarmRegistry.swarms(swarmId);
 
             if (status != SwarmStatus.ACCEPTED) continue;

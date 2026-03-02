@@ -40,12 +40,12 @@ graph TB
 
 ## Core Components
 
-| Contract                   | Role                           | Identity                                   | Token |
-| :------------------------- | :----------------------------- | :----------------------------------------- | :---- |
-| **FleetIdentity**          | Fleet registry (ERC-721)       | `(regionKey << 128) \| uuid`               | SFID  |
-| **ServiceProvider**        | Backend URL registry (ERC-721) | `keccak256(url)`                           | SSV   |
-| **SwarmRegistryL1**        | Tag group registry (L1)        | `keccak256(fleetUuid, providerId, filter)` | —     |
-| **SwarmRegistryUniversal** | Tag group registry (ZkSync+)   | `keccak256(fleetUuid, providerId, filter)` | —     |
+| Contract                   | Role                           | Identity                                           | Token |
+| :------------------------- | :----------------------------- | :------------------------------------------------- | :---- |
+| **FleetIdentity**          | Fleet registry (ERC-721)       | `(regionKey << 128) \| uuid`                       | SFID  |
+| **ServiceProvider**        | Backend URL registry (ERC-721) | `keccak256(url)`                                   | SSV   |
+| **SwarmRegistryL1**        | Tag group registry (L1)        | `keccak256(fleetUuid, filter, fpSize, tagType)`    | —     |
+| **SwarmRegistryUniversal** | Tag group registry (ZkSync+)   | `keccak256(fleetUuid, filter, fpSize, tagType)`    | —     |
 
 All contracts are **permissionless**—access control via NFT ownership. FleetIdentity requires ERC-20 bond (anti-spam).
 

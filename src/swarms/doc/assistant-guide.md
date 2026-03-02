@@ -48,13 +48,13 @@ This allows the same UUID to be registered in multiple regions, each with a dist
 
 | Parameter           | Value                                                      |
 | :------------------ | :--------------------------------------------------------- |
-| **Tier Capacity**   | 4 members per tier                                         |
+| **Tier Capacity**   | 10 members per tier                                        |
 | **Max Tiers**       | 24 per region                                              |
 | **Local Bond**      | `BASE_BOND * 2^tier`                                       |
 | **Country Bond**    | `BASE_BOND * COUNTRY_BOND_MULTIPLIER * 2^tier` (16× local) |
 | **Max Bundle Size** | 20 UUIDs                                                   |
 
-Country fleets pay 16× more but appear in all admin-area bundles within their country. This economic difference provides locals a significant advantage: a local can reach tier 3 for the same cost a country player pays for tier 0.
+Country fleets pay 16× more but appear in all admin-area bundles within their country. This economic difference provides locals a significant advantage: a local can reach tier 4 for the same cost a country player pays for tier 0.
 
 ### UUID Ownership Model
 
@@ -114,13 +114,15 @@ uint256 tokenId = fleetIdentity.registerFleetLocal(uuid, 840, 5, tier);
 #### B3. Claim-First Flow (Reserve UUID, Register Later)
 
 ```solidity
-// 1. Claim UUID ownership (costs BASE_BOND)
+// 1. Claim UUID ownership (costs BASE_BOND), optionally designate operator
 NODL.approve(fleetIdentityAddress, BASE_BOND);
-uint256 ownedTokenId = fleetIdentity.claimUuid(uuid);
+uint256 ownedTokenId = fleetIdentity.claimUuid(uuid, operatorAddress);
 // Returns tokenId = uint128(uuid) (regionKey = 0)
+// If operatorAddress is address(0), caller becomes the operator
 
-// 2. Later: Register from owned state (burns owned token, mints regional token)
-// Only pays incremental bond (tier bond - BASE_BOND already paid)
+// 2. Later: Operator registers from owned state (burns owned token, mints regional token to owner)
+// Operator pays tier bond only (BASE_BOND already paid by owner via claimUuid)
+NODL.approve(fleetIdentityAddress, tierBond); // as operator
 uint256 tokenId = fleetIdentity.registerFleetLocal(uuid, 840, 5, targetTier);
 ```
 
@@ -143,25 +145,28 @@ fleetIdentity.reassignTier(tokenId, targetTier);
 UUID owners can delegate tier management to an operator wallet:
 
 ```solidity
-// Set operator at registration time (owner pays BASE_BOND, operator pays tier excess)
-fleetIdentity.registerFleetLocalWithOperator(uuid, 840, 5, tier, operatorAddress);
+// Set operator at claim time (owner pays BASE_BOND, operator manages tiers later)
+uint256 ownedTokenId = fleetIdentity.claimUuid(uuid, operatorAddress);
 
-// Or set operator after registration (transfers tier bonds atomically)
+// Or set/change operator after registration (transfers tier bonds atomically)
 fleetIdentity.setOperator(uuid, operatorAddress);
+// Pulls total tier bonds from new operator, refunds old operator
 
 // Check current operator (returns owner if none set)
 address manager = fleetIdentity.operatorOf(uuid);
 
 // Clear operator (reverts to owner-managed)
 fleetIdentity.setOperator(uuid, address(0));
+// Pulls tier bonds from owner, refunds old operator
 ```
 
 **Key Points:**
 
-- Operator handles `promote()`, `reassignTier()`, and `burn()` calls for registered tokens
-- Owner retains `setOperator()` control and `burn()` rights for owned-only tokens
-- Tier excess bonds transfer between operators when changing
-- Cannot set operator for owned-only UUIDs (must be registered)
+- Operator handles `promote()`, `reassignTier()`, and registration calls for owned UUIDs
+- Operator can burn registered tokens (refunds tier bond to operator)
+- Owner retains `setOperator()` control and can burn owned-only tokens
+- `setOperator` transfers all tier bonds atomically (O(1) via `uuidTotalTierBonds`)
+- Can set operator for both owned-only and registered UUIDs
 
 ### E. Burn Fleet Token
 
@@ -213,10 +218,11 @@ Only the owner of the provider NFT (`providerId`) can accept or reject.
 
 ### H. Swarm Updates
 
-The fleet owner can modify a swarm at any time. Both operations reset status to `REGISTERED`, requiring fresh provider approval:
+The fleet owner can change the service provider. This resets status to `REGISTERED`, requiring fresh provider approval:
 
-- **Replace the XOR filter**: `swarmRegistry.updateSwarmFilter(swarmId, newFilterData)`
 - **Change service provider**: `swarmRegistry.updateSwarmProvider(swarmId, newProviderId)`
+
+**Note:** The XOR filter is immutable and part of swarm identity. To change the filter, delete the swarm and create a new one.
 
 ### I. Swarm Deletion
 
@@ -277,10 +283,10 @@ To verify membership on-chain, the contract uses **3-hash XOR logic**.
 Swarm IDs are **deterministic** — derived from the swarm's core identity:
 
 ```
-swarmId = uint256(keccak256(abi.encode(fleetUuid, providerId, filterData)))
+swarmId = uint256(keccak256(abi.encode(fleetUuid, filterData, fingerprintSize, tagType)))
 ```
 
-This means the same (UUID, provider, filter) triple always produces the same ID, and duplicate registrations revert with `SwarmAlreadyExists()`. The `computeSwarmId` function is `public pure`, so it can be called off-chain at zero cost via `eth_call`.
+Swarm identity is based on fleet, filter, fingerprintSize, and tagType. ProviderId is mutable and not part of identity. The same (UUID, filter, fpSize, tagType) tuple always produces the same ID, and duplicate registrations revert with `SwarmAlreadyExists()`. The `computeSwarmId` function is `public pure`, so it can be called off-chain at zero cost via `eth_call`.
 
 ---
 
@@ -375,7 +381,7 @@ for (uint256 i = 0; ; i++) {
 ```solidity
 // Construct tagHash based on swarm's tagType
 (bytes16 fleetUuid, uint256 providerId, uint32 filterLen, uint8 fpSize,
- SwarmStatus status, TagType tagType) = swarmRegistry.swarms(swarmId);
+ TagType tagType, SwarmStatus status) = swarmRegistry.swarms(swarmId);
 
 // Build tagId per schema (see Section 3)
 bytes memory tagId;

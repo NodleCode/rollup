@@ -52,11 +52,10 @@ classDiagram
         +mapping uuidSwarms : bytes16 → uint256[]
         +mapping swarmIndexInUuid : uint256 → uint256
         --
-        +computeSwarmId(fleetUuid, providerId, filter) → swarmId
+        +computeSwarmId(fleetUuid, filter, fpSize, tagType) → swarmId
         +registerSwarm(fleetUuid, providerId, filter, fpSize, tagType) → swarmId
         +acceptSwarm(swarmId)
         +rejectSwarm(swarmId)
-        +updateSwarmFilter(swarmId, newFilter)
         +updateSwarmProvider(swarmId, newProviderId)
         +deleteSwarm(swarmId)
         +isSwarmValid(swarmId) → fleetValid, providerValid
@@ -133,10 +132,10 @@ uint32 adminRegion = fleetIdentity.makeAdminRegion(countryCode, adminCode);
 Deterministic and collision-free:
 
 ```solidity
-swarmId = uint256(keccak256(abi.encode(fleetUuid, providerId, filterData)))
+swarmId = uint256(keccak256(abi.encode(fleetUuid, filterData, fingerprintSize, tagType)))
 ```
 
-Duplicate registration reverts with `SwarmAlreadyExists()`.
+Swarm identity is based on fleet, filter, fingerprintSize, and tagType. ProviderId is mutable and not part of identity. Duplicate registration reverts with `SwarmAlreadyExists()`.
 
 ## XOR Filter Membership
 

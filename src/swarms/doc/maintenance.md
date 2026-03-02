@@ -124,21 +124,21 @@ const [uuids, count] = await fleetIdentity.buildCountryOnlyBundle(countryCode);
 
 ```mermaid
 sequenceDiagram
-    actor FO as Fleet Owner
+    actor OP as Operator
     participant FI as FleetIdentity
     participant TOKEN as BOND_TOKEN
 
-    FO->>+FI: tierBond(currentTier, isCountry)
-    FI-->>-FO: currentBond
-    FO->>+FI: tierBond(targetTier, isCountry)
-    FI-->>-FO: targetBond
+    OP->>+FI: tierBond(currentTier, isCountry)
+    FI-->>-OP: currentBond
+    OP->>+FI: tierBond(targetTier, isCountry)
+    FI-->>-OP: targetBond
 
-    Note over FO: additionalBond = targetBond - currentBond
+    Note over OP: additionalBond = targetBond - currentBond
 
-    FO->>TOKEN: approve(FleetIdentity, additionalBond)
-    FO->>+FI: reassignTier(tokenId, targetTier)
-    FI->>TOKEN: transferFrom(...)
-    FI-->>-FO: FleetPromoted
+    OP->>TOKEN: approve(FleetIdentity, additionalBond)
+    OP->>+FI: reassignTier(tokenId, targetTier)
+    FI->>TOKEN: transferFrom(operator, ...)
+    FI-->>-OP: FleetPromoted
 ```
 
 ### Quick Promote
@@ -146,6 +146,7 @@ sequenceDiagram
 ```solidity
 fleetIdentity.promote(tokenId);
 // Moves to currentTier + 1
+// Only operator (or owner if no operator set) can call
 ```
 
 ### Handle TierFull

@@ -42,10 +42,10 @@ sequenceDiagram
 Deterministic derivation:
 
 ```solidity
-swarmId = uint256(keccak256(abi.encode(fleetUuid, providerId, filter)))
+swarmId = uint256(keccak256(abi.encode(fleetUuid, filter, fingerprintSize, tagType)))
 ```
 
-Duplicate registration reverts with `SwarmAlreadyExists()`.
+Swarm identity is based on fleet, filter, fingerprintSize, and tagType. ProviderId is mutable and not part of identity. Duplicate registration reverts with `SwarmAlreadyExists()`.
 
 ## XOR Filter Construction
 
@@ -114,13 +114,10 @@ Only `ACCEPTED` swarms pass `checkMembership()`.
 
 ## Updates
 
-Both operations reset status to `REGISTERED`:
+The fleet owner can change the service provider. This resets status to `REGISTERED`:
 
 ```solidity
-// Replace filter
-swarmRegistry.updateSwarmFilter(swarmId, newFilterData);
-
-// Change provider
+// Change provider (requires re-approval)
 swarmRegistry.updateSwarmProvider(swarmId, newProviderId);
 ```
 
@@ -130,11 +127,13 @@ sequenceDiagram
     participant SR as SwarmRegistry
     participant FI as FleetIdentity
 
-    FO->>+SR: updateSwarmFilter(swarmId, newFilter)
+    FO->>+SR: updateSwarmProvider(swarmId, newProviderId)
     SR->>FI: uuidOwner(fleetUuid)
     Note over SR: status → REGISTERED
     SR-->>-FO: ✓ (requires re-approval)
 ```
+
+**Note:** The XOR filter is immutable and part of swarm identity. To change the filter, delete the swarm and create a new one.
 
 ## Deletion
 
