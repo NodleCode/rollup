@@ -73,19 +73,19 @@ contract SwarmRegistryL1 is ReentrancyGuard {
 
     event SwarmRegistered(uint256 indexed swarmId, bytes16 indexed fleetUuid, uint256 indexed providerId, address owner);
     event SwarmStatusChanged(uint256 indexed swarmId, SwarmStatus status);
-    event SwarmFilterUpdated(uint256 indexed swarmId, address indexed owner, uint32 filterSize);
     event SwarmProviderUpdated(uint256 indexed swarmId, uint256 indexed oldProvider, uint256 indexed newProvider);
     event SwarmDeleted(uint256 indexed swarmId, bytes16 indexed fleetUuid, address indexed owner);
     event SwarmPurged(uint256 indexed swarmId, bytes16 indexed fleetUuid, address indexed purgedBy);
 
     /// @notice Derives a deterministic swarm ID. Callable off-chain to predict IDs before registration.
-    /// @return swarmId keccak256(fleetUuid, providerId, filterData)
-    function computeSwarmId(bytes16 fleetUuid, uint256 providerId, bytes calldata filterData)
+    /// @dev Swarm identity is based on fleet, filter, fingerprintSize, and tagType. ProviderId is mutable and not part of identity.
+    /// @return swarmId keccak256(fleetUuid, filterData, fingerprintSize, tagType)
+    function computeSwarmId(bytes16 fleetUuid, bytes calldata filterData, uint8 fingerprintSize, TagType tagType)
         public
         pure
         returns (uint256)
     {
-        return uint256(keccak256(abi.encode(fleetUuid, providerId, filterData)));
+        return uint256(keccak256(abi.encode(fleetUuid, filterData, fingerprintSize, tagType)));
     }
 
     constructor(address _fleetContract, address _providerContract) {
@@ -124,11 +124,12 @@ contract SwarmRegistryL1 is ReentrancyGuard {
         if (FLEET_CONTRACT.uuidOwner(fleetUuid) != msg.sender) {
             revert NotUuidOwner();
         }
-        if (PROVIDER_CONTRACT.ownerOf(providerId) == address(0)) {
+        try PROVIDER_CONTRACT.ownerOf(providerId) returns (address) {}
+        catch {
             revert ProviderDoesNotExist();
         }
 
-        swarmId = computeSwarmId(fleetUuid, providerId, filterData);
+        swarmId = computeSwarmId(fleetUuid, filterData, fingerprintSize, tagType);
 
         if (swarms[swarmId].filterPointer != address(0)) {
             revert SwarmAlreadyExists();
@@ -181,28 +182,6 @@ contract SwarmRegistryL1 is ReentrancyGuard {
         emit SwarmStatusChanged(swarmId, SwarmStatus.REJECTED);
     }
 
-    /// @notice Replaces the XOR filter. Resets status to REGISTERED. Caller must own the fleet UUID.
-    /// @param swarmId The swarm to update.
-    /// @param newFilterData Replacement filter blob.
-    function updateSwarmFilter(uint256 swarmId, bytes calldata newFilterData) external nonReentrant {
-        Swarm storage s = swarms[swarmId];
-        if (s.filterPointer == address(0)) {
-            revert SwarmNotFound();
-        }
-        if (FLEET_CONTRACT.uuidOwner(s.fleetUuid) != msg.sender) {
-            revert NotUuidOwner();
-        }
-        if (newFilterData.length == 0 || newFilterData.length > 24576) {
-            revert InvalidFilterSize();
-        }
-
-        s.status = SwarmStatus.REGISTERED;
-
-        s.filterPointer = SSTORE2.write(newFilterData);
-
-        emit SwarmFilterUpdated(swarmId, msg.sender, uint32(newFilterData.length));
-    }
-
     /// @notice Reassigns the service provider. Resets status to REGISTERED. Caller must own the fleet UUID.
     /// @param swarmId The swarm to update.
     /// @param newProviderId New provider token ID.
@@ -214,7 +193,8 @@ contract SwarmRegistryL1 is ReentrancyGuard {
         if (FLEET_CONTRACT.uuidOwner(s.fleetUuid) != msg.sender) {
             revert NotUuidOwner();
         }
-        if (PROVIDER_CONTRACT.ownerOf(newProviderId) == address(0)) {
+        try PROVIDER_CONTRACT.ownerOf(newProviderId) returns (address) {}
+        catch {
             revert ProviderDoesNotExist();
         }
 
