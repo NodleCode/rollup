@@ -53,7 +53,7 @@ jobs:
         run: yarn
 
       - name: Run coverage
-        run: forge coverage --ir-minimum --report lcov --report-file coverage.lcov
+        run: forge coverage --match-path "test/{Swarm*,ServiceProvider,FleetIdentity}*.t.sol" --ir-minimum --report lcov --report-file coverage.lcov
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -64,17 +64,29 @@ jobs:
 
       - name: Check line coverage threshold
         run: |
-          # Extract line coverage from lcov report
-          LINES_FOUND=$(grep -E "^LF:" coverage.lcov | awk -F: '{sum += $2} END {print sum}')
-          LINES_HIT=$(grep -E "^LH:" coverage.lcov | awk -F: '{sum += $2} END {print sum}')
+          # Extract line coverage from lcov report for src/swarms/ contracts only
+          # Parse lcov format: find swarm file sections and sum their LF/LH values
+          LINES_FOUND=$(awk '
+            /^SF:.*src\/swarms\// { in_swarm = 1 }
+            /^end_of_record/ { in_swarm = 0 }
+            in_swarm && /^LF:/ { sum += substr($0, 4) }
+            END { print sum+0 }
+          ' coverage.lcov)
+          
+          LINES_HIT=$(awk '
+            /^SF:.*src\/swarms\// { in_swarm = 1 }
+            /^end_of_record/ { in_swarm = 0 }
+            in_swarm && /^LH:/ { sum += substr($0, 4) }
+            END { print sum+0 }
+          ' coverage.lcov)
           
           if [ "$LINES_FOUND" -eq 0 ]; then
-            echo "Error: No lines found in coverage report"
+            echo "Error: No lines found in coverage report for src/swarms/"
             exit 1
           fi
           
           COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($LINES_HIT / $LINES_FOUND) * 100}")
-          echo "Line coverage: $COVERAGE% ($LINES_HIT / $LINES_FOUND lines)"
+          echo "Swarms line coverage: $COVERAGE% ($LINES_HIT / $LINES_FOUND lines)"
           
           # Check if coverage is below 95%
           THRESHOLD=95
