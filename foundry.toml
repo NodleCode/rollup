@@ -8,3 +8,7 @@ solc = "0.8.26"
 
 # necessary as some of the zksync contracts are big
 via_ir = true
+
+[lint]
+# Exclude ERC20 transfer warning - false positive for ERC721.transferFrom in tests
+exclude_lints = ["erc20-unchecked-transfer"]

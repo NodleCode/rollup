@@ -10,3 +10,6 @@
 [submodule "lib/era-contracts"]
 	path = lib/era-contracts
 	url = https://github.com/matter-labs/era-contracts
+[submodule "lib/solady"]
+	path = lib/solady
+	url = https://github.com/vectorized/solady
