@@ -29,16 +29,16 @@ stateDiagram-v2
 
 ### State Transitions
 
-| From          | To      | Function                   | Who Calls | Bond Effect                                                    |
-| :------------ | :------ | :------------------------- | :-------- | :------------------------------------------------------------- |
-| None          | Owned   | `claimUuid()`              | Anyone    | Pull BASE_BOND from caller (becomes owner)                     |
-| None          | Local   | `registerFleetLocal()`     | Anyone    | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
-| None          | Country | `registerFleetCountry()`   | Anyone    | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
-| Owned         | Local   | `registerFleetLocal()`     | Operator  | Pull tierBond from operator                                    |
-| Owned         | Country | `registerFleetCountry()`   | Operator  | Pull tierBond from operator                                    |
-| Local/Country | Owned   | `burn()`                   | Operator  | Refund tierBond to operator (last token mints owned-only)      |
-| Owned         | None    | `burn()`                   | Owner     | Refund BASE_BOND to owner                                      |
-| Local/Country | -       | `burn()`                   | Operator  | Refund tierBond to operator (not last token, stays registered) |
+| From          | To      | Function                 | Who Calls | Bond Effect                                                    |
+| :------------ | :------ | :----------------------- | :-------- | :------------------------------------------------------------- |
+| None          | Owned   | `claimUuid()`            | Anyone    | Pull BASE_BOND from caller (becomes owner)                     |
+| None          | Local   | `registerFleetLocal()`   | Anyone    | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
+| None          | Country | `registerFleetCountry()` | Anyone    | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
+| Owned         | Local   | `registerFleetLocal()`   | Operator  | Pull tierBond from operator                                    |
+| Owned         | Country | `registerFleetCountry()` | Operator  | Pull tierBond from operator                                    |
+| Local/Country | Owned   | `burn()`                 | Operator  | Refund tierBond to operator (last token mints owned-only)      |
+| Owned         | None    | `burn()`                 | Owner     | Refund BASE_BOND to owner                                      |
+| Local/Country | -       | `burn()`                 | Operator  | Refund tierBond to operator (not last token, stays registered) |
 
 ## Swarm Status States
 
@@ -103,7 +103,8 @@ sequenceDiagram
     Note over FI: Burn owned-only token (owner)
     FI->>TOKEN: transfer(owner, BASE_BOND)
 ```
-```
+
+````
 
 ## Orphan Lifecycle
 
@@ -115,7 +116,7 @@ flowchart TD
     ORPHAN --> CHECK[isSwarmValid returns false]
     CHECK --> PURGE[Anyone: purgeOrphanedSwarm]
     PURGE --> DELETED[Swarm Deleted + Gas Refund]
-```
+````
 
 ### Orphan Guards
 
