@@ -2,7 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {FleetIdentity} from "../src/swarms/FleetIdentity.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {FleetIdentityUpgradeable} from "../src/swarms/FleetIdentityUpgradeable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /// @dev Minimal ERC-20 mock with public mint for testing.
@@ -104,8 +105,20 @@ contract FleetIdentityFairnessTest is Test {
     // Helper Functions
     // ══════════════════════════════════════════════════════════════════════════════════
 
-    function _deployFleet() internal returns (FleetIdentity) {
-        FleetIdentity fleet = new FleetIdentity(address(bondToken), BASE_BOND);
+    address fleetOwner = address(0x1111);
+
+    function _deployFleet() internal returns (FleetIdentityUpgradeable) {
+        // Deploy implementation
+        FleetIdentityUpgradeable impl = new FleetIdentityUpgradeable();
+
+        // Deploy proxy with initialize call
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(impl),
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(bondToken), BASE_BOND, fleetOwner))
+        );
+
+        // Cast proxy to contract type
+        FleetIdentityUpgradeable fleet = FleetIdentityUpgradeable(address(proxy));
 
         // Approve all players
         vm.prank(whale);
@@ -131,7 +144,7 @@ contract FleetIdentityFairnessTest is Test {
     }
 
     /// @dev Count how many slots in a bundle are from country vs local registrations
-    function _countBundleComposition(FleetIdentity fleet, uint16 cc, uint16 admin)
+    function _countBundleComposition(FleetIdentityUpgradeable fleet, uint16 cc, uint16 admin)
         internal
         view
         returns (uint256 localCount, uint256 countryCount)
@@ -160,7 +173,7 @@ contract FleetIdentityFairnessTest is Test {
      * Tests that locals correctly fill slots by tier-descent priority.
      */
     function test_scenarioA_localHeavyMarket() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
         uint16 targetAdmin = adminAreas[0];
 
         // 16 local players at tiers 0-3 (4 per tier due to TIER_CAPACITY)
@@ -195,7 +208,7 @@ contract FleetIdentityFairnessTest is Test {
      * Tests that higher-tier country beats lower-tier local.
      */
     function test_scenarioB_countryHighTierDominance() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
         uint16 targetAdmin = adminAreas[0];
 
         // 4 local players at tier 0
@@ -231,7 +244,7 @@ contract FleetIdentityFairnessTest is Test {
      * Tests that locals get priority within the same tier.
      */
     function test_scenarioC_sameTierLocalPriority() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
         uint16 targetAdmin = adminAreas[0];
 
         // 4 local at tier 0
@@ -267,7 +280,7 @@ contract FleetIdentityFairnessTest is Test {
      * Tests that whale can dominate IF they outbid locals on tier level.
      */
     function test_scenarioD_countryWhaleHighTier() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
         uint16 targetAdmin = adminAreas[0];
 
         // 12 locals at tiers 0-2 (4 per tier)
@@ -303,7 +316,7 @@ contract FleetIdentityFairnessTest is Test {
      * Shows that locals can economically counter a country whale.
      */
     function test_scenarioE_localsCounterWhale() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
         uint16 targetAdmin = adminAreas[0];
 
         // Whale registers 4 country fleets at tier 3
@@ -352,7 +365,7 @@ contract FleetIdentityFairnessTest is Test {
      * @notice Verify the 16× economic advantage constants.
      */
     function test_economicAdvantage_8xMultiplier() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
 
         // Verify multiplier
         assertEq(fleet.COUNTRY_BOND_MULTIPLIER(), 16, "Multiplier should be 16");
@@ -369,7 +382,7 @@ contract FleetIdentityFairnessTest is Test {
      * @notice Demonstrate that a local at tier N+4 costs the same as country at tier N.
      */
     function test_economicAdvantage_localTierEquivalence() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
 
         // Local tier 4 = Country tier 0 (2^4 = 16)
         assertEq(
@@ -401,7 +414,7 @@ contract FleetIdentityFairnessTest is Test {
      * @notice Analyze country registration efficiency across admin areas.
      */
     function test_economicAdvantage_multiRegionEfficiency() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
 
         // Single country registration covers ALL admin areas
         uint256 countryBond = fleet.tierBond(0, true); // 800 NODL
@@ -425,7 +438,7 @@ contract FleetIdentityFairnessTest is Test {
      * @notice Bond escalation analysis showing geometric growth.
      */
     function test_bondEscalationAnalysis() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
 
         emit log_string("");
         emit log_string("=== BOND ESCALATION ANALYSIS ===");
@@ -453,7 +466,7 @@ contract FleetIdentityFairnessTest is Test {
      * @notice CRITICAL: Core invariants that must ALWAYS hold.
      */
     function test_invariant_coreGuarantees() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
 
         // Invariant 1: Country multiplier is exactly 16
         assertEq(fleet.COUNTRY_BOND_MULTIPLIER(), 16, "INVARIANT: Country multiplier must be 16");
@@ -480,7 +493,7 @@ contract FleetIdentityFairnessTest is Test {
      * @notice Bundle always respects tier-descent priority.
      */
     function test_invariant_tierDescentPriority() public {
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
         uint16 targetAdmin = adminAreas[0];
 
         // Mixed setup: locals at tier 1, country at tier 2
@@ -518,7 +531,7 @@ contract FleetIdentityFairnessTest is Test {
         numLocals = uint8(bound(numLocals, 1, 16));
         numCountry = uint8(bound(numCountry, 1, 12));
 
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
         uint16 targetAdmin = adminAreas[0];
 
         // Register local players (spread across tiers for variety)
@@ -552,7 +565,7 @@ contract FleetIdentityFairnessTest is Test {
      */
     function testFuzz_constantMultiplier(uint8 tier) public {
         tier = uint8(bound(tier, 0, 20));
-        FleetIdentity fleet = _deployFleet();
+        FleetIdentityUpgradeable fleet = _deployFleet();
 
         uint256 localBond = fleet.tierBond(tier, false);
         uint256 countryBond = fleet.tierBond(tier, true);

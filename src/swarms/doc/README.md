@@ -112,15 +112,16 @@ The system provides **non-enumerating** tag verification—individual tags aren'
 
 ## Documentation
 
-| Document                                       | Description                                       |
-| :--------------------------------------------- | :------------------------------------------------ |
-| [data-model.md](data-model.md)                 | Contract interfaces, enums, storage layout        |
-| [fleet-registration.md](fleet-registration.md) | Fleet & UUID registration, tier economics         |
-| [swarm-operations.md](swarm-operations.md)     | Swarm registration, filters, provider approval    |
-| [lifecycle.md](lifecycle.md)                   | State machines, updates, deletion, orphan cleanup |
-| [discovery.md](discovery.md)                   | Client discovery flows, tag hash construction     |
-| [maintenance.md](maintenance.md)               | Bundle inclusion monitoring, tier optimization    |
-| [iso3166-reference.md](iso3166-reference.md)   | ISO 3166-1/2 codes and admin area mappings        |
+| Document                                             | Description                                       |
+| :--------------------------------------------------- | :------------------------------------------------ |
+| [data-model.md](data-model.md)                       | Contract interfaces, enums, storage layout        |
+| [fleet-registration.md](fleet-registration.md)       | Fleet & UUID registration, tier economics         |
+| [swarm-operations.md](swarm-operations.md)           | Swarm registration, filters, provider approval    |
+| [lifecycle.md](lifecycle.md)                         | State machines, updates, deletion, orphan cleanup |
+| [discovery.md](discovery.md)                         | Client discovery flows, tag hash construction     |
+| [maintenance.md](maintenance.md)                     | Bundle inclusion monitoring, tier optimization    |
+| [iso3166-reference.md](iso3166-reference.md)         | ISO 3166-1/2 codes and admin area mappings        |
+| [upgradeable-contracts.md](upgradeable-contracts.md) | UUPS proxy pattern and upgrade procedures         |
 
 ## End-to-End Flow
 

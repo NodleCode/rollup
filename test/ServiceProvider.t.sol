@@ -2,10 +2,12 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {ServiceProvider} from "../src/swarms/ServiceProvider.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {ServiceProviderUpgradeable} from "../src/swarms/ServiceProviderUpgradeable.sol";
 
 contract ServiceProviderTest is Test {
-    ServiceProvider provider;
+    ServiceProviderUpgradeable provider;
+    address owner = address(0x1111);
 
     address alice = address(0xA);
     address bob = address(0xB);
@@ -18,7 +20,17 @@ contract ServiceProviderTest is Test {
     event ProviderBurned(address indexed owner, uint256 indexed tokenId);
 
     function setUp() public {
-        provider = new ServiceProvider();
+        // Deploy implementation
+        ServiceProviderUpgradeable impl = new ServiceProviderUpgradeable();
+
+        // Deploy proxy with initialize call
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(impl),
+            abi.encodeCall(ServiceProviderUpgradeable.initialize, (owner))
+        );
+
+        // Cast proxy to contract type
+        provider = ServiceProviderUpgradeable(address(proxy));
     }
 
     // ==============================
@@ -64,7 +76,7 @@ contract ServiceProviderTest is Test {
 
     function test_RevertIf_registerProvider_emptyURL() public {
         vm.prank(alice);
-        vm.expectRevert(ServiceProvider.EmptyURL.selector);
+        vm.expectRevert(ServiceProviderUpgradeable.EmptyURL.selector);
         provider.registerProvider("");
     }
 
@@ -112,7 +124,7 @@ contract ServiceProviderTest is Test {
         uint256 tokenId = provider.registerProvider(URL_1);
 
         vm.prank(bob);
-        vm.expectRevert(ServiceProvider.NotTokenOwner.selector);
+        vm.expectRevert(ServiceProviderUpgradeable.NotTokenOwner.selector);
         provider.burn(tokenId);
     }
 
@@ -153,7 +165,7 @@ contract ServiceProviderTest is Test {
         uint256 tokenId = provider.registerProvider(URL_1);
 
         vm.prank(caller);
-        vm.expectRevert(ServiceProvider.NotTokenOwner.selector);
+        vm.expectRevert(ServiceProviderUpgradeable.NotTokenOwner.selector);
         provider.burn(tokenId);
     }
 }

@@ -2,7 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {FleetIdentity} from "../src/swarms/FleetIdentity.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {FleetIdentityUpgradeable} from "../src/swarms/FleetIdentityUpgradeable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /// @dev Minimal ERC-20 mock with public mint for testing.
@@ -40,9 +41,10 @@ contract BadERC20 is ERC20 {
 }
 
 contract FleetIdentityTest is Test {
-    FleetIdentity fleet;
+    FleetIdentityUpgradeable fleet;
     MockERC20 bondToken;
 
+    address owner = address(0x1111);
     address alice = address(0xA);
     address bob = address(0xB);
     address carol = address(0xC);
@@ -85,7 +87,18 @@ contract FleetIdentityTest is Test {
 
     function setUp() public {
         bondToken = new MockERC20();
-        fleet = new FleetIdentity(address(bondToken), BASE_BOND);
+
+        // Deploy implementation
+        FleetIdentityUpgradeable impl = new FleetIdentityUpgradeable();
+
+        // Deploy proxy with initialize call
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(impl),
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(bondToken), BASE_BOND, owner))
+        );
+
+        // Cast proxy to contract type
+        fleet = FleetIdentityUpgradeable(address(proxy));
 
         // Mint enough for all 24 tiers (tier 23 bond = BASE_BOND * 2^23 ≈ 838M ether)
         // Total for 8 members across 24 tiers ≈ 13.4 billion ether
@@ -250,13 +263,13 @@ contract FleetIdentityTest is Test {
 
     function test_RevertIf_registerFleetCountry_invalidCode_zero() public {
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.InvalidCountryCode.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidCountryCode.selector);
         fleet.registerFleetCountry(UUID_1, 0, 0);
     }
 
     function test_RevertIf_registerFleetCountry_invalidCode_over999() public {
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.InvalidCountryCode.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidCountryCode.selector);
         fleet.registerFleetCountry(UUID_1, 1000, 0);
     }
 
@@ -273,19 +286,19 @@ contract FleetIdentityTest is Test {
 
     function test_RevertIf_registerFleetLocal_invalidCountry() public {
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.InvalidCountryCode.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidCountryCode.selector);
         fleet.registerFleetLocal(UUID_1, 0, ADMIN_CA, 0);
     }
 
     function test_RevertIf_registerFleetLocal_invalidAdmin_zero() public {
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.InvalidAdminCode.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidAdminCode.selector);
         fleet.registerFleetLocal(UUID_1, US, 0, 0);
     }
 
     function test_RevertIf_registerFleetLocal_invalidAdmin_over4095() public {
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.InvalidAdminCode.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidAdminCode.selector);
         fleet.registerFleetLocal(UUID_1, US, 4096, 0);
     }
 
@@ -446,7 +459,7 @@ contract FleetIdentityTest is Test {
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
 
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.promote(tokenId);
     }
 
@@ -457,7 +470,7 @@ contract FleetIdentityTest is Test {
         fleet.reassignTier(tokenId, 2);
 
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.TargetTierSameAsCurrent.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.TargetTierSameAsCurrent.selector);
         fleet.reassignTier(tokenId, 2);
     }
 
@@ -472,7 +485,7 @@ contract FleetIdentityTest is Test {
         }
 
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.TierFull.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.TierFull.selector);
         fleet.promote(tokenId);
     }
 
@@ -481,7 +494,7 @@ contract FleetIdentityTest is Test {
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
 
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.MaxTiersReached.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.MaxTiersReached.selector);
         fleet.reassignTier(tokenId, 50);
     }
 
@@ -548,7 +561,7 @@ contract FleetIdentityTest is Test {
         fleet.reassignTier(tokenId, 2);
 
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.reassignTier(tokenId, 0);
     }
 
@@ -562,7 +575,7 @@ contract FleetIdentityTest is Test {
         fleet.reassignTier(tokenId, 2);
 
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.TierFull.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.TierFull.selector);
         fleet.reassignTier(tokenId, 0);
     }
 
@@ -571,7 +584,7 @@ contract FleetIdentityTest is Test {
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
 
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.reassignTier(tokenId, 3);
     }
 
@@ -671,7 +684,7 @@ contract FleetIdentityTest is Test {
 
         // Bob is not operator - should revert
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.burn(tokenId);
     }
 
@@ -972,7 +985,15 @@ contract FleetIdentityTest is Test {
 
     function test_RevertIf_bondToken_transferFromReturnsFalse() public {
         BadERC20 badToken = new BadERC20();
-        FleetIdentity f = new FleetIdentity(address(badToken), BASE_BOND);
+        
+        // Deploy implementation
+        FleetIdentityUpgradeable impl = new FleetIdentityUpgradeable();
+        // Deploy proxy with initialize call
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(impl),
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(badToken), BASE_BOND, owner))
+        );
+        FleetIdentityUpgradeable f = FleetIdentityUpgradeable(address(proxy));
 
         badToken.mint(alice, 1_000 ether);
         vm.prank(alice);
@@ -1037,7 +1058,15 @@ contract FleetIdentityTest is Test {
     // --- Edge cases ---
 
     function test_zeroBaseBond_allowsRegistration() public {
-        FleetIdentity f = new FleetIdentity(address(bondToken), 0);
+        // Deploy implementation
+        FleetIdentityUpgradeable impl = new FleetIdentityUpgradeable();
+        // Deploy proxy with initialize call (zero bond)
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(impl),
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(bondToken), 0, owner))
+        );
+        FleetIdentityUpgradeable f = FleetIdentityUpgradeable(address(proxy));
+        
         vm.prank(alice);
         bondToken.approve(address(f), type(uint256).max);
 
@@ -1083,7 +1112,7 @@ contract FleetIdentityTest is Test {
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
 
         vm.prank(caller);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.promote(tokenId);
     }
 
@@ -1096,7 +1125,7 @@ contract FleetIdentityTest is Test {
 
         // Only operator (alice) can burn registered tokens, not random callers
         vm.prank(caller);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.burn(tokenId);
     }
 
@@ -1142,7 +1171,7 @@ contract FleetIdentityTest is Test {
 
         // Bob tries to register same UUID in different region → revert
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.registerFleetLocal(UUID_1, DE, ADMIN_CA, 0);
     }
 
@@ -1153,7 +1182,7 @@ contract FleetIdentityTest is Test {
 
         // Bob tries to register same UUID in different country → revert
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.registerFleetCountry(UUID_1, DE, 0);
     }
 
@@ -1164,7 +1193,7 @@ contract FleetIdentityTest is Test {
 
         // Bob tries to register same UUID at local level → revert
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.registerFleetLocal(UUID_1, DE, ADMIN_CA, 0);
     }
 
@@ -1291,7 +1320,7 @@ contract FleetIdentityTest is Test {
 
         // Bob now owns tokenId, but cannot register NEW tokens for UUID_1
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.registerFleetLocal(UUID_1, DE, ADMIN_CA, 0);
     }
 
@@ -1324,11 +1353,11 @@ contract FleetIdentityTest is Test {
 
         // Bob cannot register same UUID anywhere
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.registerFleetLocal(UUID_1, cc2, admin2, 0);
 
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.registerFleetCountry(UUID_1, cc2, 0);
     }
 
@@ -1399,7 +1428,7 @@ contract FleetIdentityTest is Test {
 
         // Alice tries to register same UUID at country level → revert
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.UuidLevelMismatch.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.UuidLevelMismatch.selector);
         fleet.registerFleetCountry(UUID_1, DE, 0);
     }
 
@@ -1410,7 +1439,7 @@ contract FleetIdentityTest is Test {
 
         // Alice tries to register same UUID at local level → revert
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.UuidLevelMismatch.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.UuidLevelMismatch.selector);
         fleet.registerFleetLocal(UUID_1, DE, ADMIN_CA, 0);
     }
 
@@ -1498,7 +1527,7 @@ contract FleetIdentityTest is Test {
         fleet.claimUuid(UUID_1, address(0));
         
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.UuidAlreadyOwned.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.UuidAlreadyOwned.selector);
         fleet.claimUuid(UUID_1, address(0));
     }
 
@@ -1507,13 +1536,13 @@ contract FleetIdentityTest is Test {
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
         
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.UuidAlreadyOwned.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.UuidAlreadyOwned.selector);
         fleet.claimUuid(UUID_1, address(0));
     }
 
     function test_RevertIf_claimUuid_invalidUuid() public {
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.InvalidUUID.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidUUID.selector);
         fleet.claimUuid(bytes16(0), address(0));
     }
 
@@ -1707,7 +1736,7 @@ contract FleetIdentityTest is Test {
         
         // Alice cannot burn (not token owner)
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.NotTokenOwner.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotTokenOwner.selector);
         fleet.burn(tokenId);
         
         // Bob can burn
@@ -1723,7 +1752,7 @@ contract FleetIdentityTest is Test {
         
         // Bob cannot burn owned-only token (not owner)
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotTokenOwner.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotTokenOwner.selector);
         fleet.burn(tokenId);
     }
 
@@ -2046,7 +2075,7 @@ contract FleetIdentityTest is Test {
         vm.prank(alice);
         fleet.registerFleetCountry(UUID_1, US, 0);
 
-        vm.expectRevert(FleetIdentity.AdminAreaRequired.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.AdminAreaRequired.selector);
         fleet.buildHighestBondedUuidBundle(US, 0);
     }
 
@@ -2936,7 +2965,7 @@ contract FleetIdentityTest is Test {
         }
 
         // localInclusionHint should revert
-        vm.expectRevert(FleetIdentity.MaxTiersReached.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.MaxTiersReached.selector);
         fleet.localInclusionHint(US, ADMIN_CA);
     }
 
@@ -2954,7 +2983,7 @@ contract FleetIdentityTest is Test {
 
         // Registration at tier 0 (or any full tier) should revert with TierFull
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.TierFull.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.TierFull.selector);
         fleet.registerFleetLocal(_uuid(99999), US, ADMIN_CA, 0);
     }
 
@@ -2970,7 +2999,7 @@ contract FleetIdentityTest is Test {
             }
         }
 
-        vm.expectRevert(FleetIdentity.MaxTiersReached.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.MaxTiersReached.selector);
         fleet.countryInclusionHint(US);
     }
 
@@ -3064,7 +3093,7 @@ contract FleetIdentityTest is Test {
 
         // Now all admin tiers 0-23 are full. A new admin fleet must go to tier 24,
         // which exceeds MAX_TIERS=24 (valid tiers are 0-23).
-        vm.expectRevert(FleetIdentity.MaxTiersReached.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.MaxTiersReached.selector);
         fleet.localInclusionHint(US, ADMIN_CA);
     }
 
@@ -3254,10 +3283,10 @@ contract FleetIdentityTest is Test {
     }
 
     function test_RevertIf_buildCountryOnlyBundle_invalidCountryCode() public {
-        vm.expectRevert(FleetIdentity.InvalidCountryCode.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidCountryCode.selector);
         fleet.buildCountryOnlyBundle(0);
 
-        vm.expectRevert(FleetIdentity.InvalidCountryCode.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidCountryCode.selector);
         fleet.buildCountryOnlyBundle(1000); // > MAX_COUNTRY_CODE (999)
     }
 
@@ -3412,7 +3441,7 @@ contract FleetIdentityTest is Test {
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
 
         vm.prank(bob);
-        vm.expectRevert(FleetIdentity.NotUuidOwner.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotUuidOwner.selector);
         fleet.setOperator(UUID_1, carol);
     }
 
@@ -3508,7 +3537,7 @@ contract FleetIdentityTest is Test {
         fleet.setOperator(UUID_1, bob);
 
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.promote(tokenId);
     }
 
@@ -3541,7 +3570,7 @@ contract FleetIdentityTest is Test {
 
         // Owner cannot burn when there's a separate operator
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.NotOperator.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotOperator.selector);
         fleet.burn(tokenId);
     }
 
@@ -3640,7 +3669,7 @@ contract FleetIdentityTest is Test {
 
     function test_claimUuid_emitsEventWithOperator() public {
         vm.expectEmit(true, true, false, true);
-        emit FleetIdentity.UuidClaimed(alice, UUID_1, bob);
+        emit FleetIdentityUpgradeable.UuidClaimed(alice, UUID_1, bob);
         
         vm.prank(alice);
         fleet.claimUuid(UUID_1, bob);
@@ -3731,7 +3760,7 @@ contract FleetIdentityTest is Test {
     function test_RevertIf_setOperator_notRegistered() public {
         // UUID not registered at all - uuidOwner is address(0), so NotUuidOwner reverts first
         vm.prank(alice);
-        vm.expectRevert(FleetIdentity.NotUuidOwner.selector);
+        vm.expectRevert(FleetIdentityUpgradeable.NotUuidOwner.selector);
         fleet.setOperator(UUID_1, bob);
     }
 

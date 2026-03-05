@@ -2,21 +2,49 @@
 
 pragma solidity ^0.8.24;
 
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {FleetIdentity} from "./FleetIdentity.sol";
-import {ServiceProvider} from "./ServiceProvider.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
+
+// Import interfaces only - the registry stores proxy addresses
+interface IFleetIdentity {
+    function uuidOwner(bytes16 uuid) external view returns (address);
+}
+
+interface IServiceProvider {
+    function ownerOf(uint256 tokenId) external view returns (address);
+}
 
 /**
- * @title SwarmRegistryUniversal
- * @notice Permissionless BLE swarm registry compatible with all EVM chains (including ZkSync Era).
+ * @title SwarmRegistryUniversalUpgradeable
+ * @notice UUPS-upgradeable permissionless BLE swarm registry compatible with all EVM chains (including ZkSync Era).
  * @dev Uses native `bytes` storage for cross-chain compatibility.
  *
- *      Swarms are defined for a **fleet UUID** (not a token ID), allowing swarms to be
- *      registered for any UUID that has been claimed/registered in FleetIdentity,
- *      regardless of whether it's assigned to a region or is in "owned-only" mode.
- *      This decouples swarm management from geographic tier placement.
+ *      **Upgrade Pattern:**
+ *      - Uses OpenZeppelin UUPS proxy pattern for upgradeability.
+ *      - Only the contract owner can authorize upgrades.
+ *      - Storage layout must be preserved across upgrades (append-only).
+ *
+ *      **Important:** The FleetIdentity and ServiceProvider addresses should point to
+ *      **proxy addresses** (stable), not implementation addresses.
+ *
+ *      **Storage Migration Example (V1 → V2):**
+ *      ```solidity
+ *      function initializeV2(uint256 newParam) external reinitializer(2) {
+ *          _newParamIntroducedInV2 = newParam;
+ *      }
+ *      ```
  */
-contract SwarmRegistryUniversal is ReentrancyGuard {
+contract SwarmRegistryUniversalUpgradeable is
+    Initializable,
+    Ownable2StepUpgradeable,
+    UUPSUpgradeable,
+    ReentrancyGuard
+{
+    // ──────────────────────────────────────────────
+    // Errors
+    // ──────────────────────────────────────────────
     error InvalidFingerprintSize();
     error InvalidFilterSize();
     error InvalidUuid();
@@ -30,6 +58,9 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
     error SwarmNotOrphaned();
     error SwarmOrphaned();
 
+    // ──────────────────────────────────────────────
+    // Enums & Structs
+    // ──────────────────────────────────────────────
     enum SwarmStatus {
         REGISTERED,
         ACCEPTED,
@@ -41,26 +72,36 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
         IBEACON_INCLUDES_MAC, // 0x01: proxUUID || major || minor || MAC (Normalized)
         VENDOR_ID, // 0x02: companyID || hash(vendorBytes)
         GENERIC // 0x03
-
     }
 
     struct Swarm {
-        bytes16 fleetUuid; // Fleet UUID (not token ID) - allows swarms for any registered UUID
+        bytes16 fleetUuid;
         uint256 providerId;
-        uint32 filterLength; // Length of filter in bytes (max ~4GB, practically limited)
+        uint32 filterLength;
         uint8 fingerprintSize;
         TagType tagType;
         SwarmStatus status;
     }
 
+    // ──────────────────────────────────────────────
+    // Constants
+    // ──────────────────────────────────────────────
     uint8 public constant MAX_FINGERPRINT_SIZE = 16;
 
-    /// @notice Maximum filter size per swarm (24KB - fits in ~15M gas on cold write)
+    /// @notice Maximum filter size per swarm (24KB)
     uint32 public constant MAX_FILTER_SIZE = 24576;
 
-    FleetIdentity public immutable FLEET_CONTRACT;
+    // ──────────────────────────────────────────────
+    // Storage (V1) - Order matters for upgrades!
+    // ──────────────────────────────────────────────
 
-    ServiceProvider public immutable PROVIDER_CONTRACT;
+    /// @notice The FleetIdentity contract (proxy address).
+    /// @dev In non-upgradeable version this was immutable.
+    IFleetIdentity private _fleetContract;
+
+    /// @notice The ServiceProvider contract (proxy address).
+    /// @dev In non-upgradeable version this was immutable.
+    IServiceProvider private _providerContract;
 
     /// @notice SwarmID -> Swarm metadata
     mapping(uint256 => Swarm) public swarms;
@@ -68,24 +109,79 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
     /// @notice SwarmID -> XOR filter data (stored as bytes)
     mapping(uint256 => bytes) internal filterData;
 
-    /// @notice UUID -> List of SwarmIDs (keyed by fleet UUID, not token ID)
+    /// @notice UUID -> List of SwarmIDs
     mapping(bytes16 => uint256[]) public uuidSwarms;
 
     /// @notice SwarmID -> index in uuidSwarms[fleetUuid] (for O(1) removal)
     mapping(uint256 => uint256) public swarmIndexInUuid;
 
+    // ──────────────────────────────────────────────
+    // Storage Gap (for future upgrades)
+    // ──────────────────────────────────────────────
+
+    /// @dev Reserved storage slots for future upgrades.
+    // solhint-disable-next-line var-name-mixedcase
+    uint256[44] private __gap;
+
+    // ──────────────────────────────────────────────
+    // Events
+    // ──────────────────────────────────────────────
     event SwarmRegistered(
         uint256 indexed swarmId, bytes16 indexed fleetUuid, uint256 indexed providerId, address owner, uint32 filterSize
     );
-
     event SwarmStatusChanged(uint256 indexed swarmId, SwarmStatus status);
     event SwarmProviderUpdated(uint256 indexed swarmId, uint256 indexed oldProvider, uint256 indexed newProvider);
     event SwarmDeleted(uint256 indexed swarmId, bytes16 indexed fleetUuid, address indexed owner);
     event SwarmPurged(uint256 indexed swarmId, bytes16 indexed fleetUuid, address indexed purgedBy);
 
-    /// @notice Derives a deterministic swarm ID. Callable off-chain to predict IDs before registration.
-    /// @dev Swarm identity is based on fleet, filter, fingerprintSize, and tagType. ProviderId is mutable and not part of identity.
-    /// @return swarmId keccak256(fleetUuid, filter, fingerprintSize, tagType)
+    // ──────────────────────────────────────────────
+    // Constructor (disables initializers on implementation)
+    // ──────────────────────────────────────────────
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ──────────────────────────────────────────────
+    // Initializer
+    // ──────────────────────────────────────────────
+
+    /// @notice Initializes the contract. Must be called once via proxy.
+    /// @param fleetContract_ Address of the FleetIdentity proxy contract.
+    /// @param providerContract_ Address of the ServiceProvider proxy contract.
+    /// @param owner_ The address that will own this contract and can authorize upgrades.
+    function initialize(address fleetContract_, address providerContract_, address owner_) external initializer {
+        if (fleetContract_ == address(0) || providerContract_ == address(0)) {
+            revert InvalidSwarmData();
+        }
+
+        __Ownable_init(owner_);
+        __Ownable2Step_init();
+
+        _fleetContract = IFleetIdentity(fleetContract_);
+        _providerContract = IServiceProvider(providerContract_);
+    }
+
+    // ──────────────────────────────────────────────
+    // Public Getters for former immutables
+    // ──────────────────────────────────────────────
+
+    /// @notice Returns the FleetIdentity contract address.
+    function FLEET_CONTRACT() external view returns (IFleetIdentity) {
+        return _fleetContract;
+    }
+
+    /// @notice Returns the ServiceProvider contract address.
+    function PROVIDER_CONTRACT() external view returns (IServiceProvider) {
+        return _providerContract;
+    }
+
+    // ──────────────────────────────────────────────
+    // Pure Functions
+    // ──────────────────────────────────────────────
+
+    /// @notice Derives a deterministic swarm ID.
     function computeSwarmId(bytes16 fleetUuid, bytes calldata filter, uint8 fingerprintSize, TagType tagType)
         public
         pure
@@ -94,21 +190,11 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
         return uint256(keccak256(abi.encode(fleetUuid, filter, fingerprintSize, tagType)));
     }
 
-    constructor(address _fleetContract, address _providerContract) {
-        if (_fleetContract == address(0) || _providerContract == address(0)) {
-            revert InvalidSwarmData();
-        }
-        FLEET_CONTRACT = FleetIdentity(_fleetContract);
-        PROVIDER_CONTRACT = ServiceProvider(_providerContract);
-    }
+    // ──────────────────────────────────────────────
+    // Core Functions
+    // ──────────────────────────────────────────────
 
-    /// @notice Registers a new swarm. Caller must own the fleet UUID (via FleetIdentity.uuidOwner).
-    /// @param fleetUuid Fleet UUID (bytes16) - the UUID must be registered in FleetIdentity.
-    /// @param providerId Service provider token ID.
-    /// @param filter XOR filter blob (1–24 576 bytes).
-    /// @param fingerprintSize Fingerprint width in bits (1–16).
-    /// @param tagType Tag identity schema.
-    /// @return swarmId Deterministic ID for this swarm.
+    /// @notice Registers a new swarm. Caller must own the fleet UUID.
     function registerSwarm(
         bytes16 fleetUuid,
         uint256 providerId,
@@ -129,11 +215,10 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
             revert FilterTooLarge();
         }
 
-        // Check UUID ownership - works for any registered UUID regardless of region
-        if (FLEET_CONTRACT.uuidOwner(fleetUuid) != msg.sender) {
+        if (_fleetContract.uuidOwner(fleetUuid) != msg.sender) {
             revert NotUuidOwner();
         }
-        try PROVIDER_CONTRACT.ownerOf(providerId) returns (address) {}
+        try _providerContract.ownerOf(providerId) returns (address) {}
         catch {
             revert ProviderDoesNotExist();
         }
@@ -161,7 +246,6 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
     }
 
     /// @notice Approves a swarm. Caller must own the provider NFT.
-    /// @param swarmId The swarm to accept.
     function acceptSwarm(uint256 swarmId) external {
         Swarm storage s = swarms[swarmId];
         if (s.filterLength == 0) revert SwarmNotFound();
@@ -169,7 +253,7 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
         (bool fleetValid, bool providerValid) = isSwarmValid(swarmId);
         if (!fleetValid || !providerValid) revert SwarmOrphaned();
 
-        if (PROVIDER_CONTRACT.ownerOf(s.providerId) != msg.sender) {
+        if (_providerContract.ownerOf(s.providerId) != msg.sender) {
             revert NotProviderOwner();
         }
         s.status = SwarmStatus.ACCEPTED;
@@ -177,7 +261,6 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
     }
 
     /// @notice Rejects a swarm. Caller must own the provider NFT.
-    /// @param swarmId The swarm to reject.
     function rejectSwarm(uint256 swarmId) external {
         Swarm storage s = swarms[swarmId];
         if (s.filterLength == 0) revert SwarmNotFound();
@@ -185,32 +268,29 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
         (bool fleetValid, bool providerValid) = isSwarmValid(swarmId);
         if (!fleetValid || !providerValid) revert SwarmOrphaned();
 
-        if (PROVIDER_CONTRACT.ownerOf(s.providerId) != msg.sender) {
+        if (_providerContract.ownerOf(s.providerId) != msg.sender) {
             revert NotProviderOwner();
         }
         s.status = SwarmStatus.REJECTED;
         emit SwarmStatusChanged(swarmId, SwarmStatus.REJECTED);
     }
 
-    /// @notice Reassigns the service provider. Resets status to REGISTERED. Caller must own the fleet UUID.
-    /// @param swarmId The swarm to update.
-    /// @param newProviderId New provider token ID.
+    /// @notice Reassigns the service provider. Resets status to REGISTERED.
     function updateSwarmProvider(uint256 swarmId, uint256 newProviderId) external {
         Swarm storage s = swarms[swarmId];
         if (s.filterLength == 0) {
             revert SwarmNotFound();
         }
-        if (FLEET_CONTRACT.uuidOwner(s.fleetUuid) != msg.sender) {
+        if (_fleetContract.uuidOwner(s.fleetUuid) != msg.sender) {
             revert NotUuidOwner();
         }
-        try PROVIDER_CONTRACT.ownerOf(newProviderId) returns (address) {}
+        try _providerContract.ownerOf(newProviderId) returns (address) {}
         catch {
             revert ProviderDoesNotExist();
         }
 
         uint256 oldProvider = s.providerId;
 
-        // Effects — update provider and reset status
         s.providerId = newProviderId;
         s.status = SwarmStatus.REGISTERED;
 
@@ -218,13 +298,12 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
     }
 
     /// @notice Permanently deletes a swarm. Caller must own the fleet UUID.
-    /// @param swarmId The swarm to delete.
     function deleteSwarm(uint256 swarmId) external {
         Swarm storage s = swarms[swarmId];
         if (s.filterLength == 0) {
             revert SwarmNotFound();
         }
-        if (FLEET_CONTRACT.uuidOwner(s.fleetUuid) != msg.sender) {
+        if (_fleetContract.uuidOwner(s.fleetUuid) != msg.sender) {
             revert NotUuidOwner();
         }
 
@@ -239,25 +318,20 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
     }
 
     /// @notice Returns whether the swarm's fleet UUID and provider NFT are still valid.
-    /// @param swarmId The swarm to check.
-    /// @return fleetValid True if the fleet UUID is still owned (uuidOwner != address(0)).
-    /// @return providerValid True if the provider NFT exists.
     function isSwarmValid(uint256 swarmId) public view returns (bool fleetValid, bool providerValid) {
         Swarm storage s = swarms[swarmId];
         if (s.filterLength == 0) revert SwarmNotFound();
 
-        // Fleet is valid if UUID is still owned (not released)
-        fleetValid = FLEET_CONTRACT.uuidOwner(s.fleetUuid) != address(0);
+        fleetValid = _fleetContract.uuidOwner(s.fleetUuid) != address(0);
 
-        try PROVIDER_CONTRACT.ownerOf(s.providerId) returns (address) {
+        try _providerContract.ownerOf(s.providerId) returns (address) {
             providerValid = true;
         } catch {
             providerValid = false;
         }
     }
 
-    /// @notice Permissionless-ly removes a swarm whose fleet UUID has been released or provider NFT has been burned.
-    /// @param swarmId The orphaned swarm to purge.
+    /// @notice Permissionless-ly removes an orphaned swarm.
     function purgeOrphanedSwarm(uint256 swarmId) external {
         Swarm storage s = swarms[swarmId];
         if (s.filterLength == 0) revert SwarmNotFound();
@@ -276,27 +350,21 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
     }
 
     /// @notice Tests tag membership against the swarm's XOR filter.
-    /// @param swarmId The swarm to query.
-    /// @param tagHash keccak256 of the tag identity bytes (caller must pre-normalize per tagType).
-    /// @return isValid True if the tag passes the XOR filter check.
     function checkMembership(uint256 swarmId, bytes32 tagHash) external view returns (bool isValid) {
         Swarm storage s = swarms[swarmId];
         if (s.filterLength == 0) {
             revert SwarmNotFound();
         }
 
-        // Reject queries against orphaned swarms
         (bool fleetValid, bool providerValid) = isSwarmValid(swarmId);
         if (!fleetValid || !providerValid) revert SwarmOrphaned();
 
         bytes storage filter = filterData[swarmId];
         uint256 dataLen = s.filterLength;
 
-        // Calculate M (number of fingerprint slots)
         uint256 m = (dataLen * 8) / s.fingerprintSize;
         if (m == 0) return false;
 
-        // Derive 3 indices and expected fingerprint from hash
         uint32 h1 = uint32(uint256(tagHash)) % uint32(m);
         uint32 h2 = uint32(uint256(tagHash) >> 32) % uint32(m);
         uint32 h3 = uint32(uint256(tagHash) >> 64) % uint32(m);
@@ -304,7 +372,6 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
         uint256 fpMask = (uint256(1) << s.fingerprintSize) - 1;
         uint256 expectedFp = (uint256(tagHash) >> 96) & fpMask;
 
-        // Read and XOR fingerprints
         uint256 f1 = _readFingerprint(filter, h1, s.fingerprintSize);
         uint256 f2 = _readFingerprint(filter, h2, s.fingerprintSize);
         uint256 f3 = _readFingerprint(filter, h3, s.fingerprintSize);
@@ -313,8 +380,6 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
     }
 
     /// @notice Returns the raw XOR filter bytes for a swarm.
-    /// @param swarmId The swarm to query.
-    /// @return filter The XOR filter blob.
     function getFilterData(uint256 swarmId) external view returns (bytes memory filter) {
         if (swarms[swarmId].filterLength == 0) {
             revert SwarmNotFound();
@@ -322,9 +387,17 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
         return filterData[swarmId];
     }
 
-    /**
-     * @dev O(1) removal of a swarm from its UUID's swarm list using index tracking.
-     */
+    // ──────────────────────────────────────────────
+    // UUPS Authorization
+    // ──────────────────────────────────────────────
+
+    /// @dev Only the owner can authorize an upgrade.
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    // ──────────────────────────────────────────────
+    // Internal Functions
+    // ──────────────────────────────────────────────
+
     function _removeFromUuidSwarms(bytes16 fleetUuid, uint256 swarmId) internal {
         uint256[] storage arr = uuidSwarms[fleetUuid];
         uint256 index = swarmIndexInUuid[swarmId];
@@ -336,18 +409,11 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
         delete swarmIndexInUuid[swarmId];
     }
 
-    /**
-     * @dev Reads a packed fingerprint from storage bytes.
-     * @param filter The filter bytes in storage.
-     * @param index The fingerprint slot index.
-     * @param bits The fingerprint size in bits.
-     */
     function _readFingerprint(bytes storage filter, uint256 index, uint8 bits) internal view returns (uint256) {
         uint256 bitOffset = index * bits;
         uint256 startByte = bitOffset / 8;
         uint256 endByte = (bitOffset + bits - 1) / 8;
 
-        // Read bytes and assemble into uint256
         uint256 raw;
         for (uint256 i = startByte; i <= endByte;) {
             raw = (raw << 8) | uint8(filter[i]);
@@ -356,7 +422,6 @@ contract SwarmRegistryUniversal is ReentrancyGuard {
             }
         }
 
-        // Extract the fingerprint bits
         uint256 totalBitsRead = (endByte - startByte + 1) * 8;
         uint256 localStart = bitOffset % 8;
         uint256 shiftRight = totalBitsRead - (localStart + bits);
