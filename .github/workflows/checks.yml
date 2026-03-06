@@ -62,6 +62,15 @@ jobs:
           path: coverage.lcov
           retention-days: 30
 
+      - name: Report coverage to PR
+        uses: zgosalvez/github-actions-report-lcov@v4
+        with:
+          coverage-files: coverage.lcov
+          minimum-coverage: 95
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          update-comment: true
+          working-directory: ./
+
       - name: Check line coverage threshold
         run: |
           # Extract line coverage from lcov report for src/swarms/ contracts only
