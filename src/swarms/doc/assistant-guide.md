@@ -278,7 +278,7 @@ When a fleet or provider NFT is burned, swarms referencing it become _orphaned_:
 
 The system supports different ways of constructing the unique `TagID` based on the hardware capabilities.
 
-**Enum: `TagType`**
+**Enum: `TagType`** (defined in `interfaces/SwarmTypes.sol`)
 
 - **`0x00`: IBEACON_PAYLOAD_ONLY**
   - **Format**: `UUID (16b) || Major (2b) || Minor (2b)`

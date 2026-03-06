@@ -1,5 +1,18 @@
 # Data Model & Contract Interfaces
 
+## Interface Files
+
+Public interfaces for external integrators and cross-contract calls:
+
+| Interface                                       | Description                                    |
+| :---------------------------------------------- | :--------------------------------------------- |
+| `interfaces/IFleetIdentity.sol`                 | FleetIdentity public API (ERC721Enumerable)    |
+| `interfaces/IServiceProvider.sol`               | ServiceProvider public API (ERC721)            |
+| `interfaces/ISwarmRegistry.sol`                 | Common registry interface (L1 & Universal)    |
+| `interfaces/SwarmTypes.sol`                     | Shared enums: `RegistrationLevel`, `SwarmStatus`, `TagType`, `FingerprintSize` |
+
+These interfaces define the expected API surface for UUPS upgradeable contracts.
+
 ## Contract Classes
 
 ```mermaid

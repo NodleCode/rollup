@@ -114,6 +114,7 @@ The system provides **non-enumerating** tag verification—individual tags aren'
 
 | Document                                             | Description                                       |
 | :--------------------------------------------------- | :------------------------------------------------ |
+| [interfaces/](../interfaces/)                        | Solidity interface files (`IFleetIdentity`, `IServiceProvider`, `ISwarmRegistry`, `SwarmTypes`) |
 | [data-model.md](data-model.md)                       | Contract interfaces, enums, storage layout        |
 | [fleet-registration.md](fleet-registration.md)       | Fleet & UUID registration, tier economics         |
 | [swarm-operations.md](swarm-operations.md)           | Swarm registration, filters, provider approval    |
