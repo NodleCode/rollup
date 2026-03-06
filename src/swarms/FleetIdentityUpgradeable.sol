@@ -78,6 +78,9 @@ contract FleetIdentityUpgradeable is
     error NotUuidOwner();
     error NotOperator();
     error NotOwnerOrOperator();
+    error InvalidBaseBond();
+    error InvalidMultiplier();
+    error InvalidBondToken();
 
     // ──────────────────────────────────────────────
     // Enums
@@ -98,8 +101,11 @@ contract FleetIdentityUpgradeable is
     /// @notice Unified tier capacity for all levels.
     uint256 public constant TIER_CAPACITY = 10;
 
-    /// @notice Bond multiplier for country-level registration (16× local).
-    uint256 public constant COUNTRY_BOND_MULTIPLIER = 16;
+    /// @notice Default country bond multiplier when not explicitly set (16× local).
+    uint256 public constant DEFAULT_COUNTRY_BOND_MULTIPLIER = 16;
+
+    /// @notice Default base bond for tier 0.
+    uint256 public constant DEFAULT_BASE_BOND = 1e18;
 
     /// @notice Hard cap on tier count per region.
     uint256 public constant MAX_TIERS = 24;
@@ -173,6 +179,23 @@ contract FleetIdentityUpgradeable is
     mapping(bytes16 => uint256) public uuidTotalTierBonds;
 
     // ──────────────────────────────────────────────
+    // Bond Snapshots (for safe parameter reconfiguration)
+    // ──────────────────────────────────────────────
+
+    /// @notice Configurable country bond multiplier. 0 = use DEFAULT_COUNTRY_BOND_MULTIPLIER (16).
+    /// @dev Can be updated by owner via setCountryBondMultiplier().
+    uint256 private _countryBondMultiplier;
+
+    /// @notice tokenId -> tier-0 equivalent bond paid at registration.
+    /// @dev Stores baseBond (for local) or baseBond*multiplier (for country).
+    ///      Actual tier K bond = tokenTier0Bond[tokenId] << K.
+    mapping(uint256 => uint256) public tokenTier0Bond;
+
+    /// @notice UUID -> ownership bond paid at claim/first-registration.
+    /// @dev Refunded when owned-only token is burned.
+    mapping(bytes16 => uint256) public uuidOwnershipBondPaid;
+
+    // ──────────────────────────────────────────────
     // On-chain region indexes
     // ──────────────────────────────────────────────
 
@@ -217,6 +240,8 @@ contract FleetIdentityUpgradeable is
         address indexed owner, uint256 indexed tokenId, uint32 indexed regionKey, uint256 tierIndex, uint256 bondRefund
     );
     event UuidClaimed(address indexed owner, bytes16 indexed uuid, address indexed operator);
+    event BaseBondUpdated(uint256 indexed oldBaseBond, uint256 indexed newBaseBond);
+    event CountryMultiplierUpdated(uint256 indexed oldMultiplier, uint256 indexed newMultiplier);
 
     // ──────────────────────────────────────────────
     // Constructor (disables initializers on implementation)
@@ -232,17 +257,69 @@ contract FleetIdentityUpgradeable is
     // ──────────────────────────────────────────────
 
     /// @notice Initializes the contract. Must be called once via proxy.
-    /// @param bondToken_ Address of the ERC-20 token used for bonds.
-    /// @param baseBond_ Base bond for tier 0 in any region.
     /// @param owner_ The address that will own this contract and can authorize upgrades.
-    function initialize(address bondToken_, uint256 baseBond_, address owner_) external initializer {
+    /// @param bondToken_ Address of the ERC-20 token used for bonds (required).
+    /// @param baseBond_ Base bond for tier 0 (0 = DEFAULT_BASE_BOND = 1M NODL).
+    /// @param countryMultiplier_ Country bond multiplier (0 = DEFAULT_COUNTRY_BOND_MULTIPLIER = 16).
+    function initialize(address owner_, address bondToken_, uint256 baseBond_, uint256 countryMultiplier_)
+        external
+        initializer
+    {
+        if (bondToken_ == address(0)) revert InvalidBondToken();
+
         __ERC721_init("Swarm Fleet Identity", "SFID");
         __ERC721Enumerable_init();
         __Ownable_init(owner_);
         __Ownable2Step_init();
 
         _bondToken = IERC20(bondToken_);
-        _baseBond = baseBond_;
+        _baseBond = baseBond_ == 0 ? DEFAULT_BASE_BOND : baseBond_;
+        _countryBondMultiplier = countryMultiplier_ == 0 ? DEFAULT_COUNTRY_BOND_MULTIPLIER : countryMultiplier_;
+    }
+
+    // ──────────────────────────────────────────────
+    // Admin Functions
+    // ──────────────────────────────────────────────
+
+    /// @notice Updates the base bond amount for future registrations.
+    /// @dev Existing tokens use their stored snapshots for refunds.
+    ///      **IMPORTANT**: Verify contract solvency before increasing.
+    /// @param newBaseBond The new base bond amount (must be non-zero).
+    function setBaseBond(uint256 newBaseBond) external onlyOwner {
+        if (newBaseBond == 0) revert InvalidBaseBond();
+        uint256 oldBaseBond = _baseBond;
+        _baseBond = newBaseBond;
+        emit BaseBondUpdated(oldBaseBond, newBaseBond);
+    }
+
+    /// @notice Updates the country bond multiplier for future registrations.
+    /// @dev Existing tokens use their stored snapshots for refunds.
+    ///      **IMPORTANT**: Verify contract solvency before increasing.
+    /// @param newMultiplier The new multiplier (must be non-zero).
+    function setCountryBondMultiplier(uint256 newMultiplier) external onlyOwner {
+        if (newMultiplier == 0) revert InvalidMultiplier();
+        uint256 oldMultiplier = countryBondMultiplier();
+        _countryBondMultiplier = newMultiplier;
+        emit CountryMultiplierUpdated(oldMultiplier, newMultiplier);
+    }
+
+    /// @notice Updates both bond parameters atomically for future registrations.
+    /// @dev Existing tokens use their stored snapshots for refunds.
+    ///      **IMPORTANT**: Verify contract solvency before increasing.
+    /// @param newBaseBond The new base bond amount (must be non-zero).
+    /// @param newMultiplier The new country multiplier (must be non-zero).
+    function setBondParameters(uint256 newBaseBond, uint256 newMultiplier) external onlyOwner {
+        if (newBaseBond == 0) revert InvalidBaseBond();
+        if (newMultiplier == 0) revert InvalidMultiplier();
+
+        uint256 oldBaseBond = _baseBond;
+        uint256 oldMultiplier = countryBondMultiplier();
+
+        _baseBond = newBaseBond;
+        _countryBondMultiplier = newMultiplier;
+
+        emit BaseBondUpdated(oldBaseBond, newBaseBond);
+        emit CountryMultiplierUpdated(oldMultiplier, newMultiplier);
     }
 
     // ──────────────────────────────────────────────
@@ -257,6 +334,11 @@ contract FleetIdentityUpgradeable is
     /// @notice Returns the base bond amount.
     function BASE_BOND() external view returns (uint256) {
         return _baseBond;
+    }
+
+    /// @notice Returns the country bond multiplier.
+    function countryBondMultiplier() public view returns (uint256) {
+        return _countryBondMultiplier;
     }
 
     // ══════════════════════════════════════════════
@@ -351,35 +433,40 @@ contract FleetIdentityUpgradeable is
 
         uint32 region = tokenRegion(tokenId);
         bytes16 uuid = tokenUuid(tokenId);
-        address owner_ = uuidOwner[uuid];
+        address owner = uuidOwner[uuid];
         address operator = operatorOf(uuid);
         bool isLastToken = uuidTokenCount[uuid] == 1;
 
         if (region == OWNED_REGION_KEY) {
             if (tokenHolder != msg.sender) revert NotTokenOwner();
 
+            // Use snapshot for accurate refund
+            uint256 ownershipBond = uuidOwnershipBondPaid[uuid];
+
             _burn(tokenId);
             _clearUuidOwnership(uuid);
-            _refundBond(owner_, _baseBond);
+            _refundBond(owner, ownershipBond);
 
-            emit FleetBurned(tokenHolder, tokenId, region, 0, _baseBond);
+            emit FleetBurned(tokenHolder, tokenId, region, 0, ownershipBond);
         } else {
             if (msg.sender != operator) {
                 revert NotOperator();
             }
 
             uint256 tier = fleetTier[tokenId];
-            uint256 tierBondAmount = tierBond(tier, _isCountryRegion(region));
+            // Use snapshot for accurate refund
+            uint256 tierBondAmount = _tokenTierBond(tokenId, tier);
 
             uuidTotalTierBonds[uuid] -= tierBondAmount;
 
             _cleanupFleetFromTier(tokenId, region, tier);
+            delete tokenTier0Bond[tokenId];
             _burn(tokenId);
 
             if (isLastToken) {
                 uuidLevel[uuid] = RegistrationLevel.Owned;
                 uint256 ownedTokenId = uint256(uint128(uuid));
-                _mint(owner_, ownedTokenId);
+                _mint(owner, ownedTokenId);
             } else {
                 uuidTokenCount[uuid]--;
             }
@@ -407,6 +494,7 @@ contract FleetIdentityUpgradeable is
         tokenId = uint256(uint128(uuid));
         _mint(msg.sender, tokenId);
 
+        uuidOwnershipBondPaid[uuid] = _baseBond;
         _pullBond(msg.sender, _baseBond);
 
         emit UuidClaimed(msg.sender, uuid, operatorOf(uuid));
@@ -416,10 +504,17 @@ contract FleetIdentityUpgradeable is
     // Views: Bond & tier helpers
     // ══════════════════════════════════════════════
 
-    /// @notice Bond required for tier K.
+    /// @notice Bond required for tier K at current parameters.
+    /// @dev Use _tokenTierBond for refund calculations on existing tokens.
     function tierBond(uint256 tier, bool isCountry) public view returns (uint256) {
         uint256 base = _baseBond << tier;
-        return isCountry ? base * COUNTRY_BOND_MULTIPLIER : base;
+        return isCountry ? base * countryBondMultiplier() : base;
+    }
+
+    /// @notice Bond for a token at a given tier based on registration-time parameters.
+    /// @dev Uses tier-0 bond stored at registration; returns 0 for non-existent tokens.
+    function _tokenTierBond(uint256 tokenId, uint256 tier) internal view returns (uint256) {
+        return tokenTier0Bond[tokenId] << tier;
     }
 
     /// @notice Returns the cheapest tier for local inclusion.
@@ -549,10 +644,14 @@ contract FleetIdentityUpgradeable is
     // Views: Region indexes
     // ══════════════════════════════════════════════
 
+    /// @notice Returns all country codes that have at least one active fleet.
+    /// @return Array of ISO 3166-1 numeric country codes.
     function getActiveCountries() external view returns (uint16[] memory) {
         return _activeCountries;
     }
 
+    /// @notice Returns all admin-area region keys across all countries.
+    /// @return Array of encoded region keys (countryCode << 10 | adminCode).
     function getActiveAdminAreas() external view returns (uint32[] memory) {
         uint256 total = 0;
         uint256 countryCount = _activeCountries.length;
@@ -572,10 +671,17 @@ contract FleetIdentityUpgradeable is
         return result;
     }
 
+    /// @notice Returns all active admin-area region keys for a specific country.
+    /// @param countryCode ISO 3166-1 numeric country code.
+    /// @return Array of encoded region keys for that country.
     function getCountryAdminAreas(uint16 countryCode) external view returns (uint32[] memory) {
         return _countryAdminAreas[countryCode];
     }
 
+    /// @notice Encodes a country code and admin code into a region key.
+    /// @param countryCode ISO 3166-1 numeric country code (1-999).
+    /// @param adminCode Admin-area code within the country (1-255).
+    /// @return Encoded region key: (countryCode << 10) | adminCode.
     function makeAdminRegion(uint16 countryCode, uint16 adminCode) public pure returns (uint32) {
         return (uint32(countryCode) << uint32(ADMIN_SHIFT)) | uint32(adminCode);
     }
@@ -621,6 +727,7 @@ contract FleetIdentityUpgradeable is
         delete uuidLevel[uuid];
         delete uuidOperator[uuid];
         delete uuidTotalTierBonds[uuid];
+        delete uuidOwnershipBondPaid[uuid];
     }
 
     function _decrementUuidCount(bytes16 uuid) internal returns (uint256 newCount) {
@@ -665,6 +772,9 @@ contract FleetIdentityUpgradeable is
         RegistrationLevel targetLevel = isCountry ? RegistrationLevel.Country : RegistrationLevel.Local;
         uint256 targetTierBond = tierBond(targetTier, isCountry);
 
+        // Store tier-0 equivalent bond for accurate refunds when parameters change
+        uint256 tier0Bond = isCountry ? _baseBond * countryBondMultiplier() : _baseBond;
+
         if (existingLevel == RegistrationLevel.Owned) {
             address operator = operatorOf(uuid);
             if (operator != msg.sender) revert NotOperator();
@@ -675,6 +785,7 @@ contract FleetIdentityUpgradeable is
             uuidTotalTierBonds[uuid] = targetTierBond;
 
             tokenId = _mintFleetTokenTo(owner_, uuid, region, targetTier);
+            tokenTier0Bond[tokenId] = tier0Bond;
 
             _pullBond(operator, targetTierBond);
 
@@ -686,6 +797,8 @@ contract FleetIdentityUpgradeable is
             uuidTotalTierBonds[uuid] = targetTierBond;
 
             tokenId = _mintFleetToken(uuid, region, targetTier);
+            tokenTier0Bond[tokenId] = tier0Bond;
+            uuidOwnershipBondPaid[uuid] = _baseBond;
 
             _pullBond(msg.sender, _baseBond + targetTierBond);
 
@@ -700,6 +813,7 @@ contract FleetIdentityUpgradeable is
             uuidTotalTierBonds[uuid] += targetTierBond;
 
             tokenId = _mintFleetTokenTo(owner_, uuid, region, targetTier);
+            tokenTier0Bond[tokenId] = tier0Bond;
 
             _pullBond(operator, targetTierBond);
 
@@ -719,9 +833,13 @@ contract FleetIdentityUpgradeable is
         if (_regionTierMembers[region][targetTier].length >= TIER_CAPACITY) revert TierFull();
 
         bool isCountry = _isCountryRegion(region);
-        uint256 currentBond = tierBond(currentTier, isCountry);
+        // Use stored tier-0 bond for current, current rate for target
+        uint256 currentBond = _tokenTierBond(tokenId, currentTier);
         uint256 targetBond = tierBond(targetTier, isCountry);
         uint256 additionalBond = targetBond - currentBond;
+
+        // Update tier-0 bond to current parameters since they're paying at current rates
+        tokenTier0Bond[tokenId] = isCountry ? _baseBond * countryBondMultiplier() : _baseBond;
 
         uuidTotalTierBonds[uuid] += additionalBond;
         _removeFromTier(tokenId, region, currentTier);
@@ -743,9 +861,9 @@ contract FleetIdentityUpgradeable is
         if (targetTier >= currentTier) revert TargetTierNotLower();
         if (_regionTierMembers[region][targetTier].length >= TIER_CAPACITY) revert TierFull();
 
-        bool isCountry = _isCountryRegion(region);
-        uint256 currentBond = tierBond(currentTier, isCountry);
-        uint256 targetBond = tierBond(targetTier, isCountry);
+        // Use snapshot for accurate refund based on what was paid
+        uint256 currentBond = _tokenTierBond(tokenId, currentTier);
+        uint256 targetBond = _tokenTierBond(tokenId, targetTier);
         uint256 refund = currentBond - targetBond;
 
         uuidTotalTierBonds[uuid] -= refund;

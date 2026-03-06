@@ -111,7 +111,7 @@ contract TestUpgradeOnAnvil is Script {
         FleetIdentityUpgradeable fiImpl = new FleetIdentityUpgradeable();
         ERC1967Proxy fiProxy = new ERC1967Proxy(
             address(fiImpl),
-            abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(bondToken), baseBond, deployer))
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (deployer, address(bondToken), baseBond, 0))
         );
         fleetIdentityProxy = address(fiProxy);
         console.log("  FleetIdentity Proxy:", fleetIdentityProxy);

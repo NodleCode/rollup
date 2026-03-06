@@ -94,7 +94,7 @@ contract FleetIdentityTest is Test {
         // Deploy proxy with initialize call
         ERC1967Proxy proxy = new ERC1967Proxy(
             address(impl),
-            abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(bondToken), BASE_BOND, owner))
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(bondToken), BASE_BOND, 0))
         );
 
         // Cast proxy to contract type
@@ -219,7 +219,7 @@ contract FleetIdentityTest is Test {
         assertEq(fleet.TIER_CAPACITY(), 10);
         assertEq(fleet.MAX_TIERS(), 24);
         assertEq(fleet.MAX_BONDED_UUID_BUNDLE_SIZE(), 20);
-        assertEq(fleet.COUNTRY_BOND_MULTIPLIER(), 16);
+        assertEq(fleet.countryBondMultiplier(), 16);
     }
 
     // --- tierBond ---
@@ -231,7 +231,7 @@ contract FleetIdentityTest is Test {
 
     function test_tierBond_country_tier0() public view {
         // Country regions get 16x multiplier
-        assertEq(fleet.tierBond(0, true), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER());
+        assertEq(fleet.tierBond(0, true), BASE_BOND * fleet.countryBondMultiplier());
     }
 
     function test_tierBond_local_tier1() public view {
@@ -239,7 +239,7 @@ contract FleetIdentityTest is Test {
     }
 
     function test_tierBond_country_tier1() public view {
-        assertEq(fleet.tierBond(1, true), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER() * 2);
+        assertEq(fleet.tierBond(1, true), BASE_BOND * fleet.countryBondMultiplier() * 2);
     }
 
     function test_tierBond_geometricProgression() public view {
@@ -257,7 +257,7 @@ contract FleetIdentityTest is Test {
 
         assertEq(fleet.tokenRegion(tokenId), _regionUS());
         assertEq(fleet.fleetTier(tokenId), 0);
-        assertEq(fleet.bonds(tokenId), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER()); // Country gets 16x multiplier
+        assertEq(fleet.bonds(tokenId), BASE_BOND * fleet.countryBondMultiplier()); // Country gets 16x multiplier
         assertEq(fleet.regionTierCount(_regionUS()), 1);
     }
 
@@ -315,7 +315,7 @@ contract FleetIdentityTest is Test {
         assertEq(fleet.fleetTier(c1), 0);
         assertEq(fleet.fleetTier(l1), 0);
 
-        assertEq(fleet.bonds(c1), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER()); // Country gets 16× multiplier
+        assertEq(fleet.bonds(c1), BASE_BOND * fleet.countryBondMultiplier()); // Country gets 16× multiplier
         assertEq(fleet.bonds(l1), BASE_BOND); // Local gets 1× multiplier
     }
 
@@ -329,13 +329,13 @@ contract FleetIdentityTest is Test {
         vm.prank(bob);
         uint256 us21 = fleet.registerFleetCountry(_uuid(100), US, 1);
         assertEq(fleet.fleetTier(us21), 1);
-        assertEq(fleet.bonds(us21), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER() * 2); // Country tier 1: 16× * 2^1
+        assertEq(fleet.bonds(us21), BASE_BOND * fleet.countryBondMultiplier() * 2); // Country tier 1: 16× * 2^1
 
         // DE country is independent - can still join tier 0
         vm.prank(bob);
         uint256 de1 = fleet.registerFleetCountry(_uuid(200), DE, 0);
         assertEq(fleet.fleetTier(de1), 0);
-        assertEq(fleet.bonds(de1), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER());
+        assertEq(fleet.bonds(de1), BASE_BOND * fleet.countryBondMultiplier());
         assertEq(fleet.regionTierCount(_regionDE()), 1);
 
         // US local is independent - can still join tier 0
@@ -354,13 +354,13 @@ contract FleetIdentityTest is Test {
         vm.prank(bob);
         uint256 us21 = fleet.registerFleetCountry(_uuid(500), US, 1);
         assertEq(fleet.fleetTier(us21), 1);
-        assertEq(fleet.bonds(us21), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER() * 2); // Country tier 1: 16× * 2^1
+        assertEq(fleet.bonds(us21), BASE_BOND * fleet.countryBondMultiplier() * 2); // Country tier 1: 16× * 2^1
 
         // DE country is independent - can still join tier 0
         vm.prank(bob);
         uint256 de1 = fleet.registerFleetCountry(_uuid(600), DE, 0);
         assertEq(fleet.fleetTier(de1), 0);
-        assertEq(fleet.bonds(de1), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER()); // Country tier 0: 16× * 2^0
+        assertEq(fleet.bonds(de1), BASE_BOND * fleet.countryBondMultiplier()); // Country tier 0: 16× * 2^0
     }
 
     function test_perRegionTiers_twoAdminAreasIndependent() public {
@@ -991,7 +991,7 @@ contract FleetIdentityTest is Test {
         // Deploy proxy with initialize call
         ERC1967Proxy proxy = new ERC1967Proxy(
             address(impl),
-            abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(badToken), BASE_BOND, owner))
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(badToken), BASE_BOND, 0))
         );
         FleetIdentityUpgradeable f = FleetIdentityUpgradeable(address(proxy));
 
@@ -1057,25 +1057,39 @@ contract FleetIdentityTest is Test {
 
     // --- Edge cases ---
 
-    function test_zeroBaseBond_allowsRegistration() public {
+    function test_initialize_zeroBaseBond_usesDefault() public {
         // Deploy implementation
         FleetIdentityUpgradeable impl = new FleetIdentityUpgradeable();
-        // Deploy proxy with initialize call (zero bond)
+        // Deploy proxy with zero base bond - should use DEFAULT_BASE_BOND
         ERC1967Proxy proxy = new ERC1967Proxy(
             address(impl),
-            abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(bondToken), 0, owner))
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(bondToken), 0, 0))
         );
         FleetIdentityUpgradeable f = FleetIdentityUpgradeable(address(proxy));
-        
-        vm.prank(alice);
-        bondToken.approve(address(f), type(uint256).max);
+        assertEq(f.BASE_BOND(), f.DEFAULT_BASE_BOND());
+    }
 
-        vm.prank(alice);
-        uint256 tokenId = f.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
-        assertEq(f.bonds(tokenId), 0);
+    function test_initialize_zeroMultiplier_usesDefault() public {
+        // Deploy implementation
+        FleetIdentityUpgradeable impl = new FleetIdentityUpgradeable();
+        // Deploy proxy with zero multiplier - should use DEFAULT_COUNTRY_BOND_MULTIPLIER
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(impl),
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(bondToken), BASE_BOND, 0))
+        );
+        FleetIdentityUpgradeable f = FleetIdentityUpgradeable(address(proxy));
+        assertEq(f.countryBondMultiplier(), f.DEFAULT_COUNTRY_BOND_MULTIPLIER());
+    }
 
-        vm.prank(alice);
-        f.burn(tokenId);
+    function test_initialize_revertsOnZeroBondToken() public {
+        // Deploy implementation
+        FleetIdentityUpgradeable impl = new FleetIdentityUpgradeable();
+        // Attempt to deploy proxy with zero bond token - should revert
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidBondToken.selector);
+        new ERC1967Proxy(
+            address(impl),
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(0), BASE_BOND, 0))
+        );
     }
 
     // --- Fuzz Tests ---
@@ -1088,7 +1102,7 @@ contract FleetIdentityTest is Test {
 
         assertEq(fleet.tokenRegion(tokenId), uint32(cc));
         assertEq(fleet.fleetTier(tokenId), 0);
-        assertEq(fleet.bonds(tokenId), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER()); // Country gets 16x multiplier
+        assertEq(fleet.bonds(tokenId), BASE_BOND * fleet.countryBondMultiplier()); // Country gets 16x multiplier
     }
 
     function testFuzz_registerFleetLocal_validCodes(uint16 cc, uint16 admin) public {
@@ -1861,7 +1875,7 @@ contract FleetIdentityTest is Test {
         // Local regions get 1× multiplier
         assertEq(fleet.tierBond(tier, false), expected);
         // Country regions get 16x multiplier
-        assertEq(fleet.tierBond(tier, true), expected * fleet.COUNTRY_BOND_MULTIPLIER());
+        assertEq(fleet.tierBond(tier, true), expected * fleet.countryBondMultiplier());
     }
 
     function testFuzz_perRegionTiers_newRegionAlwaysStartsAtTier0(uint16 cc) public {
@@ -1878,7 +1892,7 @@ contract FleetIdentityTest is Test {
         vm.prank(bob);
         uint256 tokenId = fleet.registerFleetCountry(_uuid(999), cc, 0);
         assertEq(fleet.fleetTier(tokenId), 0);
-        assertEq(fleet.bonds(tokenId), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER()); // Country gets 16x multiplier
+        assertEq(fleet.bonds(tokenId), BASE_BOND * fleet.countryBondMultiplier()); // Country gets 16x multiplier
     }
 
     function testFuzz_tierAssignment_autoFillsSequentiallyPerRegion(uint8 count) public {
@@ -1966,7 +1980,7 @@ contract FleetIdentityTest is Test {
     function test_countryInclusionHint_emptyReturnsZero() public view {
         (uint256 tier, uint256 bond) = fleet.countryInclusionHint(US);
         assertEq(tier, 0);
-        assertEq(bond, BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER()); // Country pays 16x multiplier
+        assertEq(bond, BASE_BOND * fleet.countryBondMultiplier()); // Country pays 16x multiplier
     }
 
     function test_countryInclusionHint_onlyCountryFleets() public {
@@ -1977,7 +1991,7 @@ contract FleetIdentityTest is Test {
         // Tier 0 is full → cheapest inclusion = tier 1.
         (uint256 tier, uint256 bond) = fleet.countryInclusionHint(US);
         assertEq(tier, 1);
-        assertEq(bond, BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER() * 2); // Country pays 16x multiplier, tier 1 = 2× base
+        assertEq(bond, BASE_BOND * fleet.countryBondMultiplier() * 2); // Country pays 16x multiplier, tier 1 = 2× base
     }
 
     function test_countryInclusionHint_adminAreaCreatesPressure() public {
@@ -2656,11 +2670,11 @@ contract FleetIdentityTest is Test {
     }
 
     function test_buildBundle_sharedCursor_sameTierIndex_differentBondByRegion() public view {
-        // Local tier 0 = BASE_BOND, Country tier 0 = BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER() (multiplier)
+        // Local tier 0 = BASE_BOND, Country tier 0 = BASE_BOND * fleet.countryBondMultiplier() (multiplier)
         assertEq(fleet.tierBond(0, false), BASE_BOND);
-        assertEq(fleet.tierBond(0, true), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER());
+        assertEq(fleet.tierBond(0, true), BASE_BOND * fleet.countryBondMultiplier());
         assertEq(fleet.tierBond(1, false), BASE_BOND * 2);
-        assertEq(fleet.tierBond(1, true), BASE_BOND * fleet.COUNTRY_BOND_MULTIPLIER() * 2);
+        assertEq(fleet.tierBond(1, true), BASE_BOND * fleet.countryBondMultiplier() * 2);
     }
 
     // ── Lifecycle ──
@@ -3817,5 +3831,253 @@ contract FleetIdentityTest is Test {
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         assertEq(fleet.ownerOf(ownedTokenId), alice);
         assertTrue(fleet.isOwnedOnly(UUID_1));
+    }
+
+    // ══════════════════════════════════════════════
+    // Bond Parameter Tests (setBaseBond, setCountryBondMultiplier)
+    // ══════════════════════════════════════════════
+
+    function test_setBaseBond_onlyOwner() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        fleet.setBaseBond(200 ether);
+    }
+
+    function test_setBaseBond_emitsEvent() public {
+        vm.prank(owner);
+        vm.expectEmit(true, true, false, false, address(fleet));
+        emit BaseBondUpdated(BASE_BOND, 200 ether);
+        fleet.setBaseBond(200 ether);
+    }
+
+    function test_setBaseBond_revertsOnZero() public {
+        vm.prank(owner);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidBaseBond.selector);
+        fleet.setBaseBond(0);
+    }
+
+    function test_setBaseBond_updatesValue() public {
+        vm.prank(owner);
+        fleet.setBaseBond(200 ether);
+        assertEq(fleet.BASE_BOND(), 200 ether);
+    }
+
+    function test_setCountryBondMultiplier_onlyOwner() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        fleet.setCountryBondMultiplier(32);
+    }
+
+    function test_setCountryBondMultiplier_emitsEvent() public {
+        vm.prank(owner);
+        vm.expectEmit(true, true, false, false, address(fleet));
+        emit CountryMultiplierUpdated(16, 32);
+        fleet.setCountryBondMultiplier(32);
+    }
+
+    function test_setCountryBondMultiplier_revertsOnZero() public {
+        vm.prank(owner);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidMultiplier.selector);
+        fleet.setCountryBondMultiplier(0);
+    }
+
+    function test_setCountryBondMultiplier_updatesValue() public {
+        vm.prank(owner);
+        fleet.setCountryBondMultiplier(32);
+        assertEq(fleet.countryBondMultiplier(), 32);
+    }
+
+    function test_countryBondMultiplier_defaultsTo16() public view {
+        // Fresh contract should return default 16
+        assertEq(fleet.countryBondMultiplier(), 16);
+    }
+
+    function test_setBondParameters_updatesBoth() public {
+        vm.prank(owner);
+        fleet.setBondParameters(200 ether, 32);
+        assertEq(fleet.BASE_BOND(), 200 ether);
+        assertEq(fleet.countryBondMultiplier(), 32);
+    }
+
+    function test_setBondParameters_onlyOwner() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        fleet.setBondParameters(200 ether, 32);
+    }
+
+    function test_setBondParameters_revertsOnZeroBaseBond() public {
+        vm.prank(owner);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidBaseBond.selector);
+        fleet.setBondParameters(0, 32);
+    }
+
+    function test_setBondParameters_revertsOnZeroMultiplier() public {
+        vm.prank(owner);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidMultiplier.selector);
+        fleet.setBondParameters(200 ether, 0);
+    }
+
+    function test_setBondParameters_emitsBothEvents() public {
+        vm.prank(owner);
+        vm.expectEmit(true, true, false, false, address(fleet));
+        emit BaseBondUpdated(BASE_BOND, 200 ether);
+        vm.expectEmit(true, true, false, false, address(fleet));
+        emit CountryMultiplierUpdated(16, 32);
+        fleet.setBondParameters(200 ether, 32);
+    }
+
+    event BaseBondUpdated(uint256 indexed oldBaseBond, uint256 indexed newBaseBond);
+    event CountryMultiplierUpdated(uint256 indexed oldMultiplier, uint256 indexed newMultiplier);
+
+    // ══════════════════════════════════════════════
+    // Bond Snapshot Tests
+    // ══════════════════════════════════════════════
+
+    function test_snapshot_burnRefundsAtOriginalRate() public {
+        // Register at original BASE_BOND (100 ether)
+        vm.prank(alice);
+        uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
+
+        // Change baseBond to 200 ether
+        vm.prank(owner);
+        fleet.setBaseBond(200 ether);
+
+        // Burn should refund at original rate (100 ether tier 0 bond)
+        uint256 balanceBefore = bondToken.balanceOf(alice);
+        vm.prank(alice);
+        fleet.burn(tokenId);
+
+        uint256 expectedRefund = 100 ether; // Original tier 0 bond
+        assertEq(bondToken.balanceOf(alice), balanceBefore + expectedRefund);
+    }
+
+    function test_snapshot_promoteAfterBaseBondIncrease() public {
+        // Register at tier 0 with BASE_BOND = 100 ether
+        vm.prank(alice);
+        uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
+
+        // Change baseBond to 200 ether
+        vm.prank(owner);
+        fleet.setBaseBond(200 ether);
+
+        // Promote to tier 1 using reassignTier
+        // Current tier 1 bond at new rate = 200 << 1 = 400 ether
+        // Old tier 0 bond from snapshot = 100 ether
+        // Additional = 400 - 100 = 300 ether
+        uint256 balanceBefore = bondToken.balanceOf(alice);
+        vm.prank(alice);
+        fleet.reassignTier(tokenId, 1);
+
+        assertEq(bondToken.balanceOf(alice), balanceBefore - 300 ether);
+    }
+
+    function test_snapshot_demoteAfterPromoteUsesNewSnapshot() public {
+        // Register at tier 0 with BASE_BOND = 100 ether
+        vm.prank(alice);
+        uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
+
+        // Change baseBond to 200 ether
+        vm.prank(owner);
+        fleet.setBaseBond(200 ether);
+
+        // Promote to tier 1 - this updates the snapshot to new params
+        vm.prank(alice);
+        fleet.reassignTier(tokenId, 1);
+
+        // Demote back to tier 0
+        // Snapshot was updated on promote, so:
+        // Current (snapshot) tier 1 = 200 << 1 = 400 ether
+        // Target (snapshot) tier 0 = 200 << 0 = 200 ether
+        // Refund = 400 - 200 = 200 ether
+        uint256 balanceBefore = bondToken.balanceOf(alice);
+        vm.prank(alice);
+        fleet.reassignTier(tokenId, 0);
+
+        assertEq(bondToken.balanceOf(alice), balanceBefore + 200 ether);
+    }
+
+    function test_snapshot_claimUuidRefundsOriginalRate() public {
+        // Claim UUID at original BASE_BOND (100 ether)
+        vm.prank(alice);
+        uint256 tokenId = fleet.claimUuid(UUID_1, address(0));
+
+        // Change baseBond to 200 ether
+        vm.prank(owner);
+        fleet.setBaseBond(200 ether);
+
+        // Burn owned token should refund at original rate
+        uint256 balanceBefore = bondToken.balanceOf(alice);
+        vm.prank(alice);
+        fleet.burn(tokenId);
+
+        assertEq(bondToken.balanceOf(alice), balanceBefore + 100 ether);
+    }
+
+    function test_snapshot_countryMultiplierChangeRefund() public {
+        // Register country fleet at original multiplier (16)
+        vm.prank(alice);
+        uint256 tokenId = fleet.registerFleetCountry(UUID_1, US, 0);
+
+        // Original bond: 100 ether * 16 = 1600 ether + 100 ownership = 1700 total
+        // Change multiplier to 32
+        vm.prank(owner);
+        fleet.setCountryBondMultiplier(32);
+
+        // Burn should refund at original multiplier
+        uint256 balanceBefore = bondToken.balanceOf(alice);
+        vm.prank(alice);
+        fleet.burn(tokenId);
+
+        // Tier bond refund should be 1600 ether (original)
+        assertEq(bondToken.balanceOf(alice), balanceBefore + 1600 ether);
+    }
+
+    function test_snapshot_newRegistrationUsesCurrentParams() public {
+        // Change params before registration
+        vm.prank(owner);
+        fleet.setBaseBond(200 ether);
+        vm.prank(owner);
+        fleet.setCountryBondMultiplier(32);
+
+        uint256 balanceBefore = bondToken.balanceOf(alice);
+        
+        vm.prank(alice);
+        fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
+
+        // Should pull: 200 ether (ownership) + 200 ether (tier 0) = 400 ether
+        assertEq(bondToken.balanceOf(alice), balanceBefore - 400 ether);
+    }
+
+    // ══════════════════════════════════════════════
+    // Region Index Tests
+    // ══════════════════════════════════════════════
+
+    function test_getCountryAdminAreas_returnsRegisteredAreas() public {
+        vm.prank(alice);
+        fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
+        
+        vm.prank(alice);
+        fleet.registerFleetLocal(UUID_2, US, ADMIN_NY, 0);
+        
+        uint32[] memory areas = fleet.getCountryAdminAreas(US);
+        assertEq(areas.length, 2);
+        
+        // Areas should contain both admin area region keys
+        uint32 caRegion = fleet.makeAdminRegion(US, ADMIN_CA);
+        uint32 nyRegion = fleet.makeAdminRegion(US, ADMIN_NY);
+        
+        bool foundCA = false;
+        bool foundNY = false;
+        for (uint256 i = 0; i < areas.length; i++) {
+            if (areas[i] == caRegion) foundCA = true;
+            if (areas[i] == nyRegion) foundNY = true;
+        }
+        assertTrue(foundCA);
+        assertTrue(foundNY);
+    }
+
+    function test_getCountryAdminAreas_emptyForNoRegistrations() public view {
+        uint32[] memory areas = fleet.getCountryAdminAreas(JP);
+        assertEq(areas.length, 0);
     }
 }

@@ -19,7 +19,7 @@ sequenceDiagram
     FO->>+SR: registerSwarm(fleetUuid, providerId, filter, fpSize, tagType)
     SR->>FI: uuidOwner(fleetUuid)
     SR->>SP: ownerOf(providerId)
-    Note over SR: swarmId = keccak256(fleetUuid, providerId, filter)
+    Note over SR: swarmId = keccak256(fleetUuid, filter, fpSize, tagType)
     SR-->>-FO: swarmId (status: REGISTERED)
 
     PRV->>+SR: acceptSwarm(swarmId)

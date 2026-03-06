@@ -48,7 +48,7 @@ contract SwarmRegistryUniversalTest is Test {
         FleetIdentityUpgradeable fleetImpl = new FleetIdentityUpgradeable();
         ERC1967Proxy fleetProxy = new ERC1967Proxy(
             address(fleetImpl),
-            abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(bondToken), FLEET_BOND, contractOwner))
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (contractOwner, address(bondToken), FLEET_BOND, 0))
         );
         fleetContract = FleetIdentityUpgradeable(address(fleetProxy));
 

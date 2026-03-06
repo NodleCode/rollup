@@ -114,7 +114,7 @@ contract FleetIdentityFairnessTest is Test {
         // Deploy proxy with initialize call
         ERC1967Proxy proxy = new ERC1967Proxy(
             address(impl),
-            abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(bondToken), BASE_BOND, fleetOwner))
+            abi.encodeCall(FleetIdentityUpgradeable.initialize, (fleetOwner, address(bondToken), BASE_BOND, 0))
         );
 
         // Cast proxy to contract type
@@ -368,7 +368,7 @@ contract FleetIdentityFairnessTest is Test {
         FleetIdentityUpgradeable fleet = _deployFleet();
 
         // Verify multiplier
-        assertEq(fleet.COUNTRY_BOND_MULTIPLIER(), 16, "Multiplier should be 16");
+        assertEq(fleet.countryBondMultiplier(), 16, "Multiplier should be 16");
 
         // At every tier, country pays exactly 16× local
         for (uint256 tier = 0; tier < 6; tier++) {
@@ -469,7 +469,7 @@ contract FleetIdentityFairnessTest is Test {
         FleetIdentityUpgradeable fleet = _deployFleet();
 
         // Invariant 1: Country multiplier is exactly 16
-        assertEq(fleet.COUNTRY_BOND_MULTIPLIER(), 16, "INVARIANT: Country multiplier must be 16");
+        assertEq(fleet.countryBondMultiplier(), 16, "INVARIANT: Country multiplier must be 16");
 
         // Invariant 2: Tier capacity allows fair competition
         assertEq(fleet.TIER_CAPACITY(), 10, "INVARIANT: Tier capacity must be 10");

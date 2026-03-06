@@ -13,12 +13,12 @@ Two registry variants exist for different deployment targets:
 
 ### Core Components
 
-| Contract                     | Role                                | Key Identity                               | Token |
-| :--------------------------- | :---------------------------------- | :----------------------------------------- | :---- |
-| **`FleetIdentity`**          | Fleet Registry (ERC-721 Enumerable) | `(regionKey << 128) \| uint128(uuid)`      | SFID  |
-| **`ServiceProvider`**        | Service Registry (ERC-721)          | `keccak256(url)`                           | SSV   |
-| **`SwarmRegistryL1`**        | Swarm Registry (L1)                 | `keccak256(fleetUuid, providerId, filter)` | —     |
-| **`SwarmRegistryUniversal`** | Swarm Registry (Universal)          | `keccak256(fleetUuid, providerId, filter)` | —     |
+| Contract                     | Role                                | Key Identity                                  | Token |
+| :--------------------------- | :---------------------------------- | :-------------------------------------------- | :---- |
+| **`FleetIdentity`**          | Fleet Registry (ERC-721 Enumerable) | `(regionKey << 128) \| uint128(uuid)`         | SFID  |
+| **`ServiceProvider`**        | Service Registry (ERC-721)          | `keccak256(url)`                              | SSV   |
+| **`SwarmRegistryL1`**        | Swarm Registry (L1)                 | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
+| **`SwarmRegistryUniversal`** | Swarm Registry (Universal)          | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
 
 All contracts are **permissionless** — access control is enforced through NFT ownership rather than admin roles. `FleetIdentity` additionally requires an ERC-20 bond (e.g. NODL) to register a fleet, acting as an anti-spam / anti-abuse mechanism.
 
@@ -55,6 +55,36 @@ This allows the same UUID to be registered in multiple regions, each with a dist
 | **Max Bundle Size** | 20 UUIDs                                                   |
 
 Country fleets pay 16× more but appear in all admin-area bundles within their country. This economic difference provides locals a significant advantage: a local can reach tier 4 for the same cost a country player pays for tier 0.
+
+### Runtime Bond Parameter Configuration
+
+The contract owner can adjust bond parameters at runtime:
+
+```solidity
+// Update base bond for future registrations
+fleetIdentity.setBaseBond(newBaseBond);
+
+// Update country multiplier for future registrations  
+fleetIdentity.setCountryBondMultiplier(newMultiplier);
+
+// Update both parameters atomically
+fleetIdentity.setBondParameters(newBaseBond, newMultiplier);
+```
+
+**Tier-0 Bond Tracking:**
+
+To ensure fair refunds when parameters change, each token stores its "tier-0 equivalent bond" at registration time:
+
+- **For local tokens**: `tokenTier0Bond[tokenId] = baseBond`
+- **For country tokens**: `tokenTier0Bond[tokenId] = baseBond * countryBondMultiplier()`
+- **Bond at tier K**: `tokenTier0Bond[tokenId] << K` (bitshift = multiply by 2^K)
+
+This simplified approach:
+- Stores a single uint256 per token (not a struct)
+- No need to track country/local distinction or multiplier separately
+- O(1) operations for promote/demote/burn with accurate refunds
+
+For UUID ownership bonds, `uuidOwnershipBondPaid[uuid]` tracks what was paid at claim/first-registration.
 
 ### UUID Ownership Model
 

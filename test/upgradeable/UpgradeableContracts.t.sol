@@ -141,7 +141,7 @@ contract UpgradeableContractsTest is Test {
         fleetIdentityProxy = address(
             new ERC1967Proxy(
                 address(fleetIdentityImpl),
-                abi.encodeCall(FleetIdentityUpgradeable.initialize, (address(bondToken), BASE_BOND, owner))
+                abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(bondToken), BASE_BOND, 0))
             )
         );
         fleetIdentity = FleetIdentityUpgradeable(fleetIdentityProxy);
@@ -260,12 +260,12 @@ contract UpgradeableContractsTest is Test {
 
     function test_FleetIdentity_CannotReinitialize() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        fleetIdentity.initialize(address(bondToken), BASE_BOND, attacker);
+        fleetIdentity.initialize(attacker, address(bondToken), BASE_BOND, 0);
     }
 
     function test_FleetIdentity_ImplementationCannotBeInitialized() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        fleetIdentityImpl.initialize(address(bondToken), BASE_BOND, attacker);
+        fleetIdentityImpl.initialize(attacker, address(bondToken), BASE_BOND, 0);
     }
 
     // =========================================================================
