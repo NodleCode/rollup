@@ -62,6 +62,9 @@ jobs:
           path: coverage.lcov
           retention-days: 30
 
+      - name: Install lcov
+        run: apt-get update && apt-get install -y lcov
+
       - name: Report coverage to PR
         uses: zgosalvez/github-actions-report-lcov@v4
         with:

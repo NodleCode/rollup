@@ -1243,4 +1243,96 @@ contract SwarmRegistryUniversalTest is Test {
         vm.expectRevert(SwarmRegistryUniversalUpgradeable.SwarmNotFound.selector);
         swarmRegistry.acceptSwarm(swarmId);
     }
+
+    // ==============================
+    // Additional Coverage Tests
+    // ==============================
+
+    function test_checkMembership_8bit_forcedPath() public {
+        // This test ensures the 8-bit _readFingerprint path is exercised
+        // Uses a tagId known to have non-colliding h1, h2, h3 for m=100
+        uint256 fleetId = _registerFleet(fleetOwner, "f8bit");
+        uint256 providerId = _registerProvider(providerOwner, "url8bit");
+
+        // Use 100 bytes for filter
+        uint256 filterLen = 100;
+        bytes memory filter = new bytes(filterLen);
+
+        // For 8-bit, m = filterLen = 100 slots
+        // Pick a tag that's known to have distinct h1, h2, h3
+        bytes memory tagId = abi.encodePacked(uint256(0x12345678));
+        bytes32 tagHash = keccak256(tagId);
+        uint32 m32 = uint32(filterLen);
+
+        uint32 h1 = uint32(uint256(tagHash)) % m32;
+        uint32 h2 = uint32(uint256(tagHash) >> 32) % m32;
+        uint32 h3 = uint32(uint256(tagHash) >> 64) % m32;
+
+        // If there are collisions, try different tag
+        if (h1 == h2 || h1 == h3 || h2 == h3) {
+            tagId = abi.encodePacked(uint256(0xABCDEF01));
+            tagHash = keccak256(tagId);
+            h1 = uint32(uint256(tagHash)) % m32;
+            h2 = uint32(uint256(tagHash) >> 32) % m32;
+            h3 = uint32(uint256(tagHash) >> 64) % m32;
+        }
+
+        // Calculate expected fingerprint (8-bit)
+        uint256 expectedFp = (uint256(tagHash) >> 96) & 0xFF;
+
+        // Write fingerprint to h1 slot (f1 ^ 0 ^ 0 = expectedFp)
+        filter[h1] = bytes1(uint8(expectedFp));
+
+        uint256 swarmId = _registerSwarm(
+            fleetOwner, fleetId, providerId, filter, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+        );
+
+        // This should exercise the 8-bit path in _readFingerprint
+        bool result = swarmRegistry.checkMembership(swarmId, tagHash);
+        assertTrue(result, "8-bit membership check should pass");
+    }
+
+    function test_upgrade_ownerCanUpgrade() public {
+        // Deploy a new implementation
+        SwarmRegistryUniversalUpgradeable newImpl = new SwarmRegistryUniversalUpgradeable();
+
+        // Owner should be able to upgrade (tests _authorizeUpgrade)
+        vm.prank(contractOwner);
+        swarmRegistry.upgradeToAndCall(address(newImpl), "");
+
+        // Verify upgrade succeeded - contract still works
+        assertEq(address(swarmRegistry.FLEET_CONTRACT()), address(fleetContract));
+    }
+
+    function test_RevertIf_upgrade_notOwner() public {
+        SwarmRegistryUniversalUpgradeable newImpl = new SwarmRegistryUniversalUpgradeable();
+
+        vm.prank(caller);
+        vm.expectRevert();
+        swarmRegistry.upgradeToAndCall(address(newImpl), "");
+    }
+
+    function test_checkMembership_mZero_16bit_returnsFalse() public {
+        // Edge case: filter too short for 16-bit -> m = 0 -> return false
+        uint256 fleetId = _registerFleet(fleetOwner, "f0");
+        uint256 providerId = _registerProvider(providerOwner, "url0");
+
+        // 1 byte filter with 16-bit: m = 1/2 = 0
+        bytes memory filter = new bytes(1);
+        uint256 swarmId =
+            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+
+        // Should return false without reverting
+        assertFalse(swarmRegistry.checkMembership(swarmId, keccak256("anyTag")));
+    }
+
+    function test_registerSwarm_zeroProviderId() public {
+        uint256 fleetId = _registerFleet(fleetOwner, "f1");
+
+        vm.prank(fleetOwner);
+        vm.expectRevert(SwarmRegistryUniversalUpgradeable.ProviderDoesNotExist.selector);
+        swarmRegistry.registerSwarm(
+            _getFleetUuid(fleetId), 0, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+        );
+    }
 }

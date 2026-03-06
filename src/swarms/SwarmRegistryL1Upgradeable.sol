@@ -338,6 +338,15 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
         emit SwarmPurged(swarmId, fleetUuid, msg.sender);
     }
 
+    /// @notice Returns the raw XOR filter bytes for a swarm.
+    function getFilterData(uint256 swarmId) external view returns (bytes memory) {
+        Swarm storage s = swarms[swarmId];
+        if (s.filterPointer == address(0)) {
+            revert SwarmNotFound();
+        }
+        return SSTORE2.read(s.filterPointer);
+    }
+
     /// @notice Tests tag membership against the swarm's XOR filter.
     function checkMembership(uint256 swarmId, bytes32 tagHash) external view returns (bool isValid) {
         Swarm storage s = swarms[swarmId];
