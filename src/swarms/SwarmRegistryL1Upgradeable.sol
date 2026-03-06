@@ -10,14 +10,9 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 
-// Import interfaces only - the registry stores proxy addresses
-interface IFleetIdentity {
-    function uuidOwner(bytes16 uuid) external view returns (address);
-}
-
-interface IServiceProvider {
-    function ownerOf(uint256 tokenId) external view returns (address);
-}
+import {IFleetIdentity} from "./interfaces/IFleetIdentity.sol";
+import {IServiceProvider} from "./interfaces/IServiceProvider.sol";
+import {SwarmStatus, TagType, FingerprintSize} from "./interfaces/SwarmTypes.sol";
 
 /**
  * @title SwarmRegistryL1Upgradeable
@@ -55,26 +50,8 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
     error SwarmOrphaned();
 
     // ──────────────────────────────────────────────
-    // Enums & Structs
+    // Structs (L1-specific: uses SSTORE2 pointer)
     // ──────────────────────────────────────────────
-    enum SwarmStatus {
-        REGISTERED,
-        ACCEPTED,
-        REJECTED
-    }
-
-    enum TagType {
-        IBEACON_PAYLOAD_ONLY, // 0x00: proxUUID || major || minor
-        IBEACON_INCLUDES_MAC, // 0x01: proxUUID || major || minor || MAC (Normalized)
-        VENDOR_ID, // 0x02: companyID || hash(vendorBytes)
-        GENERIC // 0x03
-    }
-
-    /// @notice Fingerprint size for XOR filter (8-bit or 16-bit only for gas efficiency)
-    enum FingerprintSize {
-        BITS_8, // 8-bit fingerprints (1 byte each)
-        BITS_16 // 16-bit fingerprints (2 bytes each)
-    }
 
     struct Swarm {
         bytes16 fleetUuid;
@@ -121,6 +98,7 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
     // ──────────────────────────────────────────────
     // Events
     // ──────────────────────────────────────────────
+
     event SwarmRegistered(uint256 indexed swarmId, bytes16 indexed fleetUuid, uint256 indexed providerId, address owner);
     event SwarmStatusChanged(uint256 indexed swarmId, SwarmStatus status);
     event SwarmProviderUpdated(uint256 indexed swarmId, uint256 indexed oldProvider, uint256 indexed newProvider);

@@ -6,6 +6,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import "../src/swarms/SwarmRegistryUniversalUpgradeable.sol";
 import {FleetIdentityUpgradeable} from "../src/swarms/FleetIdentityUpgradeable.sol";
 import {ServiceProviderUpgradeable} from "../src/swarms/ServiceProviderUpgradeable.sol";
+import {SwarmStatus, TagType, FingerprintSize} from "../src/swarms/interfaces/SwarmTypes.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MockBondTokenUniv is ERC20 {
@@ -34,15 +35,13 @@ contract SwarmRegistryUniversalTest is Test {
     uint16 constant ADMIN_CA = 6; // California
 
     // Alias for FingerprintSize enum
-    SwarmRegistryUniversalUpgradeable.FingerprintSize constant BITS_8 =
-        SwarmRegistryUniversalUpgradeable.FingerprintSize.BITS_8;
-    SwarmRegistryUniversalUpgradeable.FingerprintSize constant BITS_16 =
-        SwarmRegistryUniversalUpgradeable.FingerprintSize.BITS_16;
+    FingerprintSize constant BITS_8 = FingerprintSize.BITS_8;
+    FingerprintSize constant BITS_16 = FingerprintSize.BITS_16;
 
     event SwarmRegistered(
         uint256 indexed swarmId, bytes16 indexed fleetUuid, uint256 indexed providerId, address owner, uint32 filterSize
     );
-    event SwarmStatusChanged(uint256 indexed swarmId, SwarmRegistryUniversalUpgradeable.SwarmStatus status);
+    event SwarmStatusChanged(uint256 indexed swarmId, SwarmStatus status);
     event SwarmProviderUpdated(uint256 indexed swarmId, uint256 indexed oldProviderId, uint256 indexed newProviderId);
     event SwarmDeleted(uint256 indexed swarmId, bytes16 indexed fleetUuid, address indexed owner);
     event SwarmPurged(uint256 indexed swarmId, bytes16 indexed fleetUuid, address indexed purgedBy);
@@ -103,8 +102,8 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId,
         uint256 providerId,
         bytes memory filter,
-        SwarmRegistryUniversalUpgradeable.FingerprintSize fpSize,
-        SwarmRegistryUniversalUpgradeable.TagType tagType
+        FingerprintSize fpSize,
+        TagType tagType
     ) internal returns (uint256) {
         bytes16 fleetUuid = _getFleetUuid(fleetId);
         vm.prank(owner);
@@ -115,13 +114,13 @@ contract SwarmRegistryUniversalTest is Test {
     function getExpectedValues(
         bytes memory tagId,
         uint256 m,
-        SwarmRegistryUniversalUpgradeable.FingerprintSize fpSize
+        FingerprintSize fpSize
     ) public pure returns (uint32 h1, uint32 h2, uint32 h3, uint256 fp) {
         bytes32 h = keccak256(tagId);
         h1 = uint32(uint256(h)) % uint32(m);
         h2 = uint32(uint256(h) >> 32) % uint32(m);
         h3 = uint32(uint256(h) >> 64) % uint32(m);
-        uint256 fpMask = fpSize == SwarmRegistryUniversalUpgradeable.FingerprintSize.BITS_8 ? 0xFF : 0xFFFF;
+        uint256 fpMask = fpSize == FingerprintSize.BITS_8 ? 0xFF : 0xFFFF;
         fp = (uint256(h) >> 96) & fpMask;
     }
 
@@ -180,12 +179,12 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 providerId = _registerProvider(providerOwner, "https://api.example.com");
 
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(100), BITS_16, SwarmRegistryUniversalUpgradeable.TagType.IBEACON_INCLUDES_MAC
+            fleetOwner, fleetId, providerId, new bytes(100), BITS_16, TagType.IBEACON_INCLUDES_MAC
         );
 
         // Swarm ID is deterministic hash of (fleetUuid, filter, fpSize, tagType)
         uint256 expectedId = swarmRegistry.computeSwarmId(
-            _getFleetUuid(fleetId), new bytes(100), BITS_16, SwarmRegistryUniversalUpgradeable.TagType.IBEACON_INCLUDES_MAC
+            _getFleetUuid(fleetId), new bytes(100), BITS_16, TagType.IBEACON_INCLUDES_MAC
         );
         assertEq(swarmId, expectedId);
     }
@@ -195,23 +194,23 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 providerId = _registerProvider(providerOwner, "url1");
 
         uint256 swarmId =
-            _registerSwarm(fleetOwner, fleetId, providerId, new bytes(50), BITS_16, SwarmRegistryUniversalUpgradeable.TagType.VENDOR_ID);
+            _registerSwarm(fleetOwner, fleetId, providerId, new bytes(50), BITS_16, TagType.VENDOR_ID);
 
         (
             bytes16 storedFleetUuid,
             uint256 storedProviderId,
             uint32 storedFilterLen,
-            SwarmRegistryUniversalUpgradeable.FingerprintSize storedFpSize,
-            SwarmRegistryUniversalUpgradeable.TagType storedTagType,
-            SwarmRegistryUniversalUpgradeable.SwarmStatus storedStatus
+            FingerprintSize storedFpSize,
+            TagType storedTagType,
+            SwarmStatus storedStatus
         ) = swarmRegistry.swarms(swarmId);
 
         assertEq(storedFleetUuid, _getFleetUuid(fleetId));
         assertEq(storedProviderId, providerId);
         assertEq(storedFilterLen, 50);
         assertEq(uint8(storedFpSize), uint8(BITS_16));
-        assertEq(uint8(storedTagType), uint8(SwarmRegistryUniversalUpgradeable.TagType.VENDOR_ID));
-        assertEq(uint8(storedStatus), uint8(SwarmRegistryUniversalUpgradeable.SwarmStatus.REGISTERED));
+        assertEq(uint8(storedTagType), uint8(TagType.VENDOR_ID));
+        assertEq(uint8(storedStatus), uint8(SwarmStatus.REGISTERED));
     }
 
     function test_registerSwarm_storesFilterData() public {
@@ -225,7 +224,7 @@ contract SwarmRegistryUniversalTest is Test {
         filter[99] = 0xEF;
 
         uint256 swarmId =
-            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, TagType.GENERIC);
 
         bytes memory storedFilter = swarmRegistry.getFilterData(swarmId);
         assertEq(storedFilter.length, 100);
@@ -241,10 +240,10 @@ contract SwarmRegistryUniversalTest is Test {
         bytes memory filter = new bytes(32);
 
         uint256 expectedId =
-            swarmRegistry.computeSwarmId(_getFleetUuid(fleetId), filter, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            swarmRegistry.computeSwarmId(_getFleetUuid(fleetId), filter, BITS_8, TagType.GENERIC);
 
         uint256 swarmId =
-            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_8, TagType.GENERIC);
         assertEq(swarmId, expectedId);
     }
 
@@ -252,12 +251,12 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
 
-        _registerSwarm(fleetOwner, fleetId, providerId, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+        _registerSwarm(fleetOwner, fleetId, providerId, new bytes(32), BITS_8, TagType.GENERIC);
 
         vm.prank(fleetOwner);
         vm.expectRevert(SwarmRegistryUniversalUpgradeable.SwarmAlreadyExists.selector);
         swarmRegistry.registerSwarm(
-            _getFleetUuid(fleetId), providerId, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            _getFleetUuid(fleetId), providerId, new bytes(32), BITS_8, TagType.GENERIC
         );
     }
 
@@ -267,13 +266,13 @@ contract SwarmRegistryUniversalTest is Test {
 
         bytes memory filter = new bytes(50);
         uint256 expectedId = swarmRegistry.computeSwarmId(
-            _getFleetUuid(fleetId), filter, BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            _getFleetUuid(fleetId), filter, BITS_16, TagType.GENERIC
         );
 
         vm.expectEmit(true, true, true, true);
         emit SwarmRegistered(expectedId, _getFleetUuid(fleetId), providerId, fleetOwner, 50);
 
-        _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+        _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, TagType.GENERIC);
     }
 
     function test_registerSwarm_linksUuidSwarms() public {
@@ -288,9 +287,9 @@ contract SwarmRegistryUniversalTest is Test {
         filter2[0] = 0x02;
 
         uint256 s1 =
-            _registerSwarm(fleetOwner, fleetId, providerId1, filter1, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, providerId1, filter1, BITS_8, TagType.GENERIC);
         uint256 s2 =
-            _registerSwarm(fleetOwner, fleetId, providerId2, filter2, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, providerId2, filter2, BITS_8, TagType.GENERIC);
 
         assertEq(swarmRegistry.uuidSwarms(_getFleetUuid(fleetId), 0), s1);
         assertEq(swarmRegistry.uuidSwarms(_getFleetUuid(fleetId), 1), s2);
@@ -304,27 +303,27 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 providerId = _registerProvider(providerOwner, "url");
 
         uint256 s1 = _registerSwarm(
-            fleetOwner, fleetId1, providerId, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.IBEACON_PAYLOAD_ONLY
+            fleetOwner, fleetId1, providerId, new bytes(32), BITS_8, TagType.IBEACON_PAYLOAD_ONLY
         );
         uint256 s2 = _registerSwarm(
-            fleetOwner, fleetId2, providerId, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.IBEACON_INCLUDES_MAC
+            fleetOwner, fleetId2, providerId, new bytes(32), BITS_8, TagType.IBEACON_INCLUDES_MAC
         );
         uint256 s3 = _registerSwarm(
-            fleetOwner, fleetId3, providerId, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.VENDOR_ID
+            fleetOwner, fleetId3, providerId, new bytes(32), BITS_8, TagType.VENDOR_ID
         );
         uint256 s4 = _registerSwarm(
-            fleetOwner, fleetId4, providerId, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId4, providerId, new bytes(32), BITS_8, TagType.GENERIC
         );
 
-        (,,,, SwarmRegistryUniversalUpgradeable.TagType t1,) = swarmRegistry.swarms(s1);
-        (,,,, SwarmRegistryUniversalUpgradeable.TagType t2,) = swarmRegistry.swarms(s2);
-        (,,,, SwarmRegistryUniversalUpgradeable.TagType t3,) = swarmRegistry.swarms(s3);
-        (,,,, SwarmRegistryUniversalUpgradeable.TagType t4,) = swarmRegistry.swarms(s4);
+        (,,,, TagType t1,) = swarmRegistry.swarms(s1);
+        (,,,, TagType t2,) = swarmRegistry.swarms(s2);
+        (,,,, TagType t3,) = swarmRegistry.swarms(s3);
+        (,,,, TagType t4,) = swarmRegistry.swarms(s4);
 
-        assertEq(uint8(t1), uint8(SwarmRegistryUniversalUpgradeable.TagType.IBEACON_PAYLOAD_ONLY));
-        assertEq(uint8(t2), uint8(SwarmRegistryUniversalUpgradeable.TagType.IBEACON_INCLUDES_MAC));
-        assertEq(uint8(t3), uint8(SwarmRegistryUniversalUpgradeable.TagType.VENDOR_ID));
-        assertEq(uint8(t4), uint8(SwarmRegistryUniversalUpgradeable.TagType.GENERIC));
+        assertEq(uint8(t1), uint8(TagType.IBEACON_PAYLOAD_ONLY));
+        assertEq(uint8(t2), uint8(TagType.IBEACON_INCLUDES_MAC));
+        assertEq(uint8(t3), uint8(TagType.VENDOR_ID));
+        assertEq(uint8(t4), uint8(TagType.GENERIC));
     }
 
     function test_registerSwarm_bothFingerprintSizes() public {
@@ -333,14 +332,14 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 providerId = _registerProvider(providerOwner, "url");
 
         uint256 s1 = _registerSwarm(
-            fleetOwner, fleetId1, providerId, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId1, providerId, new bytes(32), BITS_8, TagType.GENERIC
         );
         uint256 s2 = _registerSwarm(
-            fleetOwner, fleetId2, providerId, new bytes(64), BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId2, providerId, new bytes(64), BITS_16, TagType.GENERIC
         );
 
-        (,,, SwarmRegistryUniversalUpgradeable.FingerprintSize fp1,,) = swarmRegistry.swarms(s1);
-        (,,, SwarmRegistryUniversalUpgradeable.FingerprintSize fp2,,) = swarmRegistry.swarms(s2);
+        (,,, FingerprintSize fp1,,) = swarmRegistry.swarms(s1);
+        (,,, FingerprintSize fp2,,) = swarmRegistry.swarms(s2);
 
         assertEq(uint8(fp1), uint8(BITS_8));
         assertEq(uint8(fp2), uint8(BITS_16));
@@ -356,7 +355,7 @@ contract SwarmRegistryUniversalTest is Test {
         vm.prank(fleetOwner);
         vm.expectRevert(SwarmRegistryUniversalUpgradeable.InvalidUuid.selector);
         swarmRegistry.registerSwarm(
-            bytes16(0), providerId, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            bytes16(0), providerId, new bytes(32), BITS_8, TagType.GENERIC
         );
     }
 
@@ -367,7 +366,7 @@ contract SwarmRegistryUniversalTest is Test {
         vm.prank(fleetOwner);
         vm.expectRevert(SwarmRegistryUniversalUpgradeable.ProviderDoesNotExist.selector);
         swarmRegistry.registerSwarm(
-            _getFleetUuid(fleetId), nonExistentProvider, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            _getFleetUuid(fleetId), nonExistentProvider, new bytes(32), BITS_8, TagType.GENERIC
         );
     }
 
@@ -377,7 +376,7 @@ contract SwarmRegistryUniversalTest is Test {
         vm.prank(caller);
         vm.expectRevert(SwarmRegistryUniversalUpgradeable.NotUuidOwner.selector);
         swarmRegistry.registerSwarm(
-            _getFleetUuid(fleetId), 1, new bytes(10), BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            _getFleetUuid(fleetId), 1, new bytes(10), BITS_16, TagType.GENERIC
         );
     }
 
@@ -388,7 +387,7 @@ contract SwarmRegistryUniversalTest is Test {
         vm.prank(fleetOwner);
         vm.expectRevert(SwarmRegistryUniversalUpgradeable.InvalidFilterSize.selector);
         swarmRegistry.registerSwarm(
-            _getFleetUuid(fleetId), providerId, new bytes(0), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            _getFleetUuid(fleetId), providerId, new bytes(0), BITS_8, TagType.GENERIC
         );
     }
 
@@ -399,7 +398,7 @@ contract SwarmRegistryUniversalTest is Test {
         vm.prank(fleetOwner);
         vm.expectRevert(SwarmRegistryUniversalUpgradeable.FilterTooLarge.selector);
         swarmRegistry.registerSwarm(
-            _getFleetUuid(fleetId), providerId, new bytes(24577), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            _getFleetUuid(fleetId), providerId, new bytes(24577), BITS_8, TagType.GENERIC
         );
     }
 
@@ -409,7 +408,7 @@ contract SwarmRegistryUniversalTest is Test {
 
         // Exactly MAX_FILTER_SIZE (24576) should succeed
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(24576), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(24576), BITS_8, TagType.GENERIC
         );
         assertTrue(swarmId != 0);
     }
@@ -420,7 +419,7 @@ contract SwarmRegistryUniversalTest is Test {
 
         // 1 byte filter
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(1), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(1), BITS_8, TagType.GENERIC
         );
         assertTrue(swarmId != 0);
     }
@@ -433,41 +432,41 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.expectEmit(true, true, true, true);
-        emit SwarmStatusChanged(swarmId, SwarmRegistryUniversalUpgradeable.SwarmStatus.ACCEPTED);
+        emit SwarmStatusChanged(swarmId, SwarmStatus.ACCEPTED);
 
         vm.prank(providerOwner);
         swarmRegistry.acceptSwarm(swarmId);
 
-        (,,,,, SwarmRegistryUniversalUpgradeable.SwarmStatus status) = swarmRegistry.swarms(swarmId);
-        assertEq(uint8(status), uint8(SwarmRegistryUniversalUpgradeable.SwarmStatus.ACCEPTED));
+        (,,,,, SwarmStatus status) = swarmRegistry.swarms(swarmId);
+        assertEq(uint8(status), uint8(SwarmStatus.ACCEPTED));
     }
 
     function test_rejectSwarm_setsStatusAndEmits() public {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.expectEmit(true, true, true, true);
-        emit SwarmStatusChanged(swarmId, SwarmRegistryUniversalUpgradeable.SwarmStatus.REJECTED);
+        emit SwarmStatusChanged(swarmId, SwarmStatus.REJECTED);
 
         vm.prank(providerOwner);
         swarmRegistry.rejectSwarm(swarmId);
 
-        (,,,,, SwarmRegistryUniversalUpgradeable.SwarmStatus status) = swarmRegistry.swarms(swarmId);
-        assertEq(uint8(status), uint8(SwarmRegistryUniversalUpgradeable.SwarmStatus.REJECTED));
+        (,,,,, SwarmStatus status) = swarmRegistry.swarms(swarmId);
+        assertEq(uint8(status), uint8(SwarmStatus.REJECTED));
     }
 
     function test_RevertIf_acceptSwarm_notProviderOwner() public {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(caller);
@@ -479,7 +478,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(fleetOwner); // fleet owner != provider owner
@@ -491,7 +490,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(fleetOwner);
@@ -503,7 +502,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(providerOwner);
@@ -512,15 +511,15 @@ contract SwarmRegistryUniversalTest is Test {
         vm.prank(providerOwner);
         swarmRegistry.acceptSwarm(swarmId);
 
-        (,,,,, SwarmRegistryUniversalUpgradeable.SwarmStatus status) = swarmRegistry.swarms(swarmId);
-        assertEq(uint8(status), uint8(SwarmRegistryUniversalUpgradeable.SwarmStatus.ACCEPTED));
+        (,,,,, SwarmStatus status) = swarmRegistry.swarms(swarmId);
+        assertEq(uint8(status), uint8(SwarmStatus.ACCEPTED));
     }
 
     function test_rejectSwarm_afterAccept() public {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(providerOwner);
@@ -529,8 +528,8 @@ contract SwarmRegistryUniversalTest is Test {
         vm.prank(providerOwner);
         swarmRegistry.rejectSwarm(swarmId);
 
-        (,,,,, SwarmRegistryUniversalUpgradeable.SwarmStatus status) = swarmRegistry.swarms(swarmId);
-        assertEq(uint8(status), uint8(SwarmRegistryUniversalUpgradeable.SwarmStatus.REJECTED));
+        (,,,,, SwarmStatus status) = swarmRegistry.swarms(swarmId);
+        assertEq(uint8(status), uint8(SwarmStatus.REJECTED));
     }
 
     // ==============================
@@ -555,7 +554,7 @@ contract SwarmRegistryUniversalTest is Test {
         _write16Bit(filter, h1, uint16(expectedFp));
 
         uint256 swarmId =
-            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, TagType.GENERIC);
 
         bytes32 tagHash = keccak256(tagId);
         assertTrue(swarmRegistry.checkMembership(swarmId, tagHash), "Tag should be member");
@@ -582,7 +581,7 @@ contract SwarmRegistryUniversalTest is Test {
         _write8Bit(filter, h1, uint8(expectedFp));
 
         uint256 swarmId =
-            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_8, TagType.GENERIC);
 
         assertTrue(swarmRegistry.checkMembership(swarmId, keccak256(tagId)), "8-bit valid tag should pass");
         assertFalse(swarmRegistry.checkMembership(swarmId, keccak256(hex"FFFFFF")), "8-bit invalid tag should fail");
@@ -600,7 +599,7 @@ contract SwarmRegistryUniversalTest is Test {
         // All-zero filter: f1^f2^f3 = 0^0^0 = 0
         bytes memory filter = new bytes(64);
         uint256 swarmId =
-            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, TagType.GENERIC);
 
         // Should not revert regardless of result
         swarmRegistry.checkMembership(swarmId, keccak256("test1"));
@@ -614,7 +613,7 @@ contract SwarmRegistryUniversalTest is Test {
         // 1-byte filter with 16-bit fingerprint: m = 1/2 = 0, returns false immediately
         bytes memory filter = new bytes(1);
         uint256 swarmId =
-            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, TagType.GENERIC);
 
         // Should return false (not revert) because m == 0
         assertFalse(swarmRegistry.checkMembership(swarmId, keccak256("test")), "m=0 should return false");
@@ -633,7 +632,7 @@ contract SwarmRegistryUniversalTest is Test {
         filter[99] = 0x01;
 
         uint256 swarmId =
-            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, TagType.GENERIC);
 
         bytes memory stored = swarmRegistry.getFilterData(swarmId);
         assertEq(stored.length, 100);
@@ -657,13 +656,13 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 providerId3 = _registerProvider(providerOwner, "url3");
 
         uint256 s1 = _registerSwarm(
-            fleetOwner, fleetId, providerId1, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId1, new bytes(32), BITS_8, TagType.GENERIC
         );
         uint256 s2 = _registerSwarm(
-            fleetOwner, fleetId, providerId2, new bytes(64), BITS_16, SwarmRegistryUniversalUpgradeable.TagType.VENDOR_ID
+            fleetOwner, fleetId, providerId2, new bytes(64), BITS_16, TagType.VENDOR_ID
         );
         uint256 s3 = _registerSwarm(
-            fleetOwner, fleetId, providerId3, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.IBEACON_PAYLOAD_ONLY
+            fleetOwner, fleetId, providerId3, new bytes(50), BITS_8, TagType.IBEACON_PAYLOAD_ONLY
         );
 
         // IDs are distinct hashes
@@ -693,7 +692,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 providerId = _registerProvider(providerOwner, string(abi.encodePacked("url-", size)));
 
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(size), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(size), BITS_8, TagType.GENERIC
         );
 
         (,, uint32 storedLen,,,) = swarmRegistry.swarms(swarmId);
@@ -710,7 +709,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 providerId2 = _registerProvider(providerOwner, "url2");
 
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId1, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId1, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         // Provider accepts
@@ -725,9 +724,9 @@ contract SwarmRegistryUniversalTest is Test {
         swarmRegistry.updateSwarmProvider(swarmId, providerId2);
 
         // Check new provider and status reset
-        (, uint256 newProviderId,,,, SwarmRegistryUniversalUpgradeable.SwarmStatus status) = swarmRegistry.swarms(swarmId);
+        (, uint256 newProviderId,,,, SwarmStatus status) = swarmRegistry.swarms(swarmId);
         assertEq(newProviderId, providerId2);
-        assertEq(uint8(status), uint8(SwarmRegistryUniversalUpgradeable.SwarmStatus.REGISTERED));
+        assertEq(uint8(status), uint8(SwarmStatus.REGISTERED));
     }
 
     function test_RevertIf_updateSwarmProvider_swarmNotFound() public {
@@ -744,7 +743,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 providerId2 = _registerProvider(providerOwner, "url2");
 
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId1, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId1, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(caller);
@@ -757,7 +756,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 providerId = _registerProvider(providerOwner, "url1");
 
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(fleetOwner);
@@ -773,7 +772,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.expectEmit(true, true, true, true);
@@ -800,10 +799,10 @@ contract SwarmRegistryUniversalTest is Test {
         filter2[0] = 0x02;
 
         uint256 swarm1 = _registerSwarm(
-            fleetOwner, fleetId, providerId1, filter1, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId1, filter1, BITS_8, TagType.GENERIC
         );
         uint256 swarm2 = _registerSwarm(
-            fleetOwner, fleetId, providerId2, filter2, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId2, filter2, BITS_8, TagType.GENERIC
         );
 
         // Delete first swarm
@@ -831,13 +830,13 @@ contract SwarmRegistryUniversalTest is Test {
         filter3[0] = 0x03;
 
         uint256 swarm1 = _registerSwarm(
-            fleetOwner, fleetId, providerId1, filter1, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId1, filter1, BITS_8, TagType.GENERIC
         );
         uint256 swarm2 = _registerSwarm(
-            fleetOwner, fleetId, providerId2, filter2, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId2, filter2, BITS_8, TagType.GENERIC
         );
         uint256 swarm3 = _registerSwarm(
-            fleetOwner, fleetId, providerId3, filter3, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId3, filter3, BITS_8, TagType.GENERIC
         );
 
         // Delete middle swarm
@@ -861,7 +860,7 @@ contract SwarmRegistryUniversalTest is Test {
         }
 
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, filterData, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, filterData, BITS_8, TagType.GENERIC
         );
 
         // Delete swarm
@@ -883,7 +882,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(caller);
@@ -896,7 +895,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 providerId1 = _registerProvider(providerOwner, "url1");
         uint256 providerId2 = _registerProvider(providerOwner, "url2");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId1, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId1, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         // Update provider then delete
@@ -925,11 +924,11 @@ contract SwarmRegistryUniversalTest is Test {
         filter3[0] = 0x03;
 
         uint256 s1 =
-            _registerSwarm(fleetOwner, fleetId, p1, filter1, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, p1, filter1, BITS_8, TagType.GENERIC);
         uint256 s2 =
-            _registerSwarm(fleetOwner, fleetId, p2, filter2, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, p2, filter2, BITS_8, TagType.GENERIC);
         uint256 s3 =
-            _registerSwarm(fleetOwner, fleetId, p3, filter3, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, p3, filter3, BITS_8, TagType.GENERIC);
 
         // Verify initial indices
         assertEq(swarmRegistry.swarmIndexInUuid(s1), 0);
@@ -953,7 +952,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         (bool fleetValid, bool providerValid) = swarmRegistry.isSwarmValid(swarmId);
@@ -965,7 +964,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(providerOwner);
@@ -980,7 +979,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         // Burn registered fleet token (operator = owner for fresh registration)
@@ -1004,7 +1003,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         // Burn registered fleet token → mints owned-only token
@@ -1038,7 +1037,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(providerOwner);
@@ -1058,7 +1057,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         // Burn registered fleet token → mints owned-only token
@@ -1091,9 +1090,9 @@ contract SwarmRegistryUniversalTest is Test {
         filter2[0] = 0x02;
 
         uint256 s1 =
-            _registerSwarm(fleetOwner, fleetId, p1, filter1, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, p1, filter1, BITS_8, TagType.GENERIC);
         uint256 s2 =
-            _registerSwarm(fleetOwner, fleetId, p2, filter2, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, p2, filter2, BITS_8, TagType.GENERIC);
 
         // Burn provider of s1
         vm.prank(providerOwner);
@@ -1118,7 +1117,7 @@ contract SwarmRegistryUniversalTest is Test {
         }
 
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, filter, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, filter, BITS_8, TagType.GENERIC
         );
 
         vm.prank(providerOwner);
@@ -1141,7 +1140,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.expectRevert(SwarmRegistryUniversalUpgradeable.SwarmNotOrphaned.selector);
@@ -1156,7 +1155,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(providerOwner);
@@ -1171,7 +1170,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         // Burn registered fleet token → mints owned-only token
@@ -1193,7 +1192,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(providerOwner);
@@ -1207,7 +1206,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         // Burn registered fleet token → mints owned-only token
@@ -1229,7 +1228,7 @@ contract SwarmRegistryUniversalTest is Test {
         uint256 fleetId = _registerFleet(fleetOwner, "f1");
         uint256 providerId = _registerProvider(providerOwner, "url1");
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, new bytes(50), BITS_8, TagType.GENERIC
         );
 
         vm.prank(providerOwner);
@@ -1284,7 +1283,7 @@ contract SwarmRegistryUniversalTest is Test {
         filter[h1] = bytes1(uint8(expectedFp));
 
         uint256 swarmId = _registerSwarm(
-            fleetOwner, fleetId, providerId, filter, BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            fleetOwner, fleetId, providerId, filter, BITS_8, TagType.GENERIC
         );
 
         // This should exercise the 8-bit path in _readFingerprint
@@ -1320,7 +1319,7 @@ contract SwarmRegistryUniversalTest is Test {
         // 1 byte filter with 16-bit: m = 1/2 = 0
         bytes memory filter = new bytes(1);
         uint256 swarmId =
-            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, SwarmRegistryUniversalUpgradeable.TagType.GENERIC);
+            _registerSwarm(fleetOwner, fleetId, providerId, filter, BITS_16, TagType.GENERIC);
 
         // Should return false without reverting
         assertFalse(swarmRegistry.checkMembership(swarmId, keccak256("anyTag")));
@@ -1332,7 +1331,7 @@ contract SwarmRegistryUniversalTest is Test {
         vm.prank(fleetOwner);
         vm.expectRevert(SwarmRegistryUniversalUpgradeable.ProviderDoesNotExist.selector);
         swarmRegistry.registerSwarm(
-            _getFleetUuid(fleetId), 0, new bytes(32), BITS_8, SwarmRegistryUniversalUpgradeable.TagType.GENERIC
+            _getFleetUuid(fleetId), 0, new bytes(32), BITS_8, TagType.GENERIC
         );
     }
 }

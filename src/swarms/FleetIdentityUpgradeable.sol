@@ -11,6 +11,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 
+import {RegistrationLevel} from "./interfaces/SwarmTypes.sol";
+
 /**
  * @title FleetIdentityUpgradeable
  * @notice UUPS-upgradeable ERC-721 with ERC721Enumerable representing ownership of a BLE fleet,
@@ -81,18 +83,6 @@ contract FleetIdentityUpgradeable is
     error InvalidBaseBond();
     error InvalidMultiplier();
     error InvalidBondToken();
-
-    // ──────────────────────────────────────────────
-    // Enums
-    // ──────────────────────────────────────────────
-
-    /// @notice Registration level for a UUID.
-    enum RegistrationLevel {
-        None, // 0 - not registered (default)
-        Owned, // 1 - owned but not registered in any region
-        Local, // 2 - admin area (local) level
-        Country // 3 - country level
-    }
 
     // ──────────────────────────────────────────────
     // Constants

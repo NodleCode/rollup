@@ -10,6 +10,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ServiceProviderUpgradeable} from "../../src/swarms/ServiceProviderUpgradeable.sol";
 import {FleetIdentityUpgradeable} from "../../src/swarms/FleetIdentityUpgradeable.sol";
 import {SwarmRegistryUniversalUpgradeable} from "../../src/swarms/SwarmRegistryUniversalUpgradeable.sol";
+import {SwarmStatus, TagType, FingerprintSize} from "../../src/swarms/interfaces/SwarmTypes.sol";
 
 import {MockERC20} from "../__helpers__/MockERC20.sol";
 
@@ -373,8 +374,8 @@ contract UpgradeableContractsTest is Test {
 
         // Register swarm with correct parameters
         bytes memory filterData = hex"0102030405";
-        SwarmRegistryUniversalUpgradeable.FingerprintSize fpSize = SwarmRegistryUniversalUpgradeable.FingerprintSize.BITS_16;
-        SwarmRegistryUniversalUpgradeable.TagType tagType = SwarmRegistryUniversalUpgradeable.TagType.IBEACON_PAYLOAD_ONLY;
+        FingerprintSize fpSize = FingerprintSize.BITS_16;
+        TagType tagType = TagType.IBEACON_PAYLOAD_ONLY;
         
         vm.prank(alice);
         uint256 swarmId = swarmRegistry.registerSwarm(uuid, providerId, filterData, fpSize, tagType);
