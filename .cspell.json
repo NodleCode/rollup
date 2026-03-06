@@ -76,6 +76,17 @@
     "MBOND",
     "USCA",
     "USNY",
-    "usca"
+    "usca",
+    "UUPS",
+    "reinitializer",
+    "Reinitializer",
+    "Initializable",
+    "bitshift",
+    "timelock",
+    "iface",
+    "pkill",
+    "Blockscout",
+    "REINIT",
+    "reinit"
   ]
 }

@@ -43,7 +43,6 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
     // ──────────────────────────────────────────────
     // Errors
     // ──────────────────────────────────────────────
-    error InvalidFingerprintSize();
     error InvalidFilterSize();
     error InvalidUuid();
     error NotUuidOwner();
@@ -71,11 +70,17 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
         GENERIC // 0x03
     }
 
+    /// @notice Fingerprint size for XOR filter (8-bit or 16-bit only for gas efficiency)
+    enum FingerprintSize {
+        BITS_8, // 8-bit fingerprints (1 byte each)
+        BITS_16 // 16-bit fingerprints (2 bytes each)
+    }
+
     struct Swarm {
         bytes16 fleetUuid;
         uint256 providerId;
         address filterPointer; // SSTORE2 pointer
-        uint8 fingerprintSize;
+        FingerprintSize fpSize;
         TagType tagType;
         SwarmStatus status;
     }
@@ -83,7 +88,6 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
     // ──────────────────────────────────────────────
     // Constants
     // ──────────────────────────────────────────────
-    uint8 public constant MAX_FINGERPRINT_SIZE = 16;
 
     // ──────────────────────────────────────────────
     // Storage (V1) - Order matters for upgrades!
@@ -171,12 +175,12 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
     // ──────────────────────────────────────────────
 
     /// @notice Derives a deterministic swarm ID.
-    function computeSwarmId(bytes16 fleetUuid, bytes calldata filterData_, uint8 fingerprintSize, TagType tagType)
+    function computeSwarmId(bytes16 fleetUuid, bytes calldata filterData_, FingerprintSize fpSize, TagType tagType)
         public
         pure
         returns (uint256)
     {
-        return uint256(keccak256(abi.encode(fleetUuid, filterData_, fingerprintSize, tagType)));
+        return uint256(keccak256(abi.encode(fleetUuid, filterData_, fpSize, tagType)));
     }
 
     // ──────────────────────────────────────────────
@@ -184,18 +188,20 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
     // ──────────────────────────────────────────────
 
     /// @notice Registers a new swarm. Caller must own the fleet UUID.
+    /// @param fleetUuid The fleet UUID (must be owned by caller)
+    /// @param providerId The service provider NFT ID
+    /// @param filterData_ The XOR filter data
+    /// @param fpSize Fingerprint size (BITS_8 or BITS_16)
+    /// @param tagType The tag type for this swarm
     function registerSwarm(
         bytes16 fleetUuid,
         uint256 providerId,
         bytes calldata filterData_,
-        uint8 fingerprintSize,
+        FingerprintSize fpSize,
         TagType tagType
     ) external nonReentrant returns (uint256 swarmId) {
         if (fleetUuid == bytes16(0)) {
             revert InvalidUuid();
-        }
-        if (fingerprintSize == 0 || fingerprintSize > MAX_FINGERPRINT_SIZE) {
-            revert InvalidFingerprintSize();
         }
         if (filterData_.length == 0 || filterData_.length > 24576) {
             revert InvalidFilterSize();
@@ -209,7 +215,7 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
             revert ProviderDoesNotExist();
         }
 
-        swarmId = computeSwarmId(fleetUuid, filterData_, fingerprintSize, tagType);
+        swarmId = computeSwarmId(fleetUuid, filterData_, fpSize, tagType);
 
         if (swarms[swarmId].filterPointer != address(0)) {
             revert SwarmAlreadyExists();
@@ -218,7 +224,7 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
         Swarm storage s = swarms[swarmId];
         s.fleetUuid = fleetUuid;
         s.providerId = providerId;
-        s.fingerprintSize = fingerprintSize;
+        s.fpSize = fpSize;
         s.tagType = tagType;
         s.status = SwarmStatus.REGISTERED;
 
@@ -355,7 +361,9 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
             }
         }
 
-        uint256 m = (dataLen * 8) / s.fingerprintSize;
+        // For BITS_8: m = dataLen (each byte is one fingerprint)
+        // For BITS_16: m = dataLen / 2 (each 2 bytes is one fingerprint)
+        uint256 m = s.fpSize == FingerprintSize.BITS_8 ? dataLen : dataLen >> 1;
         if (m == 0) return false;
 
         bytes32 h = tagHash;
@@ -364,12 +372,13 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
         uint32 h2 = uint32(uint256(h) >> 32) % uint32(m);
         uint32 h3 = uint32(uint256(h) >> 64) % uint32(m);
 
-        uint256 fpMask = (uint256(1) << s.fingerprintSize) - 1;
+        // fpMask: 0xFF for BITS_8, 0xFFFF for BITS_16
+        uint256 fpMask = s.fpSize == FingerprintSize.BITS_8 ? 0xFF : 0xFFFF;
         uint256 expectedFp = (uint256(h) >> 96) & fpMask;
 
-        uint256 f1 = _readFingerprint(pointer, h1, s.fingerprintSize);
-        uint256 f2 = _readFingerprint(pointer, h2, s.fingerprintSize);
-        uint256 f3 = _readFingerprint(pointer, h3, s.fingerprintSize);
+        uint256 f1 = _readFingerprint(pointer, h1, s.fpSize);
+        uint256 f2 = _readFingerprint(pointer, h2, s.fpSize);
+        uint256 f3 = _readFingerprint(pointer, h3, s.fpSize);
 
         return (f1 ^ f2 ^ f3) == expectedFp;
     }
@@ -396,25 +405,22 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
         delete swarmIndexInUuid[swarmId];
     }
 
-    function _readFingerprint(address pointer, uint256 index, uint8 bits) internal view returns (uint256) {
-        uint256 bitOffset = index * bits;
-        uint256 startByte = bitOffset / 8;
-        uint256 endByte = (bitOffset + bits - 1) / 8;
-
-        bytes memory chunk = SSTORE2.read(pointer, startByte, endByte + 1);
-
-        uint256 raw;
-        for (uint256 i = 0; i < chunk.length;) {
-            raw = (raw << 8) | uint8(chunk[i]);
-            unchecked {
-                ++i;
-            }
+    /// @dev Reads a fingerprint from the SSTORE2 filter at the given index.
+    ///      Optimized for 8-bit and 16-bit fingerprints (no loops, no variable shifts).
+    function _readFingerprint(address pointer, uint256 index, FingerprintSize fpSize)
+        internal
+        view
+        returns (uint256)
+    {
+        if (fpSize == FingerprintSize.BITS_8) {
+            // 8-bit: read single byte
+            bytes memory chunk = SSTORE2.read(pointer, index, index + 1);
+            return uint256(uint8(chunk[0]));
+        } else {
+            // 16-bit: read two consecutive bytes
+            uint256 byteIndex = index << 1; // index * 2
+            bytes memory chunk = SSTORE2.read(pointer, byteIndex, byteIndex + 2);
+            return (uint256(uint8(chunk[0])) << 8) | uint256(uint8(chunk[1]));
         }
-
-        uint256 totalBitsRead = chunk.length * 8;
-        uint256 localStart = bitOffset % 8;
-        uint256 shiftRight = totalBitsRead - (localStart + bits);
-
-        return (raw >> shiftRight) & ((uint256(1) << bits) - 1);
     }
 }

@@ -45,7 +45,6 @@ contract SwarmRegistryUniversalUpgradeable is
     // ──────────────────────────────────────────────
     // Errors
     // ──────────────────────────────────────────────
-    error InvalidFingerprintSize();
     error InvalidFilterSize();
     error InvalidUuid();
     error NotUuidOwner();
@@ -74,11 +73,17 @@ contract SwarmRegistryUniversalUpgradeable is
         GENERIC // 0x03
     }
 
+    /// @notice Fingerprint size for XOR filter (8-bit or 16-bit only for gas efficiency)
+    enum FingerprintSize {
+        BITS_8, // 8-bit fingerprints (1 byte each)
+        BITS_16 // 16-bit fingerprints (2 bytes each)
+    }
+
     struct Swarm {
         bytes16 fleetUuid;
         uint256 providerId;
         uint32 filterLength;
-        uint8 fingerprintSize;
+        FingerprintSize fpSize;
         TagType tagType;
         SwarmStatus status;
     }
@@ -86,7 +91,6 @@ contract SwarmRegistryUniversalUpgradeable is
     // ──────────────────────────────────────────────
     // Constants
     // ──────────────────────────────────────────────
-    uint8 public constant MAX_FINGERPRINT_SIZE = 16;
 
     /// @notice Maximum filter size per swarm (24KB)
     uint32 public constant MAX_FILTER_SIZE = 24576;
@@ -182,12 +186,12 @@ contract SwarmRegistryUniversalUpgradeable is
     // ──────────────────────────────────────────────
 
     /// @notice Derives a deterministic swarm ID.
-    function computeSwarmId(bytes16 fleetUuid, bytes calldata filter, uint8 fingerprintSize, TagType tagType)
+    function computeSwarmId(bytes16 fleetUuid, bytes calldata filter, FingerprintSize fpSize, TagType tagType)
         public
         pure
         returns (uint256)
     {
-        return uint256(keccak256(abi.encode(fleetUuid, filter, fingerprintSize, tagType)));
+        return uint256(keccak256(abi.encode(fleetUuid, filter, fpSize, tagType)));
     }
 
     // ──────────────────────────────────────────────
@@ -195,18 +199,20 @@ contract SwarmRegistryUniversalUpgradeable is
     // ──────────────────────────────────────────────
 
     /// @notice Registers a new swarm. Caller must own the fleet UUID.
+    /// @param fleetUuid The fleet UUID (must be owned by caller)
+    /// @param providerId The service provider NFT ID
+    /// @param filter The XOR filter data
+    /// @param fpSize Fingerprint size (BITS_8 or BITS_16)
+    /// @param tagType The tag type for this swarm
     function registerSwarm(
         bytes16 fleetUuid,
         uint256 providerId,
         bytes calldata filter,
-        uint8 fingerprintSize,
+        FingerprintSize fpSize,
         TagType tagType
     ) external nonReentrant returns (uint256 swarmId) {
         if (fleetUuid == bytes16(0)) {
             revert InvalidUuid();
-        }
-        if (fingerprintSize == 0 || fingerprintSize > MAX_FINGERPRINT_SIZE) {
-            revert InvalidFingerprintSize();
         }
         if (filter.length == 0) {
             revert InvalidFilterSize();
@@ -223,7 +229,7 @@ contract SwarmRegistryUniversalUpgradeable is
             revert ProviderDoesNotExist();
         }
 
-        swarmId = computeSwarmId(fleetUuid, filter, fingerprintSize, tagType);
+        swarmId = computeSwarmId(fleetUuid, filter, fpSize, tagType);
 
         if (swarms[swarmId].filterLength != 0) {
             revert SwarmAlreadyExists();
@@ -233,7 +239,7 @@ contract SwarmRegistryUniversalUpgradeable is
         s.fleetUuid = fleetUuid;
         s.providerId = providerId;
         s.filterLength = uint32(filter.length);
-        s.fingerprintSize = fingerprintSize;
+        s.fpSize = fpSize;
         s.tagType = tagType;
         s.status = SwarmStatus.REGISTERED;
 
@@ -362,19 +368,22 @@ contract SwarmRegistryUniversalUpgradeable is
         bytes storage filter = filterData[swarmId];
         uint256 dataLen = s.filterLength;
 
-        uint256 m = (dataLen * 8) / s.fingerprintSize;
+        // For BITS_8: m = dataLen (each byte is one fingerprint)
+        // For BITS_16: m = dataLen / 2 (each 2 bytes is one fingerprint)
+        uint256 m = s.fpSize == FingerprintSize.BITS_8 ? dataLen : dataLen >> 1;
         if (m == 0) return false;
 
         uint32 h1 = uint32(uint256(tagHash)) % uint32(m);
         uint32 h2 = uint32(uint256(tagHash) >> 32) % uint32(m);
         uint32 h3 = uint32(uint256(tagHash) >> 64) % uint32(m);
 
-        uint256 fpMask = (uint256(1) << s.fingerprintSize) - 1;
+        // fpMask: 0xFF for BITS_8, 0xFFFF for BITS_16
+        uint256 fpMask = s.fpSize == FingerprintSize.BITS_8 ? 0xFF : 0xFFFF;
         uint256 expectedFp = (uint256(tagHash) >> 96) & fpMask;
 
-        uint256 f1 = _readFingerprint(filter, h1, s.fingerprintSize);
-        uint256 f2 = _readFingerprint(filter, h2, s.fingerprintSize);
-        uint256 f3 = _readFingerprint(filter, h3, s.fingerprintSize);
+        uint256 f1 = _readFingerprint(filter, h1, s.fpSize);
+        uint256 f2 = _readFingerprint(filter, h2, s.fpSize);
+        uint256 f3 = _readFingerprint(filter, h3, s.fpSize);
 
         return (f1 ^ f2 ^ f3) == expectedFp;
     }
@@ -409,23 +418,20 @@ contract SwarmRegistryUniversalUpgradeable is
         delete swarmIndexInUuid[swarmId];
     }
 
-    function _readFingerprint(bytes storage filter, uint256 index, uint8 bits) internal view returns (uint256) {
-        uint256 bitOffset = index * bits;
-        uint256 startByte = bitOffset / 8;
-        uint256 endByte = (bitOffset + bits - 1) / 8;
-
-        uint256 raw;
-        for (uint256 i = startByte; i <= endByte;) {
-            raw = (raw << 8) | uint8(filter[i]);
-            unchecked {
-                ++i;
-            }
+    /// @dev Reads a fingerprint from the filter at the given index.
+    ///      Optimized for 8-bit and 16-bit fingerprints (no loops, no variable shifts).
+    function _readFingerprint(bytes storage filter, uint256 index, FingerprintSize fpSize)
+        internal
+        view
+        returns (uint256)
+    {
+        if (fpSize == FingerprintSize.BITS_8) {
+            // 8-bit: direct byte access
+            return uint256(uint8(filter[index]));
+        } else {
+            // 16-bit: two consecutive bytes
+            uint256 byteIndex = index << 1; // index * 2
+            return (uint256(uint8(filter[byteIndex])) << 8) | uint256(uint8(filter[byteIndex + 1]));
         }
-
-        uint256 totalBitsRead = (endByte - startByte + 1) * 8;
-        uint256 localStart = bitOffset % 8;
-        uint256 shiftRight = totalBitsRead - (localStart + bits);
-
-        return (raw >> shiftRight) & ((uint256(1) << bits) - 1);
     }
 }

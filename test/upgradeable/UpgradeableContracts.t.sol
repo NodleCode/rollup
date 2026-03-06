@@ -373,11 +373,11 @@ contract UpgradeableContractsTest is Test {
 
         // Register swarm with correct parameters
         bytes memory filterData = hex"0102030405";
-        uint8 fingerprintSize = 16;
+        SwarmRegistryUniversalUpgradeable.FingerprintSize fpSize = SwarmRegistryUniversalUpgradeable.FingerprintSize.BITS_16;
         SwarmRegistryUniversalUpgradeable.TagType tagType = SwarmRegistryUniversalUpgradeable.TagType.IBEACON_PAYLOAD_ONLY;
         
         vm.prank(alice);
-        uint256 swarmId = swarmRegistry.registerSwarm(uuid, providerId, filterData, fingerprintSize, tagType);
+        uint256 swarmId = swarmRegistry.registerSwarm(uuid, providerId, filterData, fpSize, tagType);
 
         // Deploy V2 and upgrade
         SwarmRegistryUniversalUpgradeableV2Mock v2Impl = new SwarmRegistryUniversalUpgradeableV2Mock();
