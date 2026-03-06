@@ -12,8 +12,9 @@ The V2 contracts (`FleetIdentityUpgradeableV2`, `ServiceProviderUpgradeableV2`, 
 
 ## Prerequisites
 
-1. **anvil-zksync** installed (comes with foundry-zksync)
-2. Contracts compiled with optimizer enabled (see `foundry.toml`)
+1. **anvil** installed (comes with foundry) for L1 mode
+2. **anvil-zksync** installed (comes with foundry-zksync) for ZkSync mode
+3. Contracts compiled with optimizer enabled (see `foundry.toml`)
 
 ---
 
@@ -57,16 +58,19 @@ cast balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --rpc-url http://127.0.0
 
 ## Running the Upgrade Test
 
-### Option A: L1 Mode (Ethereum Mainnet Simulation)
+### Option A: L1 Mode (Ethereum Mainnet Simulation) — Recommended
 
 Use this for testing `SwarmRegistryL1Upgradeable` which uses SSTORE2.
+
+> **Important:** SSTORE2 relies on `EXTCODECOPY` which is not supported on ZkSync Era.
+> You must use regular `anvil`, not `anvil-zksync --zksync-os`.
 
 ```bash
 # 1. Stop any existing anvil
 lsof -ti:8545 | xargs kill -9 2>/dev/null || true
 
-# 2. Start anvil-zksync in L1 mode
-~/.foundry/bin/anvil-zksync --host 127.0.0.1 --port 8545
+# 2. Start regular anvil (NOT anvil-zksync with --zksync-os)
+anvil --host 127.0.0.1 --port 8545
 
 # 3. Verify it's running
 cast chain-id --rpc-url http://127.0.0.1:8545
@@ -84,17 +88,21 @@ lsof -ti:8545 | xargs kill -9
 
 Use this for testing with full ZkSync system contracts.
 
+> **Note:** This test script uses `SwarmRegistryL1Upgradeable` which is incompatible with ZkSync
+> due to SSTORE2's reliance on `EXTCODECOPY`. For ZkSync, use `SwarmRegistryUniversalUpgradeable` instead.
+
 ```bash
 # 1. Stop any existing anvil
 lsof -ti:8545 | xargs kill -9 2>/dev/null || true
 
 # 2. Start anvil-zksync with ZkSync OS enabled
-~/.foundry/bin/anvil-zksync --host 127.0.0.1 --port 8545 --zksync
+~/.foundry/bin/anvil-zksync --host 127.0.0.1 --port 8545 --zksync-os
 
 # 3. Verify it's running (chain ID will be 260 for ZkSync)
 cast chain-id --rpc-url http://127.0.0.1:8545
 
 # 4. Run the test with --zksync flag (in another terminal)
+# NOTE: This will FAIL with SwarmRegistryL1 - use SwarmRegistryUniversal for ZkSync
 forge script test/upgrade-demo/TestUpgradeOnAnvil.s.sol:TestUpgradeOnAnvil \
   --rpc-url http://127.0.0.1:8545 \
   --broadcast \
@@ -110,22 +118,22 @@ Use this for testing L1↔L2 interactions (not needed for basic upgrade demo).
 
 ```bash
 # Start with both L1 and ZkSync
-~/.foundry/bin/anvil-zksync --host 127.0.0.1 --port 8545 --l1 --zksync
+~/.foundry/bin/anvil-zksync --host 127.0.0.1 --port 8545 --l1 --zksync-os
 ```
 
 ---
 
 ## Quick Reference
 
-| Task              | Command                                                             |
-| ----------------- | ------------------------------------------------------------------- |
-| Check if running  | `cast chain-id --rpc-url http://127.0.0.1:8545`                     |
-| Check port usage  | `lsof -i :8545`                                                     |
-| Kill on port 8545 | `lsof -ti:8545 \| xargs kill -9`                                    |
-| Kill all anvil    | `pkill -f anvil`                                                    |
-| Start L1 mode     | `~/.foundry/bin/anvil-zksync --host 127.0.0.1 --port 8545`          |
-| Start ZkSync mode | `~/.foundry/bin/anvil-zksync --host 127.0.0.1 --port 8545 --zksync` |
-| Health check      | `cast block-number --rpc-url http://127.0.0.1:8545`                 |
+| Task              | Command                                                                |
+| ----------------- | ---------------------------------------------------------------------- |
+| Check if running  | `cast chain-id --rpc-url http://127.0.0.1:8545`                        |
+| Check port usage  | `lsof -i :8545`                                                        |
+| Kill on port 8545 | `lsof -ti:8545 \| xargs kill -9`                                       |
+| Kill all anvil    | `pkill -f anvil`                                                       |
+| Start L1 mode     | `anvil --host 127.0.0.1 --port 8545`                                   |
+| Start ZkSync mode | `~/.foundry/bin/anvil-zksync --host 127.0.0.1 --port 8545 --zksync-os` |
+| Health check      | `cast block-number --rpc-url http://127.0.0.1:8545`                    |
 
 ---
 
@@ -134,9 +142,10 @@ Use this for testing L1↔L2 interactions (not needed for basic upgrade demo).
 The script will:
 
 1. **Deploy V1 contracts** - ServiceProvider, FleetIdentity, SwarmRegistryL1 (all via ERC1967 proxies)
-2. **Create state** - Register a provider URL and a fleet with bond
-3. **Upgrade to V2** - Deploy V2 implementations and call `upgradeToAndCall()`
-4. **Verify success** - Check `version()` returns "2.0.0" and all state is preserved
+2. **Verify V1 initializers** - Check owner, ERC721 metadata, bond parameters, and contract references
+3. **Create state** - Register a provider URL and a fleet with bond
+4. **Upgrade to V2** - Deploy V2 implementations and call `upgradeToAndCall()`
+5. **Verify success** - Check `version()` returns "2.0.0" and all state is preserved
 
 ```
 === PHASE 1: Deploy V1 Contracts ===
@@ -144,6 +153,21 @@ The script will:
   ServiceProvider Proxy: 0x...
   FleetIdentity Proxy: 0x...
   SwarmRegistry Proxy: 0x...
+
+=== PHASE 1B: Verify V1 Initializers ===
+  ServiceProvider V1 Initialization:
+    owner: 0x... [OK]
+    name: Swarm Service Provider [OK]
+    symbol: SSV [OK]
+  FleetIdentity V1 Initialization:
+    owner: 0x... [OK]
+    BOND_TOKEN: 0x... [OK]
+    BASE_BOND: 100000000000000000000 [OK]
+    countryBondMultiplier: 16 [OK]
+  SwarmRegistry V1 Initialization:
+    owner: 0x... [OK]
+    FLEET_CONTRACT: 0x... [OK]
+    PROVIDER_CONTRACT: 0x... [OK]
 
 === PHASE 2: Create State ===
   Registered Provider: Token ID: ...

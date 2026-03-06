@@ -55,9 +55,12 @@ contract MockBondToken is ERC20 {
  * @title TestUpgradeOnAnvil
  * @notice End-to-end script to deploy, use, upgrade, and verify swarm contracts on anvil.
  *
+ * @dev NOTE: This script uses SwarmRegistryL1Upgradeable which relies on SSTORE2 (EXTCODECOPY).
+ *      SSTORE2 is NOT compatible with ZkSync Era. Use regular anvil, not anvil-zksync.
+ *
  * Usage:
- *   1. Start anvil-zksync in a separate terminal:
- *      ~/.foundry/bin/anvil-zksync --host 127.0.0.1 --port 8545
+ *   1. Start regular anvil in a separate terminal:
+ *      anvil --host 127.0.0.1 --port 8545
  *
  *   2. Run this script:
  *      forge script test/upgrade-demo/TestUpgradeOnAnvil.s.sol:TestUpgradeOnAnvil \
@@ -129,12 +132,54 @@ contract TestUpgradeOnAnvil is Script {
         console.log("  SwarmRegistry Impl V1:", address(srImpl));
 
         // ═══════════════════════════════════════════
+        // PHASE 1B: Verify V1 Initializers
+        // ═══════════════════════════════════════════
+        console.log("\n=== PHASE 1B: Verify V1 Initializers ===\n");
+
+        // Verify ServiceProvider initialization
+        ServiceProviderUpgradeable sp = ServiceProviderUpgradeable(serviceProviderProxy);
+        console.log("ServiceProvider V1 Initialization:");
+        require(sp.owner() == deployer, "SP: owner not initialized correctly");
+        console.log("  owner:", sp.owner(), "[OK]");
+        require(keccak256(bytes(sp.name())) == keccak256(bytes("Swarm Service Provider")), "SP: name mismatch");
+        console.log("  name:", sp.name(), "[OK]");
+        require(keccak256(bytes(sp.symbol())) == keccak256(bytes("SSV")), "SP: symbol mismatch");
+        console.log("  symbol:", sp.symbol(), "[OK]");
+
+        // Verify FleetIdentity initialization
+        FleetIdentityUpgradeable fi = FleetIdentityUpgradeable(fleetIdentityProxy);
+        console.log("\nFleetIdentity V1 Initialization:");
+        require(fi.owner() == deployer, "FI: owner not initialized correctly");
+        console.log("  owner:", fi.owner(), "[OK]");
+        require(address(fi.BOND_TOKEN()) == address(bondToken), "FI: BOND_TOKEN mismatch");
+        console.log("  BOND_TOKEN:", address(fi.BOND_TOKEN()), "[OK]");
+        require(fi.BASE_BOND() == baseBond, "FI: BASE_BOND mismatch");
+        console.log("  BASE_BOND:", fi.BASE_BOND(), "[OK]");
+        require(fi.countryBondMultiplier() == 16, "FI: countryBondMultiplier mismatch");
+        console.log("  countryBondMultiplier:", fi.countryBondMultiplier(), "[OK]");
+        require(keccak256(bytes(fi.name())) == keccak256(bytes("Swarm Fleet Identity")), "FI: name mismatch");
+        console.log("  name:", fi.name(), "[OK]");
+        require(keccak256(bytes(fi.symbol())) == keccak256(bytes("SFID")), "FI: symbol mismatch");
+        console.log("  symbol:", fi.symbol(), "[OK]");
+
+        // Verify SwarmRegistry initialization
+        SwarmRegistryL1Upgradeable sr = SwarmRegistryL1Upgradeable(swarmRegistryProxy);
+        console.log("\nSwarmRegistry V1 Initialization:");
+        require(sr.owner() == deployer, "SR: owner not initialized correctly");
+        console.log("  owner:", sr.owner(), "[OK]");
+        require(address(sr.FLEET_CONTRACT()) == fleetIdentityProxy, "SR: FLEET_CONTRACT mismatch");
+        console.log("  FLEET_CONTRACT:", address(sr.FLEET_CONTRACT()), "[OK]");
+        require(address(sr.PROVIDER_CONTRACT()) == serviceProviderProxy, "SR: PROVIDER_CONTRACT mismatch");
+        console.log("  PROVIDER_CONTRACT:", address(sr.PROVIDER_CONTRACT()), "[OK]");
+
+        console.log("\nAll V1 initializers verified successfully!");
+
+        // ═══════════════════════════════════════════
         // PHASE 2: Create State (register provider & fleet)
         // ═══════════════════════════════════════════
         console.log("\n=== PHASE 2: Create State ===\n");
 
         // Register a provider
-        ServiceProviderUpgradeable sp = ServiceProviderUpgradeable(serviceProviderProxy);
         string memory providerUrl = "https://api.example.com";
         providerTokenId = sp.registerProvider(providerUrl);
         console.log("Registered Provider:");
@@ -143,7 +188,6 @@ contract TestUpgradeOnAnvil is Script {
         console.log("  Owner:", sp.ownerOf(providerTokenId));
 
         // Approve bond token for fleet
-        FleetIdentityUpgradeable fi = FleetIdentityUpgradeable(fleetIdentityProxy);
         bondToken.approve(fleetIdentityProxy, type(uint256).max);
         console.log("\nBond token approved for FleetIdentity");
 
@@ -238,6 +282,7 @@ contract TestUpgradeOnAnvil is Script {
         console.log("  UPGRADE TEST COMPLETED SUCCESSFULLY");
         console.log("========================================");
         console.log("- All V1 contracts deployed");
+        console.log("- V1 initializers verified (owner, params, ERC721)");
         console.log("- State created (provider + fleet)");
         console.log("- Upgraded to V2 implementations");
         console.log("- Version functions return '2.0.0'");
