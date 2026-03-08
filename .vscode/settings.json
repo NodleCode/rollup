@@ -13,8 +13,5 @@
   "editor.formatOnSave": true,
   "[solidity]": {
     "editor.defaultFormatter": "JuanBlanco.solidity"
-  },
-  "chat.tools.terminal.autoApprove": {
-    "forge": true
   }
 }
