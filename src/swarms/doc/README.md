@@ -48,7 +48,7 @@ graph TB
 | **SwarmRegistryL1**        | Tag group registry (L1)        | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
 | **SwarmRegistryUniversal** | Tag group registry (ZkSync+)   | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
 
-All contracts are **permissionless**—access control via NFT ownership. FleetIdentity requires ERC-20 bond (anti-spam).
+All contracts are **DAO-owned** (UUPS upgradeable) during initial operation, allowing parameter tuning and bug fixes. Once mature and stable, an upgrade can renounce ownership to make them fully **permissionless**. Access control is via NFT ownership; FleetIdentity requires ERC-20 bond (anti-spam).
 
 ## Key Concepts
 
