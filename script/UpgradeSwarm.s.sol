@@ -3,7 +3,6 @@
 pragma solidity ^0.8.24;
 
 import {Script, console} from "forge-std/Script.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import {ServiceProviderUpgradeable} from "../src/swarms/ServiceProviderUpgradeable.sol";
 import {FleetIdentityUpgradeable} from "../src/swarms/FleetIdentityUpgradeable.sol";
@@ -97,7 +96,7 @@ contract UpgradeSwarm is Script {
             console.log("Calling upgradeToAndCall with reinitializer...");
             proxyContract.upgradeToAndCall(impl, reinitData);
         } else {
-            console.log("Calling upgradeTo...");
+            console.log("Calling upgradeToAndCall...");
             proxyContract.upgradeToAndCall(impl, "");
         }
     }
@@ -113,7 +112,7 @@ contract UpgradeSwarm is Script {
             console.log("Calling upgradeToAndCall with reinitializer...");
             proxyContract.upgradeToAndCall(impl, reinitData);
         } else {
-            console.log("Calling upgradeTo...");
+            console.log("Calling upgradeToAndCall...");
             proxyContract.upgradeToAndCall(impl, "");
         }
     }
@@ -129,7 +128,7 @@ contract UpgradeSwarm is Script {
             console.log("Calling upgradeToAndCall with reinitializer...");
             proxyContract.upgradeToAndCall(impl, reinitData);
         } else {
-            console.log("Calling upgradeTo...");
+            console.log("Calling upgradeToAndCall...");
             proxyContract.upgradeToAndCall(impl, "");
         }
     }
@@ -145,7 +144,7 @@ contract UpgradeSwarm is Script {
             console.log("Calling upgradeToAndCall with reinitializer...");
             proxyContract.upgradeToAndCall(impl, reinitData);
         } else {
-            console.log("Calling upgradeTo...");
+            console.log("Calling upgradeToAndCall...");
             proxyContract.upgradeToAndCall(impl, "");
         }
     }

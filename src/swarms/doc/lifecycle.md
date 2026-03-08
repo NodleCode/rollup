@@ -104,8 +104,6 @@ sequenceDiagram
     FI->>TOKEN: transfer(owner, BASE_BOND)
 ```
 
-````
-
 ## Orphan Lifecycle
 
 ```mermaid
@@ -116,7 +114,7 @@ flowchart TD
     ORPHAN --> CHECK[isSwarmValid returns false]
     CHECK --> PURGE[Anyone: purgeOrphanedSwarm]
     PURGE --> DELETED[Swarm Deleted + Gas Refund]
-````
+```
 
 ### Orphan Guards
 

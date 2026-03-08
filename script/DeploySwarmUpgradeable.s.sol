@@ -50,6 +50,7 @@ contract DeploySwarmUpgradeable is Script {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address bondToken = vm.envAddress("BOND_TOKEN");
         uint256 baseBond = vm.envUint("BASE_BOND");
+        uint256 countryMultiplier = vm.envOr("COUNTRY_MULTIPLIER", uint256(0)); // 0 means use the default
         address owner = vm.envOr("OWNER", vm.addr(deployerPrivateKey));
         bool deployL1Registry = vm.envOr("DEPLOY_L1_REGISTRY", false);
 
@@ -79,7 +80,7 @@ contract DeploySwarmUpgradeable is Script {
         console.log("   Implementation:", fleetIdentityImpl);
 
         bytes memory fleetIdentityInitData =
-            abi.encodeWithSelector(FleetIdentityUpgradeable.initialize.selector, bondToken, baseBond, owner);
+            abi.encodeWithSelector(FleetIdentityUpgradeable.initialize.selector, owner, bondToken, baseBond, countryMultiplier);
         fleetIdentityProxy = address(new ERC1967Proxy(fleetIdentityImpl, fleetIdentityInitData));
         console.log("   Proxy:", fleetIdentityProxy);
         console.log("");

@@ -607,8 +607,8 @@ contract FleetIdentityUpgradeable is
         view
         returns (bytes16[] memory uuids, uint256 count)
     {
-        if (countryCode == 0) revert InvalidCountryCode();
-        if (adminCode == 0) revert AdminAreaRequired();
+        if (countryCode == 0 || countryCode > MAX_COUNTRY_CODE) revert InvalidCountryCode();
+        if (adminCode == 0 || adminCode > MAX_ADMIN_CODE) revert AdminAreaRequired();
 
         uint32 countryKey = uint32(countryCode);
         uint32 adminKey = makeAdminRegion(countryCode, adminCode);

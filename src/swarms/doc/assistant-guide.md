@@ -13,16 +13,16 @@ Two registry variants exist for different deployment targets:
 
 ### Core Components
 
-| Contract                     | Role                                | Key Identity                                  | Token |
-| :--------------------------- | :---------------------------------- | :-------------------------------------------- | :---- |
-| **`FleetIdentity`**          | Fleet Registry (ERC-721 Enumerable) | `(regionKey << 128) \| uint128(uuid)`         | SFID  |
-| **`ServiceProvider`**        | Service Registry (ERC-721)          | `keccak256(url)`                              | SSV   |
+| Contract                     | Role                                | Key Identity                                    | Token |
+| :--------------------------- | :---------------------------------- | :---------------------------------------------- | :---- |
+| **`FleetIdentity`**          | Fleet Registry (ERC-721 Enumerable) | `(regionKey << 128) \| uint128(uuid)`           | SFID  |
+| **`ServiceProvider`**        | Service Registry (ERC-721)          | `keccak256(url)`                                | SSV   |
 | **`SwarmRegistryL1`**        | Swarm Registry (L1)                 | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
 | **`SwarmRegistryUniversal`** | Swarm Registry (Universal)          | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
 
 All contracts are **permissionless** — access control is enforced through NFT ownership rather than admin roles. `FleetIdentity` additionally requires an ERC-20 bond (e.g. NODL) to register a fleet, acting as an anti-spam / anti-abuse mechanism.
 
-Both NFT contracts support **burning**. For `FleetIdentity`, owned-only tokens can be burned by the owner (refunds BASE*BOND), while registered tokens can only be burned by the operator (refunds tier bond). Burning a `ServiceProvider` token requires owner rights. Burning either NFT makes any swarms referencing that token \_orphaned*.
+Both NFT contracts support **burning**. For `FleetIdentity`, owned-only tokens can be burned by the owner (refunds BASE_BOND), while registered tokens can only be burned by the operator (refunds tier bond). Burning a `ServiceProvider` token requires owner rights. Burning either NFT makes any swarms referencing that token \_orphaned\*.
 
 ### FleetIdentity: Two-Level Geographic Registration
 
@@ -64,7 +64,7 @@ The contract owner can adjust bond parameters at runtime:
 // Update base bond for future registrations
 fleetIdentity.setBaseBond(newBaseBond);
 
-// Update country multiplier for future registrations  
+// Update country multiplier for future registrations
 fleetIdentity.setCountryBondMultiplier(newMultiplier);
 
 // Update both parameters atomically
@@ -80,6 +80,7 @@ To ensure fair refunds when parameters change, each token stores its "tier-0 equ
 - **Bond at tier K**: `tokenTier0Bond[tokenId] << K` (bitshift = multiply by 2^K)
 
 This simplified approach:
+
 - Stores a single uint256 per token (not a struct)
 - No need to track country/local distinction or multiplier separately
 - O(1) operations for promote/demote/burn with accurate refunds

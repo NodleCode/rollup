@@ -1227,4 +1227,49 @@ contract SwarmRegistryL1Test is Test {
         swarmRegistry.getFilterData(999);
     }
 
+    // ==============================
+    // Invalid Enum Values
+    // ==============================
+
+    function test_RevertIf_registerSwarm_invalidFingerprintSize() public {
+        // Solidity 0.8+ reverts with Panic(0x21) for invalid enum conversion
+        uint256 fleetId = _registerFleet(fleetOwner, "f1");
+        uint256 providerId = _registerProvider(providerOwner, "url1");
+        bytes16 uuid = _getFleetUuid(fleetId);
+
+        // Encode call with invalid fpSize (2, but enum only has 0 and 1)
+        bytes memory callData = abi.encodeWithSelector(
+            SwarmRegistryL1Upgradeable.registerSwarm.selector,
+            uuid,
+            providerId,
+            new bytes(32),
+            uint8(2), // Invalid FingerprintSize
+            uint8(0)  // Valid TagType
+        );
+
+        vm.prank(fleetOwner);
+        (bool success,) = address(swarmRegistry).call(callData);
+        assertFalse(success, "Should revert on invalid FingerprintSize");
+    }
+
+    function test_RevertIf_registerSwarm_invalidTagType() public {
+        // Also verify TagType enum validation
+        uint256 fleetId = _registerFleet(fleetOwner, "f1");
+        uint256 providerId = _registerProvider(providerOwner, "url1");
+        bytes16 uuid = _getFleetUuid(fleetId);
+
+        // Encode call with invalid tagType (4, but enum only has 0-3)
+        bytes memory callData = abi.encodeWithSelector(
+            SwarmRegistryL1Upgradeable.registerSwarm.selector,
+            uuid,
+            providerId,
+            new bytes(32),
+            uint8(0), // Valid FingerprintSize
+            uint8(4)  // Invalid TagType
+        );
+
+        vm.prank(fleetOwner);
+        (bool success,) = address(swarmRegistry).call(callData);
+        assertFalse(success, "Should revert on invalid TagType");
+    }
 }
