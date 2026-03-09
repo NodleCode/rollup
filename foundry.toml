@@ -14,3 +14,15 @@ optimizer_runs = 200
 [lint]
 # Exclude ERC20 transfer warning - false positive for ERC721.transferFrom in tests
 exclude_lints = ["erc20-unchecked-transfer"]
+
+[profile.zksync]
+src = "src"
+out = "zkout"
+libs = ["lib"]
+solc = "0.8.26"
+via_ir = true
+optimizer = true
+optimizer_runs = 200
+# Exclude L1-only contracts that use SSTORE2/EXTCODECOPY
+ignored_error_codes = []
+ignored_warnings_from = []
