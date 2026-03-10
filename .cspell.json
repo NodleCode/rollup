@@ -87,6 +87,11 @@
     "pkill",
     "Blockscout",
     "REINIT",
-    "reinit"
+    "reinit",
+    "EDDYSTONE",
+    "Eddystone",
+    "Estimote",
+    "backgrounded",
+    "reconstructable"
   ]
 }
