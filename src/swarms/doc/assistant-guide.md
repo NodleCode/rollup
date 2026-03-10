@@ -233,7 +233,7 @@ A Fleet Owner groups tags into a "Swarm" (chunk of ~10k-20k tags) and registers 
         providerId,
         filterData,
         16, // Fingerprint size in bits (1–16)
-        TagType.IBEACON_INCLUDES_MAC // or PAYLOAD_ONLY, VENDOR_ID, GENERIC
+        TagType.IBEACON_INCLUDES_MAC // or PAYLOAD_ONLY, VENDOR_ID, EDDYSTONE_UID, SERVICE_DATA
     );
     // Returns the deterministic swarmId
     ```
@@ -292,10 +292,17 @@ The system supports different ways of constructing the unique `TagID` based on t
     - If MAC is **Random/Private** (Address Type bits `01` or `11`): Replace with `FF:FF:FF:FF:FF:FF`.
     - _Why?_ To support rotating privacy MACs while still validating "It's a privacy tag".
 - **`0x02`: VENDOR_ID**
-  - **Format**: `companyID || hash(vendorBytes)`
-  - **Use Case**: Non-iBeacon BLE devices identified by Bluetooth SIG company ID.
-- **`0x03`: GENERIC**
-  - **Use Case**: Catch-all for custom tag identity schemes.
+  - **UUID**: `[Len (1B)] [CompanyID (2B, BE)] [FleetIdentifier (≤13B, zero-padded)]`
+  - **Tag Hash**: `keccak256(CompanyID || FullVendorData)`
+  - **Use Case**: Manufacturer-specific BLE advertisements (AD Type 0xFF). Len = 2 + FleetIdLen.
+- **`0x03`: EDDYSTONE_UID**
+  - **UUID**: `Namespace (10B) || Instance (6B)` — exactly 16 bytes, stored directly.
+  - **Tag Hash**: `keccak256(Namespace || Instance)`
+  - **Use Case**: Eddystone-UID beacon frames.
+- **`0x04`: SERVICE_DATA**
+  - **UUID**: Service UUID expanded to 128-bit using Bluetooth Base UUID (`00000000-0000-1000-8000-00805F9B34FB`).
+  - **Tag Hash**: `keccak256(ExpandedServiceUUID128 || ServiceData)`
+  - **Use Case**: GATT Service Data advertisements (AD Types 0x16 / 0x20 / 0x21).
 
 ### Filter Construction (The Math)
 

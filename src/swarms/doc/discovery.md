@@ -76,8 +76,9 @@ flowchart TD
 
     B -->|IBEACON_PAYLOAD_ONLY| C["UUID ∥ Major ∥ Minor (20B)"]
     B -->|IBEACON_INCLUDES_MAC| D{MAC type?}
-    B -->|VENDOR_ID| E["companyID ∥ hash(vendorBytes)"]
-    B -->|GENERIC| F["custom scheme"]
+    B -->|VENDOR_ID| E["CompanyID ∥ FullVendorData"]
+    B -->|EDDYSTONE_UID| F["Namespace ∥ Instance (16B)"]
+    B -->|SERVICE_DATA| K["ExpandedServiceUUID128 ∥ ServiceData"]
 
     D -->|Public| G["UUID ∥ Major ∥ Minor ∥ realMAC (26B)"]
     D -->|Random| H["UUID ∥ Major ∥ Minor ∥ FF:FF:FF:FF:FF:FF"]
@@ -87,6 +88,7 @@ flowchart TD
     H --> I
     E --> I
     F --> I
+    K --> I
 
     I --> J["checkMembership(swarmId, tagHash)"]
 

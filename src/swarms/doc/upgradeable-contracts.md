@@ -323,7 +323,7 @@ async function registerSwarm(
   providerId: bigint,
   filterData: Uint8Array,
   fingerprintSize: number,
-  tagType: number, // 0: IBEACON_PAYLOAD_ONLY, etc.
+  tagType: number, // 0: IBEACON_PAYLOAD_ONLY, 1: IBEACON_INCLUDES_MAC, 2: VENDOR_ID, 3: EDDYSTONE_UID, 4: SERVICE_DATA
 ): Promise<bigint> {
   const tx = await swarmRegistry.registerSwarm(
     fleetUuid,

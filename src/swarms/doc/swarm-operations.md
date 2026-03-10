@@ -58,12 +58,13 @@ Swarm identity is based on fleet, filter, fingerprintSize, and tagType. Provider
 
 ### TagType Schemas
 
-| Type                   | Format                        |  Bytes |
-| :--------------------- | :---------------------------- | -----: |
-| `IBEACON_PAYLOAD_ONLY` | UUID ∥ Major ∥ Minor          |     20 |
-| `IBEACON_INCLUDES_MAC` | UUID ∥ Major ∥ Minor ∥ MAC    |     26 |
-| `VENDOR_ID`            | companyID ∥ hash(vendorBytes) | varies |
-| `GENERIC`              | custom                        | varies |
+| Type                   | Format                               |  Bytes |
+| :--------------------- | :----------------------------------- | -----: |
+| `IBEACON_PAYLOAD_ONLY` | UUID ∥ Major ∥ Minor                 |     20 |
+| `IBEACON_INCLUDES_MAC` | UUID ∥ Major ∥ Minor ∥ MAC           |     26 |
+| `VENDOR_ID`            | CompanyID ∥ FullVendorData           | varies |
+| `EDDYSTONE_UID`        | Namespace ∥ Instance                 |     16 |
+| `SERVICE_DATA`         | ExpandedServiceUUID128 ∥ ServiceData | varies |
 
 ### MAC Normalization (IBEACON_INCLUDES_MAC)
 
