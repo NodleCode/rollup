@@ -158,6 +158,11 @@ preflight_checks() {
     exit 1
   fi
 
+  # Ensure DEPLOYER_PRIVATE_KEY has 0x prefix (required by forge vm.envUint)
+  if [[ "$DEPLOYER_PRIVATE_KEY" != 0x* ]]; then
+    export DEPLOYER_PRIVATE_KEY="0x${DEPLOYER_PRIVATE_KEY}"
+  fi
+
   # Set defaults
   export BOND_TOKEN="${BOND_TOKEN:-$NODL}"
   export BASE_BOND="${BASE_BOND:-100000000000000000000}"  # 100 NODL default
@@ -303,10 +308,12 @@ deploy_contracts() {
   )
   
   if [ "$BROADCAST" = "--broadcast" ]; then
-    FORGE_ARGS+=("--broadcast")
+    FORGE_ARGS+=("--broadcast" "--slow")
     
-    # Add verification if available
-    FORGE_ARGS+=("--verify")
+    # Add ZkSync-specific verification
+    if [ -n "$L2_VERIFIER_URL" ]; then
+      FORGE_ARGS+=("--verify" "--verifier" "zksync" "--verifier-url" "$L2_VERIFIER_URL")
+    fi
   else
     log_warning "DRY RUN MODE - Add '--broadcast' to actually deploy"
     log_info "Would deploy with:"
@@ -317,29 +324,33 @@ deploy_contracts() {
     return 0
   fi
   
+  DEPLOY_LOG="/tmp/deploy-output-$$.txt"
+  
   # Run the deployment
-  forge "${FORGE_ARGS[@]}" 2>&1 | tee /tmp/deploy-output-$$.txt
+  forge "${FORGE_ARGS[@]}" 2>&1 | tee "$DEPLOY_LOG"
   
   if [ "$BROADCAST" = "--broadcast" ]; then
     # Extract deployed addresses from output
-    # The deployment script outputs: "ServiceProvider Proxy: 0x..."
-    SERVICE_PROVIDER_PROXY=$(grep "ServiceProvider Proxy:" /tmp/deploy-output-$$.txt | awk '{print $NF}')
-    SERVICE_PROVIDER_IMPL=$(grep "ServiceProvider Implementation:" /tmp/deploy-output-$$.txt | awk '{print $NF}')
-    FLEET_IDENTITY_PROXY=$(grep "FleetIdentity Proxy:" /tmp/deploy-output-$$.txt | awk '{print $NF}')
-    FLEET_IDENTITY_IMPL=$(grep "FleetIdentity Implementation:" /tmp/deploy-output-$$.txt | awk '{print $NF}')
-    SWARM_REGISTRY_PROXY=$(grep "SwarmRegistry Proxy:" /tmp/deploy-output-$$.txt | awk '{print $NF}')
-    SWARM_REGISTRY_IMPL=$(grep "SwarmRegistry Implementation:" /tmp/deploy-output-$$.txt | awk '{print $NF}')
+    # The Solidity script outputs lines like: "ServiceProvider Proxy: 0x..."
+    SERVICE_PROVIDER_PROXY=$(grep -o 'ServiceProvider Proxy: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
+    SERVICE_PROVIDER_IMPL=$(grep -o 'ServiceProvider Implementation: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
+    FLEET_IDENTITY_PROXY=$(grep -o 'FleetIdentity Proxy: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
+    FLEET_IDENTITY_IMPL=$(grep -o 'FleetIdentity Implementation: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
+    SWARM_REGISTRY_PROXY=$(grep -o 'SwarmRegistry Proxy: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
+    SWARM_REGISTRY_IMPL=$(grep -o 'SwarmRegistry Implementation: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
     
     # Validate we got addresses
     if [ -z "$SERVICE_PROVIDER_PROXY" ] || [ -z "$FLEET_IDENTITY_PROXY" ] || [ -z "$SWARM_REGISTRY_PROXY" ]; then
-      log_warning "Could not extract all addresses from output"
-      log_info "Check /tmp/deploy-output-$$.txt for details"
+      log_error "Could not extract all addresses from output"
+      log_info "Full output saved to: $DEPLOY_LOG"
+      cat "$DEPLOY_LOG"
+      exit 1
     else
       log_success "Deployment complete!"
     fi
   fi
   
-  rm -f /tmp/deploy-output-$$.txt
+  rm -f "$DEPLOY_LOG"
 }
 
 # =============================================================================
@@ -415,16 +426,21 @@ update_env_file() {
   
   # Check if swarm contracts section already exists
   if grep -q "SERVICE_PROVIDER_PROXY" "$ENV_FILE"; then
-    log_warning "Swarm contract addresses already exist in $ENV_FILE"
-    log_warning "Please manually update the addresses:"
-    echo ""
-    echo "SERVICE_PROVIDER_PROXY=$SERVICE_PROVIDER_PROXY"
-    echo "SERVICE_PROVIDER_IMPL=$SERVICE_PROVIDER_IMPL"
-    echo "FLEET_IDENTITY_PROXY=$FLEET_IDENTITY_PROXY"
-    echo "FLEET_IDENTITY_IMPL=$FLEET_IDENTITY_IMPL"
-    echo "SWARM_REGISTRY_PROXY=$SWARM_REGISTRY_PROXY"
-    echo "SWARM_REGISTRY_IMPL=$SWARM_REGISTRY_IMPL"
-    return 0
+    log_info "Updating existing swarm contract addresses in $ENV_FILE..."
+    
+    # Remove old swarm contracts block (comment + 7 lines of variables)
+    sed -i.bak '/^# Swarm Contracts/,/^$/d' "$ENV_FILE"
+    # Also remove any straggling individual lines that weren't in a block
+    sed -i.bak '/^SERVICE_PROVIDER_PROXY=/d' "$ENV_FILE"
+    sed -i.bak '/^SERVICE_PROVIDER_IMPL=/d' "$ENV_FILE"
+    sed -i.bak '/^FLEET_IDENTITY_PROXY=/d' "$ENV_FILE"
+    sed -i.bak '/^FLEET_IDENTITY_IMPL=/d' "$ENV_FILE"
+    sed -i.bak '/^SWARM_REGISTRY_PROXY=/d' "$ENV_FILE"
+    sed -i.bak '/^SWARM_REGISTRY_IMPL=/d' "$ENV_FILE"
+    sed -i.bak '/^BASE_BOND=/d' "$ENV_FILE"
+    # Clean up trailing blank lines
+    sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$ENV_FILE"
+    rm -f "${ENV_FILE}.bak"
   fi
   
   # Append new addresses
@@ -437,6 +453,7 @@ FLEET_IDENTITY_PROXY=$FLEET_IDENTITY_PROXY
 FLEET_IDENTITY_IMPL=$FLEET_IDENTITY_IMPL
 SWARM_REGISTRY_PROXY=$SWARM_REGISTRY_PROXY
 SWARM_REGISTRY_IMPL=$SWARM_REGISTRY_IMPL
+BASE_BOND=$BASE_BOND
 EOF
   
   log_success "Environment file updated"
