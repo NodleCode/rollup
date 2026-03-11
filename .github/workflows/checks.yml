@@ -121,17 +121,12 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Puppeteer system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
-            libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
-            libpango-1.0-0 libcairo2 libasound2 libxshmfence1
-
       - name: Install npm dependencies
         working-directory: src/swarms/doc/spec
         run: npm install --no-save @mermaid-js/mermaid-cli md-to-pdf
+
+      - name: Install Puppeteer browser
+        run: npx puppeteer browsers install chrome
 
       - name: Build specification PDF
         working-directory: src/swarms/doc/spec
