@@ -107,3 +107,39 @@ jobs:
           fi
           
           echo "Coverage check passed: $COVERAGE% >= $THRESHOLD%"
+
+  Specification-PDF:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Puppeteer system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+            libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
+            libpango-1.0-0 libcairo2 libasound2 libxshmfence1
+
+      - name: Install npm dependencies
+        working-directory: src/swarms/doc/spec
+        run: npm install --no-save @mermaid-js/mermaid-cli md-to-pdf
+
+      - name: Build specification PDF
+        working-directory: src/swarms/doc/spec
+        run: bash build.sh
+
+      - name: Upload specification PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: swarm-specification
+          path: src/swarms/doc/spec/swarm-specification.pdf
+          retention-days: 30

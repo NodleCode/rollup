@@ -1,0 +1,264 @@
+/* ==========================================================================
+   Swarm System Specification — PDF Stylesheet
+   Used by md-to-pdf (Puppeteer-based PDF generation)
+   ========================================================================== */
+
+/* ---------- Page & Base ---------- */
+
+@page {
+  size: A4;
+  margin: 25mm 20mm;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.55;
+  color: #1a1a1a;
+  max-width: 100%;
+}
+
+/* ---------- Title Page ---------- */
+
+.title-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 70vh;
+  text-align: center;
+}
+
+.title-page h1 {
+  font-size: 32pt;
+  font-weight: 700;
+  margin-bottom: 8pt;
+  color: #111;
+  border-bottom: none;
+}
+
+.title-page h2 {
+  font-size: 16pt;
+  font-weight: 400;
+  color: #444;
+  border-bottom: none;
+  margin-top: 0;
+}
+
+.title-page p {
+  font-size: 11pt;
+  color: #666;
+  margin-top: 24pt;
+}
+
+/* ---------- Page Breaks ---------- */
+
+.page-break {
+  page-break-after: always;
+}
+
+/* ---------- Headings ---------- */
+
+h1 {
+  font-size: 22pt;
+  font-weight: 700;
+  color: #111;
+  border-bottom: 2px solid #4a9eff;
+  padding-bottom: 6pt;
+  margin-top: 36pt;
+  margin-bottom: 16pt;
+  page-break-after: avoid;
+}
+
+h2 {
+  font-size: 17pt;
+  font-weight: 600;
+  color: #1a1a1a;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 4pt;
+  margin-top: 28pt;
+  margin-bottom: 12pt;
+  page-break-after: avoid;
+}
+
+h3 {
+  font-size: 13pt;
+  font-weight: 600;
+  color: #222;
+  margin-top: 20pt;
+  margin-bottom: 8pt;
+  page-break-after: avoid;
+}
+
+h4 {
+  font-size: 11.5pt;
+  font-weight: 600;
+  color: #333;
+  margin-top: 14pt;
+  margin-bottom: 6pt;
+  page-break-after: avoid;
+}
+
+/* ---------- Table of Contents ---------- */
+
+h2#table-of-contents,
+h2:has(+ ol a[href^="#"]) {
+  border-bottom: 2px solid #4a9eff;
+}
+
+/* ---------- Paragraphs ---------- */
+
+p {
+  margin: 6pt 0;
+  orphans: 3;
+  widows: 3;
+}
+
+/* ---------- Tables ---------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12pt 0;
+  font-size: 10pt;
+  page-break-inside: avoid;
+}
+
+thead {
+  background-color: #f0f4f8;
+}
+
+th {
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid #d0d7de;
+  color: #1a1a1a;
+}
+
+td {
+  padding: 6px 10px;
+  border: 1px solid #d0d7de;
+  vertical-align: top;
+}
+
+tr:nth-child(even) {
+  background-color: #f8f9fa;
+}
+
+/* ---------- Code ---------- */
+
+code {
+  font-family: "SF Mono", "Fira Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-size: 9.5pt;
+  background-color: #f0f4f8;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: #1a1a1a;
+}
+
+pre {
+  background-color: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-size: 9pt;
+  line-height: 1.45;
+  margin: 10pt 0;
+  page-break-inside: avoid;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+/* ---------- Images (Mermaid diagrams) ---------- */
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 16pt auto;
+  page-break-inside: avoid;
+}
+
+/* Center mermaid diagrams */
+p > img {
+  margin: 16pt auto;
+}
+
+/* ---------- Blockquotes ---------- */
+
+blockquote {
+  border-left: 4px solid #4a9eff;
+  padding: 8px 16px;
+  margin: 12pt 0;
+  color: #444;
+  background-color: #f0f7ff;
+  border-radius: 0 4px 4px 0;
+}
+
+/* ---------- Lists ---------- */
+
+ul, ol {
+  margin: 6pt 0;
+  padding-left: 24pt;
+}
+
+li {
+  margin: 3pt 0;
+}
+
+/* ---------- Horizontal Rules ---------- */
+
+hr {
+  border: none;
+  border-top: 1px solid #d0d7de;
+  margin: 24pt 0;
+}
+
+/* ---------- Strong / Emphasis ---------- */
+
+strong {
+  font-weight: 600;
+  color: #111;
+}
+
+em {
+  font-style: italic;
+}
+
+/* ---------- Links ---------- */
+
+a {
+  color: #4a9eff;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Print-specific ---------- */
+
+@media print {
+  body {
+    font-size: 10.5pt;
+  }
+
+  h1, h2, h3, h4 {
+    page-break-after: avoid;
+  }
+
+  table, pre, img, blockquote {
+    page-break-inside: avoid;
+  }
+
+  .page-break {
+    page-break-after: always;
+  }
+}
