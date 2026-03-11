@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.20;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {BaseContentSign} from "../../src/contentsign/BaseContentSign.sol";
 
 contract MockContentSign is BaseContentSign {

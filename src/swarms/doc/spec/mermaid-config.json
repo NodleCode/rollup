@@ -1,0 +1,20 @@
+{
+  "theme": "default",
+  "themeVariables": {
+    "primaryColor": "#4a9eff",
+    "primaryTextColor": "#fff",
+    "primaryBorderColor": "#3a8eef",
+    "lineColor": "#666",
+    "secondaryColor": "#f0f4f8",
+    "tertiaryColor": "#e8f4e8",
+    "fontSize": "14px"
+  },
+  "flowchart": {
+    "curve": "basis",
+    "useMaxWidth": true
+  },
+  "sequence": {
+    "useMaxWidth": true,
+    "wrap": true
+  }
+}

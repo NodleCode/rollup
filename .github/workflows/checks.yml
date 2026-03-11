@@ -34,4 +34,107 @@ jobs:
         run: yarn lint
 
       - name: Run tests
-        run: forge test --zksync
+        run: forge test
+
+  Coverage:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    container:
+      image: ghcr.io/nodlecode/devcontainer-rollup
+      options: --user root
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: yarn
+
+      - name: Run coverage
+        run: forge coverage --match-path "test/{Swarm*,ServiceProvider,FleetIdentity}*.t.sol" --ir-minimum --report lcov --report-file coverage.lcov
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.lcov
+          retention-days: 30
+
+      - name: Install lcov
+        run: apt-get update && apt-get install -y lcov
+
+      - name: Report coverage to PR
+        uses: zgosalvez/github-actions-report-lcov@v4
+        with:
+          coverage-files: coverage.lcov
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          update-comment: true
+          working-directory: ./
+
+      - name: Check line coverage threshold
+        run: |
+          # Extract line coverage from lcov report for src/swarms/ contracts only
+          # Parse lcov format: find swarm file sections and sum their LF/LH values
+          LINES_FOUND=$(awk '
+            /^SF:.*src\/swarms\// { in_swarm = 1 }
+            /^end_of_record/ { in_swarm = 0 }
+            in_swarm && /^LF:/ { sum += substr($0, 4) }
+            END { print sum+0 }
+          ' coverage.lcov)
+
+          LINES_HIT=$(awk '
+            /^SF:.*src\/swarms\// { in_swarm = 1 }
+            /^end_of_record/ { in_swarm = 0 }
+            in_swarm && /^LH:/ { sum += substr($0, 4) }
+            END { print sum+0 }
+          ' coverage.lcov)
+
+          if [ "$LINES_FOUND" -eq 0 ]; then
+            echo "Error: No lines found in coverage report for src/swarms/"
+            exit 1
+          fi
+
+          COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($LINES_HIT / $LINES_FOUND) * 100}")
+          echo "Swarms line coverage: $COVERAGE% ($LINES_HIT / $LINES_FOUND lines)"
+
+          # Check if coverage is below 95%
+          THRESHOLD=95
+          if awk "BEGIN {exit !($COVERAGE < $THRESHOLD)}"; then
+            echo "Error: Line coverage ($COVERAGE%) is below the required threshold ($THRESHOLD%)"
+            exit 1
+          fi
+
+          echo "Coverage check passed: $COVERAGE% >= $THRESHOLD%"
+
+  Specification-PDF:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install npm dependencies
+        working-directory: src/swarms/doc/spec
+        run: npm install --no-save @mermaid-js/mermaid-cli md-to-pdf
+
+      - name: Install Puppeteer browser
+        run: npx puppeteer browsers install chrome
+
+      - name: Build specification PDF
+        working-directory: src/swarms/doc/spec
+        run: bash build.sh
+
+      - name: Upload specification PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: swarm-specification
+          path: src/swarms/doc/spec/swarm-specification.pdf
+          retention-days: 30
