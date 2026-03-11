@@ -38,6 +38,15 @@ log()  { echo -e "${BLUE}[build]${NC} $1"; }
 ok()   { echo -e "${GREEN}[done]${NC} $1"; }
 fail() { echo -e "${RED}[error]${NC} $1"; exit 1; }
 
+# CI environments (GitHub Actions) need --no-sandbox for Puppeteer/Chrome
+PUPPETEER_ARGS=""
+if [ "${CI:-}" = "true" ]; then
+  log "CI detected — enabling --no-sandbox for Chrome"
+  PUPPETEER_CFG="$SCRIPT_DIR/.puppeteer-ci.json"
+  echo '{"args":["--no-sandbox","--disable-setuid-sandbox"]}' > "$PUPPETEER_CFG"
+  PUPPETEER_ARGS="-p $PUPPETEER_CFG"
+fi
+
 # ---------------------------------------------------------------------------
 # 1. Check / install dependencies
 # ---------------------------------------------------------------------------
@@ -93,6 +102,7 @@ mkdir -p "$IMG_DIR"
   -b white \
   -c "$MERMAID_CFG" \
   -a "$IMG_DIR" \
+  $PUPPETEER_ARGS \
   -q 2>&1 || fail "Mermaid rendering failed"
 
 ok "Mermaid diagrams rendered to $IMG_DIR/"
@@ -103,8 +113,14 @@ ok "Mermaid diagrams rendered to $IMG_DIR/"
 
 log "Generating PDF..."
 
+LAUNCH_OPTS=""
+if [ "${CI:-}" = "true" ]; then
+  LAUNCH_OPTS='--launch-options {"args":["--no-sandbox","--disable-setuid-sandbox"]}'
+fi
+
 "$MD2PDF" "$RENDERED" \
   --stylesheet "$CSS" \
+  $LAUNCH_OPTS \
   --pdf-options '{"format":"A4","margin":{"top":"25mm","bottom":"25mm","left":"20mm","right":"20mm"},"printBackground":true,"displayHeaderFooter":true,"headerTemplate":"<span></span>","footerTemplate":"<div style=\"width:100%;text-align:center;font-size:9px;color:#888;padding:0 20mm;\"><span>Nodle Swarm System — Technical Specification</span><span style=\"float:right;\">Page <span class=\"pageNumber\"></span> of <span class=\"totalPages\"></span></span></div>"}' \
   2>&1 || fail "PDF generation failed"
 

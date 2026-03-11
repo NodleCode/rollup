@@ -3,3 +3,4 @@ mermaid-images/
 *.rendered.md
 *.pdf
 node_modules/
+.puppeteer-ci.json
