@@ -1439,7 +1439,7 @@
 
 "@matterlabs/zksync-telemetry-js@git+https://github.com/matter-labs/zksync-telemetry-js.git#2fd9edbe6b9a5e0c2caeda4b04dd5631d7546a11":
   version "1.0.0"
-  resolved "git+ssh://git@github.com/matter-labs/zksync-telemetry-js.git#2fd9edbe6b9a5e0c2caeda4b04dd5631d7546a11"
+  resolved "git+https://github.com/matter-labs/zksync-telemetry-js.git#2fd9edbe6b9a5e0c2caeda4b04dd5631d7546a11"
   integrity sha512-2RfFYmhth0KYSn3MKHzGZxlP0HtCgQe4JeREfBaVPfqNifOweyy0L66BEyptew7Eu5N3Bdi5IfRRRctcVy1f/w==
   dependencies:
     "@sentry/node" "^8.45.0"

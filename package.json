@@ -10,7 +10,8 @@
     "clean": "hardhat clean",
     "lint": "solhint 'src/**/*.sol'",
     "spellcheck": "cspell --config .cspell.json",
-    "register-names": "ts-node utils/batch-register.ts"
+    "register-names": "ts-node utils/batch-register.ts",
+    "postinstall": "node -e \"var f='yarn.lock',s=require('fs');if(s.existsSync(f)){var c=s.readFileSync(f,'utf8'),n=c.replace(/git[+]ssh:\\/\\/git@github[.]com/g,'git+https://github.com');if(c!==n)s.writeFileSync(f,n)}\""
   },
   "packageManager": "yarn@1.22.19",
   "engines": {
