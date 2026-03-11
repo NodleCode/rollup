@@ -83,29 +83,29 @@ jobs:
             in_swarm && /^LF:/ { sum += substr($0, 4) }
             END { print sum+0 }
           ' coverage.lcov)
-          
+
           LINES_HIT=$(awk '
             /^SF:.*src\/swarms\// { in_swarm = 1 }
             /^end_of_record/ { in_swarm = 0 }
             in_swarm && /^LH:/ { sum += substr($0, 4) }
             END { print sum+0 }
           ' coverage.lcov)
-          
+
           if [ "$LINES_FOUND" -eq 0 ]; then
             echo "Error: No lines found in coverage report for src/swarms/"
             exit 1
           fi
-          
+
           COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($LINES_HIT / $LINES_FOUND) * 100}")
           echo "Swarms line coverage: $COVERAGE% ($LINES_HIT / $LINES_FOUND lines)"
-          
+
           # Check if coverage is below 95%
           THRESHOLD=95
           if awk "BEGIN {exit !($COVERAGE < $THRESHOLD)}"; then
             echo "Error: Line coverage ($COVERAGE%) is below the required threshold ($THRESHOLD%)"
             exit 1
           fi
-          
+
           echo "Coverage check passed: $COVERAGE% >= $THRESHOLD%"
 
   Specification-PDF:
