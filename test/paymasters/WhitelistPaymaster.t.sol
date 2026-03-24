@@ -122,4 +122,15 @@ contract WhitelistPaymasterTest is Test {
 
         vm.stopPrank();
     }
+
+    function test_RevertIf_paymasterBalanceTooLow() public {
+        vm.startPrank(alice);
+        paymaster.addWhitelistedContracts(whitelistTargets);
+        paymaster.addWhitelistedUsers(whitelistTargets);
+        vm.stopPrank();
+
+        // Paymaster has 0 balance, but requiredETH > 0
+        vm.expectRevert(WhitelistPaymaster.PaymasterBalanceTooLow.selector);
+        paymaster.mock_validateAndPayGeneralFlow(charlie, charlie, 1 ether);
+    }
 }
