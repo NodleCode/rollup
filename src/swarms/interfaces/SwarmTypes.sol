@@ -58,8 +58,14 @@ enum TagType {
     IBEACON_INCLUDES_MAC, // 0x01: proxUUID || major || minor || MAC (Normalized)
     VENDOR_ID, // 0x02: len-prefixed companyID || fleetIdentifier
     EDDYSTONE_UID, // 0x03: namespace (10B) || instance (6B)
-    SERVICE_DATA // 0x04: expanded 128-bit BLE Service UUID
+    SERVICE_DATA, // 0x04: expanded 128-bit BLE Service UUID
+    UUID_ONLY // 0x05: fleet-wide swarm — all tags under the UUID are members
 }
+
+/// @dev Sentinel filter byte used for UUID_ONLY (fleet-wide) swarms.
+///      UUID_ONLY swarms bypass the XOR filter; this 1-byte sentinel satisfies
+///      the non-empty filter requirement while keeping swarmId deterministic.
+bytes constant FLEET_WIDE_SENTINEL = hex"ff";
 
 /// @notice Fingerprint size for XOR filter (8-bit or 16-bit only for gas efficiency).
 enum FingerprintSize {

@@ -12,6 +12,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 
 import {RegistrationLevel} from "./interfaces/SwarmTypes.sol";
+import {IBondTreasury} from "./interfaces/IBondTreasury.sol";
 
 /**
  * @title FleetIdentityUpgradeable
@@ -204,7 +205,7 @@ contract FleetIdentityUpgradeable is
     /// @dev Reserved storage slots for future upgrades.
     ///      When adding new storage in V2+, reduce this gap accordingly.
     // solhint-disable-next-line var-name-mixedcase
-    uint256[40] private __gap;
+    uint256[50] private __gap;
 
     // ──────────────────────────────────────────────
     // Events
@@ -486,6 +487,48 @@ contract FleetIdentityUpgradeable is
 
         uuidOwnershipBondPaid[uuid] = _baseBond;
         _pullBond(msg.sender, _baseBond);
+
+        emit UuidClaimed(msg.sender, uuid, operatorOf(uuid));
+    }
+
+    /// @notice Claim a UUID with the bond paid by a caller-specified treasury.
+    /// @dev The treasury's `consumeSponsoredBond` validates msg.sender (whitelist, quota, etc.),
+    ///      then FleetIdentity pulls the bond from the treasury via `transferFrom` on the
+    ///      **trusted bond token**. Security does not depend on the treasury implementation:
+    ///      - Bond payment is enforced by the immutable `_bondToken` contract, not the treasury.
+    ///      - Reentrancy is blocked by `nonReentrant`.
+    ///      - Beneficiary is always `msg.sender` — no third-party can set a different owner.
+    ///      Different treasuries with different policies (whitelist, quota, geographic) can
+    ///      coexist; FleetIdentity only cares that the bond is paid.
+    /// @param uuid The UUID to claim.
+    /// @param operator The operator for tier management (address(0) or msg.sender = self-operate).
+    /// @param treasury The bond treasury that will fund this claim. Must implement IBondTreasury
+    ///        and have approved this contract to spend its bond tokens.
+    /// @return tokenId The newly minted token ID.
+    function claimUuidSponsored(bytes16 uuid, address operator, address treasury)
+        external
+        nonReentrant
+        returns (uint256 tokenId)
+    {
+        if (uuid == bytes16(0)) revert InvalidUUID();
+        if (uuidOwner[uuid] != address(0)) revert UuidAlreadyOwned();
+
+        // Treasury validates msg.sender's eligibility and consumes quota.
+        // If treasury is an EOA or no-op contract, this succeeds but the
+        // bond is still enforced by _pullBond below.
+        IBondTreasury(treasury).consumeSponsoredBond(msg.sender, _baseBond);
+
+        uuidOwner[uuid] = msg.sender;
+        uuidLevel[uuid] = RegistrationLevel.Owned;
+        uuidTokenCount[uuid] = 1;
+        uuidOperator[uuid] = (operator == address(0) || operator == msg.sender) ? address(0) : operator;
+
+        tokenId = uint256(uint128(uuid));
+        uuidOwnershipBondPaid[uuid] = _baseBond;
+        _mint(msg.sender, tokenId);
+
+        // Bond transfer uses the trusted _bondToken — cannot be faked by the treasury.
+        _pullBond(treasury, _baseBond);
 
         emit UuidClaimed(msg.sender, uuid, operatorOf(uuid));
     }

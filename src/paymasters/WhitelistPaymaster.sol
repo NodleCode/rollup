@@ -18,6 +18,7 @@ contract WhitelistPaymaster is BasePaymaster {
 
     error UserIsNotWhitelisted();
     error DestIsNotWhitelisted();
+    error PaymasterBalanceTooLow();
 
     constructor(address admin, address withdrawer) BasePaymaster(admin, withdrawer) {
         _grantRole(WHITELIST_ADMIN_ROLE, admin);
@@ -63,13 +64,17 @@ contract WhitelistPaymaster is BasePaymaster {
         emit WhitelistedUsersRemoved(users);
     }
 
-    function _validateAndPayGeneralFlow(address from, address to, uint256 /* requiredETH */ ) internal view override {
+    function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) internal view override {
         if (!isWhitelistedContract[to]) {
             revert DestIsNotWhitelisted();
         }
 
         if (!isWhitelistedUser[from]) {
             revert UserIsNotWhitelisted();
+        }
+
+        if (address(this).balance < requiredETH) {
+            revert PaymasterBalanceTooLow();
         }
     }
 

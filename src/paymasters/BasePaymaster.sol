@@ -11,6 +11,9 @@ import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interface
 import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
+/// @dev Duplicated from era-contracts/system-contracts/contracts/Constants.sol
+/// because the canonical file uses a template variable ({{SYSTEM_CONTRACTS_OFFSET}})
+/// that cannot be imported directly. Value: 0x8000 (2^15).
 uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000;
 address payable constant BOOTLOADER_FORMAL_ADDRESS = payable(address(SYSTEM_CONTRACTS_OFFSET + 0x01));
 
@@ -93,10 +96,11 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
     function withdraw(address to, uint256 amount) external {
         _checkRole(WITHDRAWER_ROLE);
 
+        // CEI: emit before external call
+        emit Withdrawn(to, amount);
+
         (bool success,) = payable(to).call{value: amount}("");
         if (!success) revert FailedToWithdraw();
-
-        emit Withdrawn(to, amount);
     }
 
     receive() external payable {}
@@ -109,6 +113,9 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
 
     function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) internal virtual;
 
+    /// @dev Subclasses implementing this flow MUST verify that the token allowance
+    /// from the user to this paymaster is at least `tokenAmount` before calling
+    /// `transferFrom`. Do not trust the sender-provided `tokenAmount` blindly.
     function _validateAndPayApprovalBasedFlow(
         address from,
         address to,
