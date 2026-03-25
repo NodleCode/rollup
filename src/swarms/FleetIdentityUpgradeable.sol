@@ -205,7 +205,7 @@ contract FleetIdentityUpgradeable is
     /// @dev Reserved storage slots for future upgrades.
     ///      When adding new storage in V2+, reduce this gap accordingly.
     // solhint-disable-next-line var-name-mixedcase
-    uint256[40] private __gap;
+    uint256[50] private __gap;
 
     // ──────────────────────────────────────────────
     // Events
