@@ -5,6 +5,9 @@ import {Test} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {FleetIdentityUpgradeable} from "../src/swarms/FleetIdentityUpgradeable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IBondTreasury} from "../src/swarms/interfaces/IBondTreasury.sol";
 
 /// @dev Minimal ERC-20 mock with public mint for testing.
 contract MockERC20 is ERC20 {
@@ -37,6 +40,28 @@ contract BadERC20 is ERC20 {
     function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
         if (shouldFail) return false;
         return super.transferFrom(from, to, amount);
+    }
+}
+
+/// @dev Minimal bond treasury mock for FleetIdentity tests.
+contract MockBondTreasury is IBondTreasury {
+    using SafeERC20 for IERC20;
+
+    mapping(address => bool) public whitelisted;
+
+    error NotWhitelisted();
+
+    function setWhitelisted(address user, bool status) external {
+        whitelisted[user] = status;
+    }
+
+    function consumeSponsoredBond(address user, uint256) external view override {
+        if (!whitelisted[user]) revert NotWhitelisted();
+    }
+
+    /// @dev Approve a spender to pull tokens held by this treasury.
+    function approveSpender(address token, address spender) external {
+        IERC20(token).forceApprove(spender, type(uint256).max);
     }
 }
 
@@ -4079,5 +4104,183 @@ contract FleetIdentityTest is Test {
     function test_getCountryAdminAreas_emptyForNoRegistrations() public view {
         uint32[] memory areas = fleet.getCountryAdminAreas(JP);
         assertEq(areas.length, 0);
+    }
+
+    // ══════════════════════════════════════════════
+    // claimUuidSponsored (treasury-backed claims)
+    // ══════════════════════════════════════════════
+
+    function _deployTreasury() internal returns (MockBondTreasury treasury) {
+        treasury = new MockBondTreasury();
+        // Fund treasury and approve FleetIdentity to pull from it
+        bondToken.mint(address(treasury), 100_000 ether);
+        treasury.approveSpender(address(bondToken), address(fleet));
+    }
+
+    function test_claimUuidSponsored_basic() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        vm.prank(alice);
+        uint256 tokenId = fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
+
+        // Alice is both beneficiary and msg.sender — self-sovereign
+        assertEq(fleet.uuidOwner(UUID_1), alice);
+        assertEq(fleet.ownerOf(tokenId), alice);
+        assertEq(uint256(fleet.uuidLevel(UUID_1)), uint256(1)); // Owned
+        assertEq(fleet.uuidTokenCount(UUID_1), 1);
+        assertEq(tokenId, uint256(uint128(UUID_1)));
+    }
+
+    function test_claimUuidSponsored_operatorSetCorrectly() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        // Operator set to carol
+        vm.prank(alice);
+        fleet.claimUuidSponsored(UUID_1, carol, address(treasury));
+        assertEq(fleet.operatorOf(UUID_1), carol);
+
+        // Operator == sender → stored as address(0), operatorOf returns sender
+        vm.prank(alice);
+        fleet.claimUuidSponsored(UUID_2, alice, address(treasury));
+        assertEq(fleet.operatorOf(UUID_2), alice);
+    }
+
+    function test_claimUuidSponsored_bondPulledFromTreasury() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        uint256 treasuryBefore = bondToken.balanceOf(address(treasury));
+        uint256 fleetBefore = bondToken.balanceOf(address(fleet));
+        uint256 aliceBefore = bondToken.balanceOf(alice);
+
+        vm.prank(alice);
+        fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
+
+        // Bond comes from treasury, NOT from alice
+        assertEq(bondToken.balanceOf(address(treasury)), treasuryBefore - BASE_BOND);
+        assertEq(bondToken.balanceOf(address(fleet)), fleetBefore + BASE_BOND);
+        assertEq(bondToken.balanceOf(alice), aliceBefore); // alice untouched
+    }
+
+    function test_claimUuidSponsored_emitsUuidClaimed() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        vm.expectEmit(true, true, true, true);
+        emit FleetIdentityUpgradeable.UuidClaimed(alice, UUID_1, alice);
+
+        vm.prank(alice);
+        fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
+    }
+
+    function test_RevertIf_claimUuidSponsored_notWhitelisted() public {
+        MockBondTreasury treasury = _deployTreasury();
+        // alice NOT whitelisted
+
+        vm.prank(alice);
+        vm.expectRevert(MockBondTreasury.NotWhitelisted.selector);
+        fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
+    }
+
+    function test_RevertIf_claimUuidSponsored_zeroUuid() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        vm.prank(alice);
+        vm.expectRevert(FleetIdentityUpgradeable.InvalidUUID.selector);
+        fleet.claimUuidSponsored(bytes16(0), address(0), address(treasury));
+    }
+
+    function test_RevertIf_claimUuidSponsored_uuidAlreadyOwned() public {
+        // Bob claims UUID_1 directly first
+        vm.prank(bob);
+        fleet.claimUuid(UUID_1, address(0));
+
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        vm.prank(alice);
+        vm.expectRevert(FleetIdentityUpgradeable.UuidAlreadyOwned.selector);
+        fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
+    }
+
+    function test_claimUuidSponsored_ownershipBondSnapshotRecorded() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        vm.prank(alice);
+        fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
+
+        assertEq(fleet.uuidOwnershipBondPaid(UUID_1), BASE_BOND);
+    }
+
+    function test_claimUuidSponsored_burnRefundsToSender() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        vm.prank(alice);
+        uint256 tokenId = fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
+
+        uint256 aliceBefore = bondToken.balanceOf(alice);
+
+        // Alice (token holder and uuid owner) burns the owned-only token
+        vm.prank(alice);
+        fleet.burn(tokenId);
+
+        // Refund goes to alice (uuidOwner = msg.sender always)
+        assertEq(bondToken.balanceOf(alice), aliceBefore + BASE_BOND);
+    }
+
+    function test_claimUuidSponsored_thenRegisterWorksForOperator() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        // Alice claims UUID with carol as operator
+        vm.prank(alice);
+        fleet.claimUuidSponsored(UUID_1, carol, address(treasury));
+
+        // Carol (operator) can now register the fleet in a region
+        vm.prank(carol);
+        uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
+
+        // Token is minted to alice (uuid owner), not carol
+        assertEq(fleet.ownerOf(tokenId), alice);
+    }
+
+    function test_claimUuidSponsored_differentTreasuries() public {
+        // Deploy two independent treasuries with different whitelists
+        MockBondTreasury treasury1 = _deployTreasury();
+        MockBondTreasury treasury2 = _deployTreasury();
+
+        treasury1.setWhitelisted(alice, true);
+        treasury2.setWhitelisted(bob, true);
+
+        // Alice uses treasury1
+        vm.prank(alice);
+        fleet.claimUuidSponsored(UUID_1, address(0), address(treasury1));
+        assertEq(fleet.uuidOwner(UUID_1), alice);
+
+        // Bob uses treasury2
+        vm.prank(bob);
+        fleet.claimUuidSponsored(UUID_2, address(0), address(treasury2));
+        assertEq(fleet.uuidOwner(UUID_2), bob);
+
+        // Alice cannot use treasury2 (not whitelisted there)
+        vm.prank(alice);
+        vm.expectRevert(MockBondTreasury.NotWhitelisted.selector);
+        fleet.claimUuidSponsored(UUID_3, address(0), address(treasury2));
+    }
+
+    function test_RevertIf_claimUuidSponsored_treasuryHasNoBalance() public {
+        MockBondTreasury treasury = new MockBondTreasury();
+        // Approve but don't fund
+        treasury.approveSpender(address(bondToken), address(fleet));
+        treasury.setWhitelisted(alice, true);
+
+        vm.prank(alice);
+        vm.expectRevert(); // safeTransferFrom will fail — insufficient balance
+        fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
     }
 }
