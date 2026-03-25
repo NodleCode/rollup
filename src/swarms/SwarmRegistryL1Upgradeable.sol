@@ -12,7 +12,7 @@ import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 
 import {IFleetIdentity} from "./interfaces/IFleetIdentity.sol";
 import {IServiceProvider} from "./interfaces/IServiceProvider.sol";
-import {SwarmStatus, TagType, FingerprintSize} from "./interfaces/SwarmTypes.sol";
+import {SwarmStatus, TagType, FingerprintSize, FLEET_WIDE_SENTINEL} from "./interfaces/SwarmTypes.sol";
 
 /**
  * @title SwarmRegistryL1Upgradeable
@@ -48,6 +48,9 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
     error SwarmAlreadyExists();
     error SwarmNotOrphaned();
     error SwarmOrphaned();
+    error FleetWideSwarmExists();
+    error FleetHasSwarms();
+    error InvalidFleetWideSentinel();
 
     // ──────────────────────────────────────────────
     // Structs (L1-specific: uses SSTORE2 pointer)
@@ -87,13 +90,16 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
     /// @notice SwarmID -> index in uuidSwarms[fleetUuid] (for O(1) removal)
     mapping(uint256 => uint256) public swarmIndexInUuid;
 
+    /// @notice UUID -> true if a fleet-wide (UUID_ONLY) swarm is registered.
+    mapping(bytes16 => bool) public hasFleetWideSwarm;
+
     // ──────────────────────────────────────────────
     // Storage Gap (for future upgrades)
     // ──────────────────────────────────────────────
 
     /// @dev Reserved storage slots for future upgrades.
     // solhint-disable-next-line var-name-mixedcase
-    uint256[45] private __gap;
+    uint256[50] private __gap;
 
     // ──────────────────────────────────────────────
     // Events
@@ -181,8 +187,26 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
         if (fleetUuid == bytes16(0)) {
             revert InvalidUuid();
         }
-        if (filterData_.length == 0 || filterData_.length > 24576) {
-            revert InvalidFilterSize();
+
+        bool isFleetWide = tagType == TagType.UUID_ONLY;
+
+        if (isFleetWide) {
+            // UUID_ONLY swarms must use the well-known 1-byte sentinel filter
+            if (filterData_.length != 1 || filterData_[0] != FLEET_WIDE_SENTINEL[0]) {
+                revert InvalidFleetWideSentinel();
+            }
+            // A fleet-wide swarm is mutually exclusive with other swarms
+            if (uuidSwarms[fleetUuid].length > 0) {
+                revert FleetHasSwarms();
+            }
+        } else {
+            if (filterData_.length == 0 || filterData_.length > 24576) {
+                revert InvalidFilterSize();
+            }
+            // Cannot add a regular swarm if a fleet-wide swarm already exists
+            if (hasFleetWideSwarm[fleetUuid]) {
+                revert FleetWideSwarmExists();
+            }
         }
 
         if (_fleetContract.uuidOwner(fleetUuid) != msg.sender) {
@@ -210,6 +234,10 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
         swarmIndexInUuid[swarmId] = uuidSwarms[fleetUuid].length - 1;
 
         s.filterPointer = SSTORE2.write(filterData_);
+
+        if (isFleetWide) {
+            hasFleetWideSwarm[fleetUuid] = true;
+        }
 
         emit SwarmRegistered(swarmId, fleetUuid, providerId, msg.sender);
     }
@@ -277,10 +305,15 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
         }
 
         bytes16 fleetUuid = s.fleetUuid;
+        bool wasFleetWide = s.tagType == TagType.UUID_ONLY;
 
         _removeFromUuidSwarms(fleetUuid, swarmId);
 
         delete swarms[swarmId];
+
+        if (wasFleetWide) {
+            hasFleetWideSwarm[fleetUuid] = false;
+        }
 
         emit SwarmDeleted(swarmId, fleetUuid, msg.sender);
     }
@@ -308,10 +341,15 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
         if (fleetValid && providerValid) revert SwarmNotOrphaned();
 
         bytes16 fleetUuid = s.fleetUuid;
+        bool wasFleetWide = s.tagType == TagType.UUID_ONLY;
 
         _removeFromUuidSwarms(fleetUuid, swarmId);
 
         delete swarms[swarmId];
+
+        if (wasFleetWide) {
+            hasFleetWideSwarm[fleetUuid] = false;
+        }
 
         emit SwarmPurged(swarmId, fleetUuid, msg.sender);
     }
@@ -326,6 +364,7 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
     }
 
     /// @notice Tests tag membership against the swarm's XOR filter.
+    /// @dev UUID_ONLY swarms short-circuit to true (all tags under the UUID are members).
     function checkMembership(uint256 swarmId, bytes32 tagHash) external view returns (bool isValid) {
         Swarm storage s = swarms[swarmId];
         if (s.filterPointer == address(0)) {
@@ -334,6 +373,11 @@ contract SwarmRegistryL1Upgradeable is Initializable, Ownable2StepUpgradeable, U
 
         (bool fleetValid, bool providerValid) = isSwarmValid(swarmId);
         if (!fleetValid || !providerValid) revert SwarmOrphaned();
+
+        // Fleet-wide swarms accept all tags under this UUID
+        if (s.tagType == TagType.UUID_ONLY) {
+            return true;
+        }
 
         uint256 dataLen;
         address pointer = s.filterPointer;

@@ -149,4 +149,9 @@ interface ISwarmRegistry {
     /// @param swarmId The swarm ID.
     /// @return The index in the UUID's swarm array.
     function swarmIndexInUuid(uint256 swarmId) external view returns (uint256);
+
+    /// @notice Returns true if a fleet-wide (UUID_ONLY) swarm is registered for this UUID.
+    /// @param fleetUuid The fleet UUID.
+    /// @return True if a fleet-wide swarm exists.
+    function hasFleetWideSwarm(bytes16 fleetUuid) external view returns (bool);
 }
