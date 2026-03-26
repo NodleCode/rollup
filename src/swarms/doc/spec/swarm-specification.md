@@ -1437,14 +1437,14 @@ This enables a **Web2-style onboarding experience with full Web3 ownership**: a 
 
 ### 11.2 Key Properties
 
-| Property             | Value                                                               |
-| :------------------- | :------------------------------------------------------------------ |
-| **Gas sponsorship**  | Pays ZkSync gas for calls to FleetIdentity by whitelisted users     |
-| **Bond sponsorship** | Pays `BASE_BOND` NODL from its own balance via `claimUuidSponsored` |
-| **Allowed target**   | `fleetIdentity` only — no other contract can use this paymaster     |
-| **Access control**   | `admin`, `WHITELIST_ADMIN_ROLE`, `WITHDRAWER_ROLE`                  |
-| **Quota control**    | Inherits `QuotaControl` — configurable daily/weekly NODL cap        |
-| **Paymaster flow**   | General flow only — approval-based flow not supported               |
+| Property             | Value                                                                                                |
+| :------------------- | :--------------------------------------------------------------------------------------------------- |
+| **Gas sponsorship**  | Pays ZkSync gas for calls to FleetIdentity by whitelisted users; also sponsors admin calls to itself |
+| **Bond sponsorship** | Pays `BASE_BOND` NODL from its own balance via `claimUuidSponsored`                                  |
+| **Allowed targets**  | `fleetIdentity` (whitelisted users) and `address(this)` (whitelist admins)                           |
+| **Access control**   | `admin`, `WHITELIST_ADMIN_ROLE`, `WITHDRAWER_ROLE`                                                   |
+| **Quota control**    | Inherits `QuotaControl` — configurable daily/weekly NODL cap                                         |
+| **Paymaster flow**   | General flow only — approval-based flow not supported                                                |
 
 ### 11.3 Contract Interface
 
@@ -1477,12 +1477,13 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
 
 ### 11.4 Paymaster Validation (Gas Flow)
 
-ZkSync calls `validateAndPayForPaymasterTransaction` before executing the user operation. The paymaster applies two checks:
+ZkSync calls `validateAndPayForPaymasterTransaction` before executing the user operation. The paymaster applies destination-based routing:
 
-1. `to == fleetIdentity` — only calls to FleetIdentity are sponsored.
-2. `isWhitelistedUser[from]` — only whitelisted addresses get gas coverage.
+- **`to == fleetIdentity`:** only whitelisted users (`isWhitelistedUser[from]`) receive gas coverage.
+- **`to == address(this)`:** only holders of `WHITELIST_ADMIN_ROLE` receive gas coverage. This allows the sponsor to submit `addWhitelistedUsers`, `removeWhitelistedUsers`, and other admin operations gas-free.
+- **Any other destination:** validation reverts; the sender is responsible for their own gas.
 
-If either check fails, validation reverts and the user pays their own gas. The approval-based paymaster flow is explicitly rejected (`PaymasterFlowNotSupported()`).
+In all cases the paymaster also verifies `address(this).balance >= requiredETH`. Using the paymaster is always opt-in — admins can submit ordinary transactions (without `paymasterParams`) and pay gas from their own wallet at any time. The approval-based paymaster flow is explicitly rejected (`PaymasterFlowNotSupported()`).
 
 ### 11.5 Bond Treasury Flow
 
@@ -1517,16 +1518,16 @@ This allows different sponsors with different policies (access lists, geographic
 
 ### 11.7 Events & Errors
 
-| Event / Error                        | Type  | Description                                          |
-| :----------------------------------- | :---- | :--------------------------------------------------- |
-| `WhitelistedUsersAdded(users)`       | Event | Emitted when users are added to the whitelist        |
-| `WhitelistedUsersRemoved(users)`     | Event | Emitted when users are removed from the whitelist    |
-| `TokensWithdrawn(token, to, amount)` | Event | Emitted on ERC-20 withdrawal                         |
-| `UserIsNotWhitelisted()`             | Error | User not in whitelist (bond or gas validation)       |
-| `DestinationNotAllowed()`            | Error | Gas sponsorship attempted for non-FleetIdentity call |
-| `PaymasterBalanceTooLow()`           | Error | Insufficient ETH to cover gas                        |
-| `NotFleetIdentity()`                 | Error | `consumeSponsoredBond` called by non-FleetIdentity   |
-| `InsufficientBondBalance()`          | Error | Paymaster NODL balance below requested bond amount   |
+| Event / Error                        | Type  | Description                                                                                                                              |
+| :----------------------------------- | :---- | :--------------------------------------------------------------------------------------------------------------------------------------- |
+| `WhitelistedUsersAdded(users)`       | Event | Emitted when users are added to the whitelist                                                                                            |
+| `WhitelistedUsersRemoved(users)`     | Event | Emitted when users are removed from the whitelist                                                                                        |
+| `TokensWithdrawn(token, to, amount)` | Event | Emitted on ERC-20 withdrawal                                                                                                             |
+| `UserIsNotWhitelisted()`             | Error | User not in whitelist (bond or gas validation)                                                                                           |
+| `DestinationNotAllowed()`            | Error | Gas sponsorship attempted for a destination other than FleetIdentity or the paymaster itself, or admin-role check failed for a self-call |
+| `PaymasterBalanceTooLow()`           | Error | Insufficient ETH to cover gas                                                                                                            |
+| `NotFleetIdentity()`                 | Error | `consumeSponsoredBond` called by non-FleetIdentity                                                                                       |
+| `InsufficientBondBalance()`          | Error | Paymaster NODL balance below requested bond amount                                                                                       |
 
 ### 11.8 Complete Sponsored Onboarding Flow
 
