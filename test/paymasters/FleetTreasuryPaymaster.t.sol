@@ -81,9 +81,7 @@ contract FleetTreasuryPaymasterTest is Test {
         fleet = FleetIdentityUpgradeable(address(proxy));
 
         // Deploy merged paymaster/treasury
-        paymaster = new MockFleetTreasuryPaymaster(
-            admin, withdrawer, address(fleet), address(bondToken), QUOTA, PERIOD
-        );
+        paymaster = new MockFleetTreasuryPaymaster(admin, withdrawer, address(fleet), address(bondToken), QUOTA, PERIOD);
 
         // Fund paymaster with NODL for bonds
         bondToken.mint(address(paymaster), 10_000 ether);
@@ -154,6 +152,22 @@ contract FleetTreasuryPaymasterTest is Test {
     function test_generalFlowValidation_success() public {
         vm.deal(address(paymaster), 10 ether);
         paymaster.mock_validateAndPayGeneralFlow(alice, address(fleet), 1 ether);
+    }
+
+    function test_generalFlowValidation_adminToSelf_success() public {
+        vm.deal(address(paymaster), 10 ether);
+        paymaster.mock_validateAndPayGeneralFlow(admin, address(paymaster), 1 ether);
+    }
+
+    function test_RevertIf_nonAdminToSelf_destinationNotAllowed() public {
+        vm.deal(address(paymaster), 10 ether);
+        vm.expectRevert(FleetTreasuryPaymaster.DestinationNotAllowed.selector);
+        paymaster.mock_validateAndPayGeneralFlow(alice, address(paymaster), 1 ether);
+    }
+
+    function test_RevertIf_adminToSelf_paymasterBalanceTooLow() public {
+        vm.expectRevert(FleetTreasuryPaymaster.PaymasterBalanceTooLow.selector);
+        paymaster.mock_validateAndPayGeneralFlow(admin, address(paymaster), 1 ether);
     }
 
     function test_doesNotSupportApprovalBasedFlow() public {
@@ -397,9 +411,7 @@ contract FleetTreasuryPaymasterTest is Test {
 
     function test_RevertIf_constructorTooLongPeriod() public {
         vm.expectRevert(QuotaControl.TooLongPeriod.selector);
-        new MockFleetTreasuryPaymaster(
-            admin, withdrawer, address(fleet), address(bondToken), QUOTA, 31 days
-        );
+        new MockFleetTreasuryPaymaster(admin, withdrawer, address(fleet), address(bondToken), QUOTA, 31 days);
     }
 
     // ══════════════════════════════════════════════

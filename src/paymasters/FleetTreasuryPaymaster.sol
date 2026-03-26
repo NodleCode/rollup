@@ -102,8 +102,13 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     // ──────────────────────────────────────────────
 
     function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) internal view override {
-        if (to != fleetIdentity) revert DestinationNotAllowed();
-        if (!isWhitelistedUser[from]) revert UserIsNotWhitelisted();
+        if (to == fleetIdentity) {
+            if (!isWhitelistedUser[from]) revert UserIsNotWhitelisted();
+        } else if (to == address(this)) {
+            if (!hasRole(WHITELIST_ADMIN_ROLE, from)) revert DestinationNotAllowed();
+        } else {
+            revert DestinationNotAllowed();
+        }
         if (address(this).balance < requiredETH) revert PaymasterBalanceTooLow();
     }
 
