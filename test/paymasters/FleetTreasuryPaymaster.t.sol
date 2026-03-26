@@ -108,6 +108,10 @@ contract FleetTreasuryPaymasterTest is Test {
         assertEq(address(paymaster.bondToken()), address(bondToken));
     }
 
+    function test_fleetIdentitySeededAsWhitelistedContract() public view {
+        assertTrue(paymaster.isWhitelistedContract(address(fleet)));
+    }
+
     // ══════════════════════════════════════════════
     // Whitelist Management
     // ══════════════════════════════════════════════
@@ -175,9 +179,58 @@ contract FleetTreasuryPaymasterTest is Test {
         paymaster.mock_validateAndPayApprovalBasedFlow(alice, address(fleet), address(0), 1, "0x", 0);
     }
 
-    function test_RevertIf_destinationNotAllowed() public {
-        vm.expectRevert(FleetTreasuryPaymaster.DestinationNotAllowed.selector);
+    function test_RevertIf_destIsNotWhitelisted() public {
+        vm.expectRevert(FleetTreasuryPaymaster.DestIsNotWhitelisted.selector);
         paymaster.mock_validateAndPayGeneralFlow(alice, address(0xDEAD), 0);
+    }
+
+    function test_generalFlowValidation_whitelistedContract_success() public {
+        address extra = address(0xCAFE);
+        address[] memory contracts_ = new address[](1);
+        contracts_[0] = extra;
+        vm.prank(admin);
+        paymaster.addWhitelistedContracts(contracts_);
+        assertTrue(paymaster.isWhitelistedContract(extra));
+
+        vm.deal(address(paymaster), 10 ether);
+        paymaster.mock_validateAndPayGeneralFlow(alice, extra, 1 ether);
+    }
+
+    function test_RevertIf_whitelistedContract_userNotWhitelisted() public {
+        address extra = address(0xCAFE);
+        address[] memory contracts_ = new address[](1);
+        contracts_[0] = extra;
+        vm.prank(admin);
+        paymaster.addWhitelistedContracts(contracts_);
+
+        vm.expectRevert(FleetTreasuryPaymaster.UserIsNotWhitelisted.selector);
+        paymaster.mock_validateAndPayGeneralFlow(bob, extra, 0);
+    }
+
+    function test_whitelistAdminUpdatesContractWhitelist() public {
+        address extra = address(0xBEEF);
+        address[] memory contracts_ = new address[](1);
+        contracts_[0] = extra;
+
+        vm.startPrank(admin);
+        vm.expectEmit();
+        emit FleetTreasuryPaymaster.WhitelistedContractsAdded(contracts_);
+        paymaster.addWhitelistedContracts(contracts_);
+        assertTrue(paymaster.isWhitelistedContract(extra));
+
+        vm.expectEmit();
+        emit FleetTreasuryPaymaster.WhitelistedContractsRemoved(contracts_);
+        paymaster.removeWhitelistedContracts(contracts_);
+        assertFalse(paymaster.isWhitelistedContract(extra));
+        vm.stopPrank();
+    }
+
+    function test_RevertIf_removeFleetIdentityFromContractWhitelist() public {
+        address[] memory contracts_ = new address[](1);
+        contracts_[0] = address(fleet);
+        vm.prank(admin);
+        vm.expectRevert(FleetTreasuryPaymaster.CannotRemoveFleetIdentity.selector);
+        paymaster.removeWhitelistedContracts(contracts_);
     }
 
     function test_RevertIf_userIsNotWhitelisted_paymaster() public {

@@ -12,8 +12,9 @@ import {QuotaControl} from "../QuotaControl.sol";
 ///      users call FleetIdentityUpgradeable.claimUuidSponsored(), which calls
 ///      this contract's `consumeSponsoredBond` to validate + consume quota,
 ///      then pulls the NODL bond via `transferFrom`.
-///      The ZkSync paymaster validation ensures only whitelisted users calling
-///      FleetIdentity get gas-sponsored.
+///      Gas sponsorship: `fleetIdentity` is seeded into `isWhitelistedContract` at
+///      deploy; admins add more destinations the same way. Admin-only calls to this
+///      contract use `WHITELIST_ADMIN_ROLE` instead of user whitelist.
 contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     using SafeERC20 for IERC20;
 
@@ -23,16 +24,22 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     IERC20 public immutable bondToken;
 
     mapping(address => bool) public isWhitelistedUser;
+    /// @notice Allowed destinations for sponsored txs; always includes `fleetIdentity` (set in constructor).
+    mapping(address => bool) public isWhitelistedContract;
 
     event WhitelistedUsersAdded(address[] users);
     event WhitelistedUsersRemoved(address[] users);
+    event WhitelistedContractsAdded(address[] contracts);
+    event WhitelistedContractsRemoved(address[] contracts);
     event TokensWithdrawn(address indexed token, address indexed to, uint256 amount);
 
     error UserIsNotWhitelisted();
+    error DestIsNotWhitelisted();
     error DestinationNotAllowed();
     error PaymasterBalanceTooLow();
     error NotFleetIdentity();
     error InsufficientBondBalance();
+    error CannotRemoveFleetIdentity();
 
     constructor(
         address admin,
@@ -45,6 +52,10 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
         _grantRole(WHITELIST_ADMIN_ROLE, admin);
         fleetIdentity = fleetIdentity_;
         bondToken = IERC20(bondToken_);
+        isWhitelistedContract[fleetIdentity_] = true;
+        address[] memory seeded = new address[](1);
+        seeded[0] = fleetIdentity_;
+        emit WhitelistedContractsAdded(seeded);
     }
 
     // ──────────────────────────────────────────────
@@ -86,6 +97,23 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
         emit WhitelistedUsersRemoved(users);
     }
 
+    function addWhitelistedContracts(address[] calldata contracts_) external {
+        _checkRole(WHITELIST_ADMIN_ROLE);
+        for (uint256 i = 0; i < contracts_.length; i++) {
+            isWhitelistedContract[contracts_[i]] = true;
+        }
+        emit WhitelistedContractsAdded(contracts_);
+    }
+
+    function removeWhitelistedContracts(address[] calldata contracts_) external {
+        _checkRole(WHITELIST_ADMIN_ROLE);
+        for (uint256 i = 0; i < contracts_.length; i++) {
+            if (contracts_[i] == fleetIdentity) revert CannotRemoveFleetIdentity();
+            isWhitelistedContract[contracts_[i]] = false;
+        }
+        emit WhitelistedContractsRemoved(contracts_);
+    }
+
     // ──────────────────────────────────────────────
     // ERC-20 Withdrawal
     // ──────────────────────────────────────────────
@@ -102,14 +130,21 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     // ──────────────────────────────────────────────
 
     function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) internal view override {
-        if (to == fleetIdentity) {
-            if (!isWhitelistedUser[from]) revert UserIsNotWhitelisted();
-        } else if (to == address(this)) {
-            if (!hasRole(WHITELIST_ADMIN_ROLE, from)) revert DestinationNotAllowed();
+        if (to == address(this)) {
+            if (!hasRole(WHITELIST_ADMIN_ROLE, from)) {
+                revert DestinationNotAllowed();
+            }
+        } else if (isWhitelistedContract[to]) {
+            if (!isWhitelistedUser[from]) {
+                revert UserIsNotWhitelisted();
+            }
         } else {
-            revert DestinationNotAllowed();
+            revert DestIsNotWhitelisted();
         }
-        if (address(this).balance < requiredETH) revert PaymasterBalanceTooLow();
+
+        if (address(this).balance < requiredETH) {
+            revert PaymasterBalanceTooLow();
+        }
     }
 
     function _validateAndPayApprovalBasedFlow(address, address, address, uint256, bytes memory, uint256)

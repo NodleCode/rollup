@@ -608,6 +608,8 @@ A sponsor (such as Nodle) can pay **both the gas and the NODL bond** on behalf o
 3. The user calls `claimUuidSponsored()` on FleetIdentity, passing the treasury address.
 4. The ZkSync paymaster covers the gas; the treasury covers the bond.
 
+The paymaster can also sponsor gas to **other** on-chain contracts (for example `SwarmRegistryUniversal`) if the sponsor adds their proxy addresses via `addWhitelistedContracts` — same user whitelist as for `FleetIdentity`. See [Section 11](#11-fleettreasurypaymaster).
+
 ```solidity
 // User calls (zero ETH / NODL needed in their wallet):
 uint256 tokenId = fleetIdentity.claimUuidSponsored(
@@ -1439,9 +1441,9 @@ This enables a **Web2-style onboarding experience with full Web3 ownership**: a 
 
 | Property             | Value                                                                                                |
 | :------------------- | :--------------------------------------------------------------------------------------------------- |
-| **Gas sponsorship**  | Pays ZkSync gas for calls to FleetIdentity by whitelisted users; also sponsors admin calls to itself |
+| **Gas sponsorship**  | Pays ZkSync gas for calls to whitelisted destinations by whitelisted users; also sponsors admin calls to itself |
 | **Bond sponsorship** | Pays `BASE_BOND` NODL from its own balance via `claimUuidSponsored`                                  |
-| **Allowed targets**  | `fleetIdentity` (whitelisted users) and `address(this)` (whitelist admins)                           |
+| **Allowed targets**  | Any contract in `isWhitelistedContract` (whitelisted users): `fleetIdentity` is seeded at deploy; admins add more via `addWhitelistedContracts` (e.g. SwarmRegistry). `fleetIdentity` cannot be removed. `address(this)` for gas: `WHITELIST_ADMIN_ROLE` only |
 | **Access control**   | `admin`, `WHITELIST_ADMIN_ROLE`, `WITHDRAWER_ROLE`                                                   |
 | **Quota control**    | Inherits `QuotaControl` — configurable daily/weekly NODL cap                                         |
 | **Paymaster flow**   | General flow only — approval-based flow not supported                                                |
@@ -1457,6 +1459,7 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     IERC20  public immutable bondToken;
 
     mapping(address => bool) public isWhitelistedUser;
+    mapping(address => bool) public isWhitelistedContract; // includes fleetIdentity at deploy
 
     // ── Bond Treasury (called by FleetIdentity) ──────────────────────
 
@@ -1467,6 +1470,8 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
 
     function addWhitelistedUsers(address[] calldata users) external; // WHITELIST_ADMIN_ROLE
     function removeWhitelistedUsers(address[] calldata users) external; // WHITELIST_ADMIN_ROLE
+    function addWhitelistedContracts(address[] calldata contracts) external; // WHITELIST_ADMIN_ROLE
+    function removeWhitelistedContracts(address[] calldata contracts) external; // WHITELIST_ADMIN_ROLE — cannot remove fleetIdentity
 
     // ── Withdrawals ──────────────────────────────────────────────────
 
@@ -1479,9 +1484,9 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
 
 ZkSync calls `validateAndPayForPaymasterTransaction` before executing the user operation. The paymaster applies destination-based routing:
 
-- **`to == fleetIdentity`:** only whitelisted users (`isWhitelistedUser[from]`) receive gas coverage.
-- **`to == address(this)`:** only holders of `WHITELIST_ADMIN_ROLE` receive gas coverage. This allows the sponsor to submit `addWhitelistedUsers`, `removeWhitelistedUsers`, and other admin operations gas-free.
-- **Any other destination:** validation reverts; the sender is responsible for their own gas.
+- **`to == address(this)`:** only holders of `WHITELIST_ADMIN_ROLE` receive gas coverage (e.g. `addWhitelistedUsers`, `addWhitelistedContracts`, quota updates).
+- **`isWhitelistedContract[to]`:** only whitelisted users (`isWhitelistedUser[from]`) receive gas coverage. At deploy, `fleetIdentity` is written into `isWhitelistedContract`; sponsors add further contracts (e.g. `SwarmRegistryUniversal` proxy) with `addWhitelistedContracts`. Removing `fleetIdentity` from the set reverts (`CannotRemoveFleetIdentity()`).
+- **Otherwise:** validation reverts with `DestIsNotWhitelisted()`; the sender pays their own gas unless using another paymaster.
 
 In all cases the paymaster also verifies `address(this).balance >= requiredETH`. Using the paymaster is always opt-in — admins can submit ordinary transactions (without `paymasterParams`) and pay gas from their own wallet at any time. The approval-based paymaster flow is explicitly rejected (`PaymasterFlowNotSupported()`).
 
@@ -1522,9 +1527,13 @@ This allows different sponsors with different policies (access lists, geographic
 | :----------------------------------- | :---- | :--------------------------------------------------------------------------------------------------------------------------------------- |
 | `WhitelistedUsersAdded(users)`       | Event | Emitted when users are added to the whitelist                                                                                            |
 | `WhitelistedUsersRemoved(users)`     | Event | Emitted when users are removed from the whitelist                                                                                        |
+| `WhitelistedContractsAdded(contracts)` | Event | Emitted when contract destinations are added (including constructor seed for `fleetIdentity`)                                       |
+| `WhitelistedContractsRemoved(contracts)` | Event | Emitted when contract destinations are removed                                                                                           |
 | `TokensWithdrawn(token, to, amount)` | Event | Emitted on ERC-20 withdrawal                                                                                                             |
 | `UserIsNotWhitelisted()`             | Error | User not in whitelist (bond or gas validation)                                                                                           |
-| `DestinationNotAllowed()`            | Error | Gas sponsorship attempted for a destination other than FleetIdentity or the paymaster itself, or admin-role check failed for a self-call |
+| `DestIsNotWhitelisted()`             | Error | `to` is not `address(this)` and not in `isWhitelistedContract`                                                                            |
+| `DestinationNotAllowed()`            | Error | `to == address(this)` but `from` lacks `WHITELIST_ADMIN_ROLE`                                                                            |
+| `CannotRemoveFleetIdentity()`        | Error | `removeWhitelistedContracts` attempted to clear `fleetIdentity`                                                                           |
 | `PaymasterBalanceTooLow()`           | Error | Insufficient ETH to cover gas                                                                                                            |
 | `NotFleetIdentity()`                 | Error | `consumeSponsoredBond` called by non-FleetIdentity                                                                                       |
 | `InsufficientBondBalance()`          | Error | Paymaster NODL balance below requested bond amount                                                                                       |
@@ -1548,7 +1557,7 @@ sequenceDiagram
     Note over User: At onboarding time
     User->>ZK: submit claimUuidSponsored(uuid, operator, PM)
     ZK->>+PM: validateAndPayForPaymasterTransaction
-    Note over PM: to == FI ✓, isWhitelisted[user] ✓, ETH balance ✓
+    Note over PM: isWhitelistedContract[FI] ✓, isWhitelisted[user] ✓, ETH balance ✓
     PM-->>-ZK: ok (PM pays gas)
 
     ZK->>+FI: claimUuidSponsored(uuid, operator, PM)
