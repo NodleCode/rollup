@@ -31,7 +31,8 @@ Version 1.0 — March 2026
 8. [Client Discovery](#8-client-discovery)
 9. [Fleet Maintenance](#9-fleet-maintenance)
 10. [Upgradeable Contract Architecture](#10-upgradeable-contract-architecture)
-11. [Appendix A: ISO 3166 Geographic Reference](#appendix-a-iso-3166-geographic-reference)
+11. [FleetTreasuryPaymaster](#11-fleettreasurypaymaster)
+12. [Appendix A: ISO 3166 Geographic Reference](#appendix-a-iso-3166-geographic-reference)
 
 <div class="page-break"></div>
 
@@ -88,6 +89,7 @@ graph TB
 | **ServiceProvider**        | Backend URL registry (ERC-721)           | `keccak256(url)`                                | SSV   |
 | **SwarmRegistryL1**        | Tag group registry (Ethereum L1)         | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
 | **SwarmRegistryUniversal** | Tag group registry (ZkSync Era, all EVM) | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
+| **FleetTreasuryPaymaster** | ZkSync paymaster + bond treasury         | —                                               | —     |
 
 All contracts are **DAO-owned** (UUPS upgradeable) during initial operation, allowing parameter tuning and bug fixes. Once mature and stable, an upgrade can renounce ownership to make them fully **permissionless**. Access control is via NFT ownership; FleetIdentity requires an ERC-20 bond (e.g., NODL) as an anti-spam mechanism.
 
@@ -126,6 +128,7 @@ The system provides non-enumerating tag verification — individual tags are not
 | `interfaces/IServiceProvider.sol` | ServiceProvider public API (ERC721)                                            |
 | `interfaces/ISwarmRegistry.sol`   | Common registry interface (L1 & Universal)                                     |
 | `interfaces/SwarmTypes.sol`       | Shared enums: `RegistrationLevel`, `SwarmStatus`, `TagType`, `FingerprintSize` |
+| `interfaces/IBondTreasury.sol`    | Bond treasury interface for sponsored UUID claims                              |
 
 ### 2.2 Contract Classes
 
@@ -147,6 +150,7 @@ classDiagram
         +mapping fleetTier : uint256 → uint256
         --
         +claimUuid(uuid, operator) → tokenId
+        +claimUuidSponsored(uuid, operator, treasury) → tokenId
         +registerFleetLocal(uuid, cc, admin, tier) → tokenId
         +registerFleetCountry(uuid, cc, tier) → tokenId
         +promote(tokenId)
@@ -185,6 +189,7 @@ classDiagram
         +purgeOrphanedSwarm(swarmId)
         +isSwarmValid(swarmId) → (fleetValid, providerValid)
         +checkMembership(swarmId, tagHash) → bool
+        +hasFleetWideSwarm(uuid) → bool
     }
 ```
 
@@ -195,7 +200,7 @@ struct Swarm {
     bytes16 fleetUuid;      // UUID that owns this swarm
     uint256 providerId;     // ServiceProvider token ID
     uint32 filterLength;    // XOR filter byte length
-    uint8 fingerprintSize;  // Fingerprint bits (1–16)
+    FingerprintSize fpSize; // Fingerprint size (BITS_8 or BITS_16)
     SwarmStatus status;     // Registration state
     TagType tagType;        // Tag identity scheme
 }
@@ -219,6 +224,13 @@ struct Swarm {
 | `Owned` (1)   | 0          | Claimed, no region |
 | `Local` (2)   | ≥ 1024     | Admin area         |
 | `Country` (3) | 1–999      | Country-wide       |
+
+#### FingerprintSize
+
+| Value     | Bits | fp mask  | False-positive rate |
+| :-------- | ---: | :------- | :------------------ |
+| `BITS_8`  |    8 | `0xFF`   | ~1 in 256           |
+| `BITS_16` |   16 | `0xFFFF` | ~1 in 65,536        |
 
 ### 2.5 Region Key Encoding
 
@@ -297,6 +309,7 @@ The `TagType` enum (defined in `interfaces/SwarmTypes.sol`) determines how tag i
 | `VENDOR_ID`            | CompanyID ∥ FullVendorData           | Len ∥ CompanyID ∥ FleetID (16B)    | Manufacturer-specific |
 | `EDDYSTONE_UID`        | Namespace ∥ Instance (16B)           | Namespace ∥ Instance (16B)         | Eddystone-UID         |
 | `SERVICE_DATA`         | ExpandedServiceUUID128 ∥ ServiceData | Bluetooth Base UUID expanded (16B) | GATT Service Data     |
+| `UUID_ONLY`            | N/A — all tags match automatically   | Same UUID encoding as tag format   | All tags under a UUID |
 
 ### 3.4 iBeacon / AltBeacon
 
@@ -411,6 +424,7 @@ flowchart TD
     B -->|VENDOR_ID| E["CompanyID ∥ FullVendorData"]
     B -->|EDDYSTONE_UID| F["Namespace ∥ Instance (16B)"]
     B -->|SERVICE_DATA| K["ExpandedServiceUUID128 ∥ ServiceData"]
+    B -->|UUID_ONLY| L["All tags match — no hash needed"]
 
     D -->|Public| G["UUID ∥ Major ∥ Minor ∥ realMAC (26B)"]
     D -->|Random| H["UUID ∥ Major ∥ Minor ∥ FF:FF:FF:FF:FF:FF"]
@@ -422,10 +436,74 @@ flowchart TD
     F --> I
     K --> I
 
+    L --> M["checkMembership returns true directly"]
     I --> J["checkMembership(swarmId, tagHash)"]
 
     style I fill:#4a9eff,color:#fff
     style J fill:#2ecc71,color:#fff
+    style L fill:#9b59b6,color:#fff
+    style M fill:#2ecc71,color:#fff
+```
+
+### 3.10 UUID_ONLY (Fleet-Wide Swarms)
+
+`UUID_ONLY` is a special `TagType` for fleet owners who want **all tags broadcasting a given UUID** to be treated as members — no XOR filter, no per-tag hashing required. This covers the case: _"My swarm covers all tags under this UUID."_
+
+#### Use Case
+
+- The fleet owner does not need to enumerate or filter individual Major/Minor values, MAC addresses, or vendor-specific payloads.
+- Any BLE device advertising the registered UUID is unconditionally accepted as a member.
+- Useful for deployments where the UUID alone uniquely identifies the fleet (e.g., a dedicated UUID not shared with any third-party device).
+
+#### Registration
+
+UUID_ONLY swarms use the constant **sentinel filter** `FLEET_WIDE_SENTINEL = 0xff` (one byte). This satisfies the non-empty filter requirement and keeps the `swarmId` fully deterministic:
+
+```solidity
+import {FLEET_WIDE_SENTINEL} from "interfaces/SwarmTypes.sol";
+
+// Register a fleet-wide swarm
+swarmRegistry.registerSwarm(
+    myUuid,
+    providerId,
+    FLEET_WIDE_SENTINEL,          // must be exactly bytes(hex"ff")
+    FingerprintSize.BITS_8,       // fpSize ignored for UUID_ONLY
+    TagType.UUID_ONLY
+);
+```
+
+#### Mutual Exclusivity
+
+A UUID may have **either** a fleet-wide swarm **or** one-or-more tag-specific swarms — never both:
+
+| Scenario                                              | Result                               |
+| :---------------------------------------------------- | :----------------------------------- |
+| Register `UUID_ONLY` when tag-specific swarms exist   | Reverts `FleetHasSwarms()`           |
+| Register a tag-specific swarm when `UUID_ONLY` exists | Reverts `FleetWideSwarmExists()`     |
+| Pass wrong sentinel bytes for `UUID_ONLY`             | Reverts `InvalidFleetWideSentinel()` |
+
+Use `hasFleetWideSwarm(uuid)` to check before registering:
+
+```solidity
+bool isFleetWide = swarmRegistry.hasFleetWideSwarm(myUuid);
+```
+
+#### Membership Check
+
+`checkMembership()` short-circuits to `true` for `UUID_ONLY` swarms after the usual orphan guards:
+
+```solidity
+// For UUID_ONLY swarms: tagHash is irrelevant — always returns true
+bool isMember = swarmRegistry.checkMembership(swarmId, bytes32(0)); // true
+```
+
+#### Deletion
+
+Deleting a `UUID_ONLY` swarm clears the `hasFleetWideSwarm` flag, allowing tag-specific swarms to be registered for the same UUID afterwards:
+
+```solidity
+swarmRegistry.deleteSwarm(swarmId);
+// hasFleetWideSwarm[uuid] is now false
 ```
 
 <div class="page-break"></div>
@@ -519,7 +597,74 @@ sequenceDiagram
     FI-->>-Operator: tokenId = ((cc<<10|admin)<<128) | uuid
 ```
 
-### 4.4 Operator Model
+### 4.4 Sponsored Claim Flow (Treasury-Paid Bond)
+
+A sponsor (such as Nodle) can pay **both the gas and the NODL bond** on behalf of a new user, enabling a completely frictionless Web2-style onboarding experience while preserving full on-chain ownership, auditability, and interoperability. The user's wallet can be a freshly created account-abstraction wallet — the user never needs to hold ETH or NODL.
+
+#### How It Works
+
+1. The sponsor deploys and funds a `FleetTreasuryPaymaster` with ETH (for gas) and NODL (for bonds).
+2. The sponsor whitelists the user's address.
+3. The user calls `claimUuidSponsored()` on FleetIdentity, passing the treasury address.
+4. The ZkSync paymaster covers the gas; the treasury covers the bond.
+
+```solidity
+// User calls (zero ETH / NODL needed in their wallet):
+uint256 tokenId = fleetIdentity.claimUuidSponsored(
+    uuid,
+    operatorAddress,  // address(0) = self-operate
+    treasuryAddress   // FleetTreasuryPaymaster
+);
+// UUID is now owned by msg.sender — provably, permanently, on-chain
+```
+
+```mermaid
+sequenceDiagram
+    actor User as User (fresh AA wallet)
+    actor Sponsor as Sponsor (Nodle)
+    participant PM as FleetTreasuryPaymaster
+    participant FI as FleetIdentity
+    participant TOKEN as NODL Token
+
+    Note over Sponsor: Pre-fund paymaster with ETH + NODL
+
+    Sponsor->>PM: addWhitelistedUsers([user])
+
+    User->>+FI: claimUuidSponsored(uuid, operator, PM) [gas paid by PM]
+    FI->>+PM: consumeSponsoredBond(user, BASE_BOND)
+    Note over PM: Check whitelist + quota + NODL balance
+    PM->>TOKEN: forceApprove(FleetIdentity, BASE_BOND)
+    PM-->>-FI: ok
+    FI->>TOKEN: transferFrom(PM, FI, BASE_BOND)
+    FI-->>-User: tokenId (UUID owned by user)
+```
+
+#### Security Properties
+
+- **Bond enforced by the token contract:** `claimUuidSponsored` calls `transferFrom` on the immutable `_bondToken`. The treasury cannot fake a bond payment — it must actually hold and approve NODL.
+- **Beneficiary is always `msg.sender`:** The UUID is always minted to the calling user. No third party can redirect ownership.
+- **Reentrancy protected:** `nonReentrant` modifier prevents treasury callbacks from re-entering FleetIdentity.
+- **Multiple treasuries supported:** Different sponsors with different policies (access lists, geographic restrictions, per-period quotas) can coexist. FleetIdentity only cares that the bond is paid.
+
+#### Treasury Quota Control
+
+`FleetTreasuryPaymaster` inherits `QuotaControl`, which limits total NODL disbursed per period:
+
+```solidity
+// Deployment example (Nodle onboarding treasury)
+new FleetTreasuryPaymaster(
+    admin,
+    withdrawer,
+    fleetIdentityAddress,
+    nodlTokenAddress,
+    100_000e18,   // quota: 100,000 NODL per period
+    7 days        // period length
+);
+```
+
+See [Section 11](#11-fleettreasurypaymaster) for the full paymaster specification.
+
+### 4.5 Operator Model
 
 **Key principles:**
 
@@ -557,7 +702,7 @@ address manager = fleetIdentity.operatorOf(uuid);
 | Set / change operator            | Owner only                             |
 | Transfer owned-only token        | Owner (ERC-721 transfer)               |
 
-### 4.5 Multi-Region Registration
+### 4.6 Multi-Region Registration
 
 The same UUID can hold multiple tokens at the **same level** (all Local or all Country):
 
@@ -569,7 +714,7 @@ fleetIdentity.registerFleetCountry(uuid, 392, 0);    // Japan ✗ UuidLevelMisma
 
 Each region pays its own tier bond independently.
 
-### 4.6 Burning
+### 4.7 Burning
 
 | State      | Who Burns | Last Token? | Result                                             |
 | :--------- | :-------- | :---------- | :------------------------------------------------- |
@@ -579,7 +724,7 @@ Each region pays its own tier bond independently.
 
 After the operator burns the last registered token, the owner receives an owned-only token and must burn it separately to fully release the UUID.
 
-### 4.7 Owned Token Transfer
+### 4.8 Owned Token Transfer
 
 Owned-only tokens transfer UUID ownership via standard ERC-721 transfer:
 
@@ -590,7 +735,7 @@ fleetIdentity.transferFrom(alice, bob, tokenId);
 
 Registered tokens can also transfer but do not change `uuidOwner`.
 
-### 4.8 Inclusion Hints
+### 4.9 Inclusion Hints
 
 View functions that recommend the cheapest tier guaranteeing bundle inclusion:
 
@@ -721,20 +866,20 @@ sequenceDiagram
 
 **Registration parameters:**
 
-| Parameter    | Type      | Description                  |
-| :----------- | :-------- | :--------------------------- |
-| `fleetUuid`  | `bytes16` | UUID that owns this swarm    |
-| `providerId` | `uint256` | ServiceProvider token ID     |
-| `filter`     | `bytes`   | XOR filter data              |
-| `fpSize`     | `uint8`   | Fingerprint size (1–16 bits) |
-| `tagType`    | `TagType` | Tag identity scheme          |
+| Parameter    | Type              | Description                                                 |
+| :----------- | :---------------- | :---------------------------------------------------------- |
+| `fleetUuid`  | `bytes16`         | UUID that owns this swarm                                   |
+| `providerId` | `uint256`         | ServiceProvider token ID                                    |
+| `filter`     | `bytes`           | XOR filter data (use `FLEET_WIDE_SENTINEL` for `UUID_ONLY`) |
+| `fpSize`     | `FingerprintSize` | `BITS_8` (8-bit) or `BITS_16` (16-bit) fingerprints         |
+| `tagType`    | `TagType`         | Tag identity scheme (use `UUID_ONLY` for fleet-wide match)  |
 
 ### 6.2 Swarm ID Derivation
 
 Swarm IDs are **deterministic** and collision-free:
 
 ```solidity
-swarmId = uint256(keccak256(abi.encode(fleetUuid, filterData, fingerprintSize, tagType)))
+swarmId = uint256(keccak256(abi.encode(fleetUuid, filter, fpSize, tagType)))
 ```
 
 Swarm identity is based on fleet, filter, fingerprint size, and tag type. The `providerId` is mutable and is not part of the identity. Duplicate registration of the same tuple reverts with `SwarmAlreadyExists()`. The `computeSwarmId` function is `public pure` and can be called off-chain at zero cost.
@@ -754,17 +899,20 @@ The contract uses **3-hash XOR logic**:
 
 ```
 Input: h = keccak256(tagId)
-M = filterLength × 8 / fingerprintSize    (number of fingerprint slots)
+
+// Slot count depends on FingerprintSize:
+M = filterLength         // BITS_8:  each byte is one fingerprint slot
+M = filterLength / 2     // BITS_16: each 2 bytes is one fingerprint slot
 
 h1 = uint32(h) % M
 h2 = uint32(h >> 32) % M
 h3 = uint32(h >> 64) % M
-fp = (h >> 96) & ((1 << fingerprintSize) - 1)
+fp = (h >> 96) & fpMask  // fpMask = 0xFF (BITS_8) or 0xFFFF (BITS_16)
 
 Member if: Filter[h1] ⊕ Filter[h2] ⊕ Filter[h3] == fp
 ```
 
-The configurable `fingerprintSize` (1–16 bits) controls the false-positive rate: larger fingerprints yield fewer false positives but require proportionally more storage per tag.
+The `FingerprintSize` enum controls the false-positive rate: `BITS_8` gives ~1/256 false positives with compact storage; `BITS_16` gives ~1/65,536 but requires twice the bytes per tag. `UUID_ONLY` swarms bypass this check entirely — `checkMembership` short-circuits to `true` after the orphan guard.
 
 ### 6.4 Provider Approval
 
@@ -841,16 +989,17 @@ stateDiagram-v2
 
 ### 7.2 State Transition Table
 
-| From          | To      | Function                 | Who Calls | Bond Effect                                                    |
-| :------------ | :------ | :----------------------- | :-------- | :------------------------------------------------------------- |
-| None          | Owned   | `claimUuid()`            | Anyone    | Pull BASE_BOND from caller (becomes owner)                     |
-| None          | Local   | `registerFleetLocal()`   | Anyone    | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
-| None          | Country | `registerFleetCountry()` | Anyone    | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
-| Owned         | Local   | `registerFleetLocal()`   | Operator  | Pull tierBond from operator                                    |
-| Owned         | Country | `registerFleetCountry()` | Operator  | Pull tierBond from operator                                    |
-| Local/Country | Owned   | `burn()`                 | Operator  | Refund tierBond to operator (last token mints owned-only)      |
-| Owned         | None    | `burn()`                 | Owner     | Refund BASE_BOND to owner                                      |
-| Local/Country | —       | `burn()`                 | Operator  | Refund tierBond to operator (not last token, stays registered) |
+| From          | To      | Function                 | Who Calls        | Bond Effect                                                    |
+| :------------ | :------ | :----------------------- | :--------------- | :------------------------------------------------------------- |
+| None          | Owned   | `claimUuid()`            | Anyone           | Pull BASE_BOND from caller (becomes owner)                     |
+| None          | Owned   | `claimUuidSponsored()`   | Whitelisted user | Treasury pays BASE_BOND; sponsor covers bond + gas (see §4.4)  |
+| None          | Local   | `registerFleetLocal()`   | Anyone           | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
+| None          | Country | `registerFleetCountry()` | Anyone           | Pull BASE_BOND + tierBond from caller (becomes owner+operator) |
+| Owned         | Local   | `registerFleetLocal()`   | Operator         | Pull tierBond from operator                                    |
+| Owned         | Country | `registerFleetCountry()` | Operator         | Pull tierBond from operator                                    |
+| Local/Country | Owned   | `burn()`                 | Operator         | Refund tierBond to operator (last token mints owned-only)      |
+| Owned         | None    | `burn()`                 | Owner            | Refund BASE_BOND to owner                                      |
+| Local/Country | —       | `burn()`                 | Operator         | Refund tierBond to operator (not last token, stays registered) |
 
 ### 7.3 Swarm Status Effects
 
@@ -1252,6 +1401,7 @@ Deployment order is dictated by contract dependencies:
 1. **ServiceProviderUpgradeable** — No dependencies
 2. **FleetIdentityUpgradeable** — Requires bond token address
 3. **SwarmRegistry (L1 or Universal)** — Requires both ServiceProvider and FleetIdentity
+4. **FleetTreasuryPaymaster** — Requires FleetIdentity address and bond token address
 
 Each step deploys an implementation contract followed by an ERC1967Proxy pointing to it.
 
@@ -1271,6 +1421,145 @@ Each step deploys an implementation contract followed by an ERC1967Proxy pointin
 | Gas efficiency (L1) | Medium                 | High                    |
 
 `SwarmRegistryL1Upgradeable` relies on `EXTCODECOPY` (unsupported on ZkSync). Always deploy `SwarmRegistryUniversalUpgradeable` on ZkSync Era.
+
+<div class="page-break"></div>
+
+## 11. FleetTreasuryPaymaster
+
+### 11.1 Overview
+
+`FleetTreasuryPaymaster` is a **ZkSync paymaster combined with a bond treasury** that enables fully sponsored fleet UUID claims. A single contract holds:
+
+- **ETH** — used to pay ZkSync gas fees on behalf of whitelisted users.
+- **NODL** — used to pay the `BASE_BOND` required by `FleetIdentity.claimUuidSponsored()`.
+
+This enables a **Web2-style onboarding experience with full Web3 ownership**: a new user can claim a UUID on-chain without holding any cryptocurrency, while retaining provable, auditable, and interoperable ownership from the very first interaction.
+
+### 11.2 Key Properties
+
+| Property             | Value                                                               |
+| :------------------- | :------------------------------------------------------------------ |
+| **Gas sponsorship**  | Pays ZkSync gas for calls to FleetIdentity by whitelisted users     |
+| **Bond sponsorship** | Pays `BASE_BOND` NODL from its own balance via `claimUuidSponsored` |
+| **Allowed target**   | `fleetIdentity` only — no other contract can use this paymaster     |
+| **Access control**   | `admin`, `WHITELIST_ADMIN_ROLE`, `WITHDRAWER_ROLE`                  |
+| **Quota control**    | Inherits `QuotaControl` — configurable daily/weekly NODL cap        |
+| **Paymaster flow**   | General flow only — approval-based flow not supported               |
+
+### 11.3 Contract Interface
+
+```solidity
+contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
+
+    bytes32 public constant WHITELIST_ADMIN_ROLE = keccak256("WHITELIST_ADMIN_ROLE");
+
+    address public immutable fleetIdentity;
+    IERC20  public immutable bondToken;
+
+    mapping(address => bool) public isWhitelistedUser;
+
+    // ── Bond Treasury (called by FleetIdentity) ──────────────────────
+
+    /// @notice Validates whitelist + quota; approves exact bond amount for FleetIdentity.
+    function consumeSponsoredBond(address user, uint256 amount) external;
+
+    // ── Whitelist Management ─────────────────────────────────────────
+
+    function addWhitelistedUsers(address[] calldata users) external; // WHITELIST_ADMIN_ROLE
+    function removeWhitelistedUsers(address[] calldata users) external; // WHITELIST_ADMIN_ROLE
+
+    // ── Withdrawals ──────────────────────────────────────────────────
+
+    function withdrawTokens(address token, address to, uint256 amount) external; // WITHDRAWER_ROLE
+    // ETH withdrawal: inherited from BasePaymaster
+}
+```
+
+### 11.4 Paymaster Validation (Gas Flow)
+
+ZkSync calls `validateAndPayForPaymasterTransaction` before executing the user operation. The paymaster applies two checks:
+
+1. `to == fleetIdentity` — only calls to FleetIdentity are sponsored.
+2. `isWhitelistedUser[from]` — only whitelisted addresses get gas coverage.
+
+If either check fails, validation reverts and the user pays their own gas. The approval-based paymaster flow is explicitly rejected (`PaymasterFlowNotSupported()`).
+
+### 11.5 Bond Treasury Flow
+
+Called by `FleetIdentity.claimUuidSponsored()` during execution:
+
+```
+1. FleetIdentity → consumeSponsoredBond(user, BASE_BOND)
+2. Paymaster checks: isWhitelistedUser[user] ✓, balance ≥ BASE_BOND ✓, quota not exhausted ✓
+3. Paymaster calls: bondToken.forceApprove(fleetIdentity, BASE_BOND)
+4. FleetIdentity calls: bondToken.transferFrom(paymaster, fleetIdentity, BASE_BOND)
+5. UUID minted to user — provably owned, zero friction
+```
+
+The approval is exact (not `type(uint256).max`) and is issued only after all checks pass, minimising exposure.
+
+### 11.6 IBondTreasury Interface
+
+Any contract implementing `IBondTreasury` can act as a bond sponsor for `claimUuidSponsored`:
+
+```solidity
+interface IBondTreasury {
+    /// @notice Validate user eligibility and consume quota.
+    /// @dev Must revert if user is not eligible. The actual NODL transfer
+    ///      happens separately via transferFrom by the caller.
+    /// @param user  The beneficiary address (always msg.sender in FleetIdentity).
+    /// @param amount The bond amount being consumed.
+    function consumeSponsoredBond(address user, uint256 amount) external;
+}
+```
+
+This allows different sponsors with different policies (access lists, geographic restrictions, per-period quotas, enterprise accounts) to coexist. `FleetTreasuryPaymaster` is the reference implementation.
+
+### 11.7 Events & Errors
+
+| Event / Error                        | Type  | Description                                          |
+| :----------------------------------- | :---- | :--------------------------------------------------- |
+| `WhitelistedUsersAdded(users)`       | Event | Emitted when users are added to the whitelist        |
+| `WhitelistedUsersRemoved(users)`     | Event | Emitted when users are removed from the whitelist    |
+| `TokensWithdrawn(token, to, amount)` | Event | Emitted on ERC-20 withdrawal                         |
+| `UserIsNotWhitelisted()`             | Error | User not in whitelist (bond or gas validation)       |
+| `DestinationNotAllowed()`            | Error | Gas sponsorship attempted for non-FleetIdentity call |
+| `PaymasterBalanceTooLow()`           | Error | Insufficient ETH to cover gas                        |
+| `NotFleetIdentity()`                 | Error | `consumeSponsoredBond` called by non-FleetIdentity   |
+| `InsufficientBondBalance()`          | Error | Paymaster NODL balance below requested bond amount   |
+
+### 11.8 Complete Sponsored Onboarding Flow
+
+```mermaid
+sequenceDiagram
+    actor User as User (fresh / AA wallet)
+    actor Sponsor as Sponsor (Nodle)
+    participant PM as FleetTreasuryPaymaster
+    participant FI as FleetIdentity
+    participant TOKEN as NODL Token
+    participant ZK as ZkSync Sequencer
+
+    Note over Sponsor: One-time setup
+    Sponsor->>PM: deposit ETH (gas reserve)
+    Sponsor->>TOKEN: transfer NODL to PM (bond reserve)
+    Sponsor->>PM: addWhitelistedUsers([user])
+
+    Note over User: At onboarding time
+    User->>ZK: submit claimUuidSponsored(uuid, operator, PM)
+    ZK->>+PM: validateAndPayForPaymasterTransaction
+    Note over PM: to == FI ✓, isWhitelisted[user] ✓, ETH balance ✓
+    PM-->>-ZK: ok (PM pays gas)
+
+    ZK->>+FI: claimUuidSponsored(uuid, operator, PM)
+    FI->>+PM: consumeSponsoredBond(user, BASE_BOND)
+    Note over PM: whitelist ✓, quota ✓, NODL balance ✓
+    PM->>TOKEN: forceApprove(FI, BASE_BOND)
+    PM-->>-FI: ok
+    FI->>TOKEN: transferFrom(PM, FI, BASE_BOND)
+    FI-->>-User: tokenId minted — UUID owned by user
+
+    Note over User: UUID provably owned on-chain<br/>No ETH or NODL ever held by user
+```
 
 <div class="page-break"></div>
 
