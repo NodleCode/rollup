@@ -22,12 +22,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
  *      - Future versions can add new storage variables at the end.
  *      - Use `reinitializer(n)` for version-specific initialization.
  */
-contract ServiceProviderUpgradeable is
-    Initializable,
-    ERC721Upgradeable,
-    Ownable2StepUpgradeable,
-    UUPSUpgradeable
-{
+contract ServiceProviderUpgradeable is Initializable, ERC721Upgradeable, Ownable2StepUpgradeable, UUPSUpgradeable {
     // ──────────────────────────────────────────────
     // Errors
     // ──────────────────────────────────────────────
@@ -49,7 +44,7 @@ contract ServiceProviderUpgradeable is
     ///      When adding new storage in V2+, reduce this gap accordingly.
     ///      Example: Adding 1 new storage variable → change to __gap[48]
     // solhint-disable-next-line var-name-mixedcase
-    uint256[49] private __gap;
+    uint256[50] private __gap;
 
     // ──────────────────────────────────────────────
     // Events
