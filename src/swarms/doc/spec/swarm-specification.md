@@ -1496,7 +1496,7 @@ Called by `FleetIdentity.claimUuidSponsored()` during execution:
 5. UUID minted to user — provably owned, zero friction
 ```
 
-The approval is exact (not `type(uint256).max`) and is issued only after all checks pass, minimising exposure.
+The approval is exact (not `type(uint256).max`) and is issued only after all checks pass, minimizing exposure.
 
 ### 11.6 IBondTreasury Interface
 
