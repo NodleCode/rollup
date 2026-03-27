@@ -24,12 +24,13 @@ pub struct LogConfig {
 }
 
 impl Config {
-    pub fn load() -> Result<Self, figment::Error> {
+    pub fn load() -> Result<Self, Box<figment::Error>> {
         let config_path = Self::default_config_path();
         Figment::new()
             .merge(Toml::file(config_path))
             .merge(Env::prefixed("APP_").split("__"))
             .extract()
+            .map_err(Box::new)
     }
 
     pub fn listen_addr(&self) -> String {
