@@ -84,6 +84,7 @@ beacon-relay/
 ```
 
 As the project grows, new modules should follow this pattern:
+
 - `src/routes/<domain>.rs` for HTTP handlers
 - `src/middleware/` for Tower middleware layers
 - `src/models/` for shared data types
@@ -100,36 +101,37 @@ known security advisories.
 
 ### Core Stack
 
-| Purpose | Crate | Version | Notes |
-|---|---|---|---|
-| Web framework | `axum` | ~0.8 | Tokio-team, macro-free, Tower ecosystem |
-| Async runtime | `tokio` | 1 (features: full) | De facto standard |
-| Serialization | `serde` | 1 (features: derive) | Universal |
-| JSON | `serde_json` | 1 | Standard JSON |
-| Structured logging | `tracing` | 0.1 | Async-aware, structured |
-| Log subscriber | `tracing-subscriber` | 0.3 (features: env-filter, json) | Configurable output |
-| Config loading | `figment` | 0.10 (features: toml, env) | Hierarchical, type-safe |
-| Error types | `thiserror` | 2 | Derive Error for enums |
-| HTTP middleware | `tower-http` | 0.6 (features: trace, cors) | Tower layers for axum |
-| HTTP types | `tower` | 0.5 | Service trait, layers |
+| Purpose            | Crate                | Version                          | Notes                                   |
+| ------------------ | -------------------- | -------------------------------- | --------------------------------------- |
+| Web framework      | `axum`               | ~0.8                             | Tokio-team, macro-free, Tower ecosystem |
+| Async runtime      | `tokio`              | 1 (features: full)               | De facto standard                       |
+| Serialization      | `serde`              | 1 (features: derive)             | Universal                               |
+| JSON               | `serde_json`         | 1                                | Standard JSON                           |
+| Structured logging | `tracing`            | 0.1                              | Async-aware, structured                 |
+| Log subscriber     | `tracing-subscriber` | 0.3 (features: env-filter, json) | Configurable output                     |
+| Config loading     | `figment`            | 0.10 (features: toml, env)       | Hierarchical, type-safe                 |
+| Error types        | `thiserror`          | 2                                | Derive Error for enums                  |
+| HTTP middleware    | `tower-http`         | 0.6 (features: trace, cors)      | Tower layers for axum                   |
+| HTTP types         | `tower`              | 0.5                              | Service trait, layers                   |
 
 ### Future Iterations (Do Not Add Until Needed)
 
-| Purpose | Crate | Notes |
-|---|---|---|
-| CBOR encoding | `ciborium` | BLE batch body parsing |
-| Redis client | `fred` or `redis` | Session/nonce store |
-| JWT | `jsonwebtoken` | Session token issuance/validation |
-| Ethereum/EIP-712 | `alloy` | Signature verification, chain interaction |
-| HTTP client | `reqwest` | Play Integrity API calls |
-| UUID | `uuid` | Session IDs |
-| Time | `chrono` or `time` | Prefer `time` (lighter, no C deps) |
-| Pub/Sub | `google-cloud-pubsub` | Streaming sink |
-| OpenTelemetry | `tracing-opentelemetry` | Distributed tracing export |
+| Purpose          | Crate                   | Notes                                     |
+| ---------------- | ----------------------- | ----------------------------------------- |
+| CBOR encoding    | `ciborium`              | BLE batch body parsing                    |
+| Redis client     | `fred` or `redis`       | Session/nonce store                       |
+| JWT              | `jsonwebtoken`          | Session token issuance/validation         |
+| Ethereum/EIP-712 | `alloy`                 | Signature verification, chain interaction |
+| HTTP client      | `reqwest`               | Play Integrity API calls                  |
+| UUID             | `uuid`                  | Session IDs                               |
+| Time             | `chrono` or `time`      | Prefer `time` (lighter, no C deps)        |
+| Pub/Sub          | `google-cloud-pubsub`   | Streaming sink                            |
+| OpenTelemetry    | `tracing-opentelemetry` | Distributed tracing export                |
 
 ### Dependency Selection Criteria
 
 When evaluating a new dependency:
+
 1. **Downloads**: >10M total on crates.io preferred; >1M acceptable if niche.
 2. **Maintenance**: Last release within 6 months; active issue triage.
 3. **Security**: No open advisories in `cargo audit`.
@@ -219,7 +221,7 @@ sections for backend implementation:
 - §4 Architecture Overview — module boundaries and endpoint map
 - §5 Protocol 1: Device Onboarding — `/v2/onboard` flow
 - §6 Protocol 2: Per-Request Authentication — `/v2/scan/ble` validation
-- §8 EIP-712 Typed Data Signing — signature verification details  
+- §8 EIP-712 Typed Data Signing — signature verification details
 - §9 Smart Contract Design — `PublisherRegistry` and `DeviceRegistry` interfaces
 - §10 Session Management — Redis state, refresh flow, service classes
 
