@@ -13,7 +13,7 @@ via EIP-712 signatures, validates sessions backed by on-chain state (ZkSync
 Era), and relays accepted data to downstream streaming sinks (default: Google
 Pub/Sub).
 
-- **Design document**: `auth-design.md` in the monorepo root.
+- **Design document**: `GATEWAY-SPEC.md` in this directory.
 - **Crate name**: `beacon-relay`
 - **Location**: `beacon-relay/` in the monorepo root.
 - **Language**: Rust (edition 2021)
@@ -215,15 +215,16 @@ starts with zero configuration.
 
 ## Design Document Reference
 
-The full v2 gateway design is in `auth-design.md` at the monorepo root. Key
-sections for backend implementation:
+The gateway specification is in `GATEWAY-SPEC.md` in this directory. Key
+sections for implementation:
 
-- §4 Architecture Overview — module boundaries and endpoint map
-- §5 Protocol 1: Device Onboarding — `/v2/onboard` flow
-- §6 Protocol 2: Per-Request Authentication — `/v2/scan/ble` validation
-- §8 EIP-712 Typed Data Signing — signature verification details
-- §9 Smart Contract Design — `PublisherRegistry` and `DeviceRegistry` interfaces
-- §10 Session Management — Redis state, refresh flow, service classes
+- §3 Architecture Overview — module boundaries and data flow
+- §4 API Endpoints — full endpoint map
+- §5 Device Onboarding — `/v2/onboard` flow
+- §6 Per-Request Authentication — `/v2/scan/ble` validation
+- §7 EIP-712 Typed Data Signing — signature verification details
+- §8 Session Management — Redis state, refresh flow, service classes
+- §9 Smart Contract Interfaces — `PublisherRegistry` and `DeviceRegistry`
 
-When implementing a new endpoint or module, read the corresponding design
-document section first.
+When implementing a new endpoint or module, read the corresponding
+specification section first.
