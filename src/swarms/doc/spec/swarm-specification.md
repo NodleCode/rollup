@@ -31,7 +31,7 @@ Version 1.0 — March 2026
 8. [Client Discovery](#8-client-discovery)
 9. [Fleet Maintenance](#9-fleet-maintenance)
 10. [Upgradeable Contract Architecture](#10-upgradeable-contract-architecture)
-11. [FleetTreasuryPaymaster](#11-fleettreasurypaymaster)
+11. [BondTreasuryPaymaster](#11-bondtreasurypaymaster)
 12. [Appendix A: ISO 3166 Geographic Reference](#appendix-a-iso-3166-geographic-reference)
 
 <div class="page-break"></div>
@@ -89,7 +89,7 @@ graph TB
 | **ServiceProvider**        | Backend URL registry (ERC-721)           | `keccak256(url)`                                | SSV   |
 | **SwarmRegistryL1**        | Tag group registry (Ethereum L1)         | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
 | **SwarmRegistryUniversal** | Tag group registry (ZkSync Era, all EVM) | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
-| **FleetTreasuryPaymaster** | ZkSync paymaster + bond treasury         | —                                               | —     |
+| **BondTreasuryPaymaster** | ZkSync paymaster + bond treasury         | —                                               | —     |
 
 All contracts are **DAO-owned** (UUPS upgradeable) during initial operation, allowing parameter tuning and bug fixes. Once mature and stable, an upgrade can renounce ownership to make them fully **permissionless**. Access control is via NFT ownership; FleetIdentity requires an ERC-20 bond (e.g., NODL) as an anti-spam mechanism.
 
@@ -603,19 +603,19 @@ A sponsor (such as Nodle) can pay **both the gas and the NODL bond** on behalf o
 
 #### How It Works
 
-1. The sponsor deploys and funds a `FleetTreasuryPaymaster` with ETH (for gas) and NODL (for bonds).
+1. The sponsor deploys and funds a `BondTreasuryPaymaster` with ETH (for gas) and NODL (for bonds).
 2. The sponsor whitelists the user's address.
 3. The user calls `claimUuidSponsored()` on FleetIdentity, passing the treasury address.
 4. The ZkSync paymaster covers the gas; the treasury covers the bond.
 
-The paymaster can also sponsor gas to **other** on-chain contracts (for example `SwarmRegistryUniversal`) if the sponsor adds their proxy addresses via `addWhitelistedContracts` — same user whitelist as for `FleetIdentity`. See [Section 11](#11-fleettreasurypaymaster).
+The paymaster can also sponsor gas to **other** on-chain contracts (for example `SwarmRegistryUniversal`) if the sponsor adds their proxy addresses via `addWhitelistedContracts` — same user whitelist as for `FleetIdentity`. See [Section 11](#11-bondtreasurypaymaster).
 
 ```solidity
 // User calls (zero ETH / NODL needed in their wallet):
 uint256 tokenId = fleetIdentity.claimUuidSponsored(
     uuid,
     operatorAddress,  // address(0) = self-operate
-    treasuryAddress   // FleetTreasuryPaymaster
+    treasuryAddress   // BondTreasuryPaymaster
 );
 // UUID is now owned by msg.sender — provably, permanently, on-chain
 ```
@@ -624,7 +624,7 @@ uint256 tokenId = fleetIdentity.claimUuidSponsored(
 sequenceDiagram
     actor User as User (fresh AA wallet)
     actor Sponsor as Sponsor (Nodle)
-    participant PM as FleetTreasuryPaymaster
+    participant PM as BondTreasuryPaymaster
     participant FI as FleetIdentity
     participant TOKEN as NODL Token
 
@@ -634,8 +634,8 @@ sequenceDiagram
 
     User->>+FI: claimUuidSponsored(uuid, operator, PM) [gas paid by PM]
     FI->>+PM: consumeSponsoredBond(user, BASE_BOND)
-    Note over PM: Check whitelist + quota + NODL balance
-    PM->>TOKEN: forceApprove(FleetIdentity, BASE_BOND)
+    Note over PM: whitelisted caller + user + quota + NODL balance
+    PM->>TOKEN: forceApprove(msg.sender, BASE_BOND)
     PM-->>-FI: ok
     FI->>TOKEN: transferFrom(PM, FI, BASE_BOND)
     FI-->>-User: tokenId (UUID owned by user)
@@ -650,21 +650,23 @@ sequenceDiagram
 
 #### Treasury Quota Control
 
-`FleetTreasuryPaymaster` inherits `QuotaControl`, which limits total NODL disbursed per period:
+`BondTreasuryPaymaster` inherits `QuotaControl`, which limits total NODL disbursed per period:
 
 ```solidity
 // Deployment example (Nodle onboarding treasury)
-new FleetTreasuryPaymaster(
+address[] memory initialContracts = new address[](1);
+initialContracts[0] = fleetIdentityProxy;
+new BondTreasuryPaymaster(
     admin,
     withdrawer,
-    fleetIdentityAddress,
+    initialContracts,
     nodlTokenAddress,
     100_000e18,   // quota: 100,000 NODL per period
     7 days        // period length
 );
 ```
 
-See [Section 11](#11-fleettreasurypaymaster) for the full paymaster specification.
+See [Section 11](#11-bondtreasurypaymaster) for the full paymaster specification.
 
 ### 4.5 Operator Model
 
@@ -1403,7 +1405,7 @@ Deployment order is dictated by contract dependencies:
 1. **ServiceProviderUpgradeable** — No dependencies
 2. **FleetIdentityUpgradeable** — Requires bond token address
 3. **SwarmRegistry (L1 or Universal)** — Requires both ServiceProvider and FleetIdentity
-4. **FleetTreasuryPaymaster** — Requires FleetIdentity address and bond token address
+4. **BondTreasuryPaymaster** — Requires initial `isWhitelistedContract` list (often FleetIdentity proxy) and bond token address
 
 Each step deploys an implementation contract followed by an ERC1967Proxy pointing to it.
 
@@ -1426,11 +1428,11 @@ Each step deploys an implementation contract followed by an ERC1967Proxy pointin
 
 <div class="page-break"></div>
 
-## 11. FleetTreasuryPaymaster
+## 11. BondTreasuryPaymaster
 
 ### 11.1 Overview
 
-`FleetTreasuryPaymaster` is a **ZkSync paymaster combined with a bond treasury** that enables fully sponsored fleet UUID claims. A single contract holds:
+`BondTreasuryPaymaster` is a **ZkSync paymaster combined with a bond treasury** that enables fully sponsored fleet UUID claims. A single contract holds:
 
 - **ETH** — used to pay ZkSync gas fees on behalf of whitelisted users.
 - **NODL** — used to pay the `BASE_BOND` required by `FleetIdentity.claimUuidSponsored()`.
@@ -1443,7 +1445,7 @@ This enables a **Web2-style onboarding experience with full Web3 ownership**: a 
 | :------------------- | :--------------------------------------------------------------------------------------------------- |
 | **Gas sponsorship**  | Pays ZkSync gas for calls to whitelisted destinations by whitelisted users; also sponsors admin calls to itself |
 | **Bond sponsorship** | Pays `BASE_BOND` NODL from its own balance via `claimUuidSponsored`                                  |
-| **Allowed targets**  | Any contract in `isWhitelistedContract` (whitelisted users): `fleetIdentity` is seeded at deploy; admins add more via `addWhitelistedContracts` (e.g. SwarmRegistry). `fleetIdentity` cannot be removed. `address(this)` for gas: `WHITELIST_ADMIN_ROLE` only |
+| **Allowed targets**  | `isWhitelistedContract[to] && isWhitelistedUser[from]`. Constructor seeds `initialWhitelistedContracts` and always seeds `address(this)` for sponsored admin txs. Bond pullers use the same contract whitelist. |
 | **Access control**   | `admin`, `WHITELIST_ADMIN_ROLE`, `WITHDRAWER_ROLE`                                                   |
 | **Quota control**    | Inherits `QuotaControl` — configurable daily/weekly NODL cap                                         |
 | **Paymaster flow**   | General flow only — approval-based flow not supported                                                |
@@ -1451,19 +1453,18 @@ This enables a **Web2-style onboarding experience with full Web3 ownership**: a 
 ### 11.3 Contract Interface
 
 ```solidity
-contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
+contract BondTreasuryPaymaster is BasePaymaster, QuotaControl {
 
     bytes32 public constant WHITELIST_ADMIN_ROLE = keccak256("WHITELIST_ADMIN_ROLE");
 
-    address public immutable fleetIdentity;
     IERC20  public immutable bondToken;
 
     mapping(address => bool) public isWhitelistedUser;
-    mapping(address => bool) public isWhitelistedContract; // includes fleetIdentity at deploy
+    mapping(address => bool) public isWhitelistedContract; // gas destinations + bond pullers
 
-    // ── Bond Treasury (called by FleetIdentity) ──────────────────────
+    // ── Bond Treasury (called by any whitelisted contract) ─────────
 
-    /// @notice Validates whitelist + quota; approves exact bond amount for FleetIdentity.
+    /// @notice Validates whitelist + quota; approves exact bond amount for msg.sender.
     function consumeSponsoredBond(address user, uint256 amount) external;
 
     // ── Whitelist Management ─────────────────────────────────────────
@@ -1471,7 +1472,7 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     function addWhitelistedUsers(address[] calldata users) external; // WHITELIST_ADMIN_ROLE
     function removeWhitelistedUsers(address[] calldata users) external; // WHITELIST_ADMIN_ROLE
     function addWhitelistedContracts(address[] calldata contracts) external; // WHITELIST_ADMIN_ROLE
-    function removeWhitelistedContracts(address[] calldata contracts) external; // WHITELIST_ADMIN_ROLE — cannot remove fleetIdentity
+    function removeWhitelistedContracts(address[] calldata contracts) external; // WHITELIST_ADMIN_ROLE
 
     // ── Withdrawals ──────────────────────────────────────────────────
 
@@ -1484,21 +1485,20 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
 
 ZkSync calls `validateAndPayForPaymasterTransaction` before executing the user operation. The paymaster applies destination-based routing:
 
-- **`to == address(this)`:** only holders of `WHITELIST_ADMIN_ROLE` receive gas coverage (e.g. `addWhitelistedUsers`, `addWhitelistedContracts`, quota updates).
-- **`isWhitelistedContract[to]`:** only whitelisted users (`isWhitelistedUser[from]`) receive gas coverage. At deploy, `fleetIdentity` is written into `isWhitelistedContract`; sponsors add further contracts (e.g. `SwarmRegistryUniversal` proxy) with `addWhitelistedContracts`. Removing `fleetIdentity` from the set reverts (`CannotRemoveFleetIdentity()`).
-- **Otherwise:** validation reverts with `DestIsNotWhitelisted()`; the sender pays their own gas unless using another paymaster.
+- **Rule:** `isWhitelistedContract[to]` and `isWhitelistedUser[from]`. The constructor always adds `address(this)` to `isWhitelistedContract` so calls to the paymaster (e.g. whitelist updates) can be sponsored once the caller is in `isWhitelistedUsers`. `initialWhitelistedContracts` seeds further destinations (e.g. FleetIdentity proxy); sponsors add or remove with `addWhitelistedContracts` / `removeWhitelistedContracts`.
+- **Otherwise:** `DestIsNotWhitelisted()` or `UserIsNotWhitelisted()`; the sender pays their own gas unless using another paymaster.
 
 In all cases the paymaster also verifies `address(this).balance >= requiredETH`. Using the paymaster is always opt-in — admins can submit ordinary transactions (without `paymasterParams`) and pay gas from their own wallet at any time. The approval-based paymaster flow is explicitly rejected (`PaymasterFlowNotSupported()`).
 
 ### 11.5 Bond Treasury Flow
 
-Called by `FleetIdentity.claimUuidSponsored()` during execution:
+Called by `FleetIdentity.claimUuidSponsored()` (or any whitelisted bond consumer) during execution:
 
 ```
-1. FleetIdentity → consumeSponsoredBond(user, BASE_BOND)
-2. Paymaster checks: isWhitelistedUser[user] ✓, balance ≥ BASE_BOND ✓, quota not exhausted ✓
-3. Paymaster calls: bondToken.forceApprove(fleetIdentity, BASE_BOND)
-4. FleetIdentity calls: bondToken.transferFrom(paymaster, fleetIdentity, BASE_BOND)
+1. Caller (e.g. FleetIdentity) → consumeSponsoredBond(user, BASE_BOND)
+2. Paymaster checks: isWhitelistedContract[msg.sender] ✓, isWhitelistedUser[user] ✓, balance ≥ BASE_BOND ✓, quota not exhausted ✓
+3. Paymaster calls: bondToken.forceApprove(msg.sender, BASE_BOND)
+4. Caller calls: bondToken.transferFrom(paymaster, caller, BASE_BOND)
 5. UUID minted to user — provably owned, zero friction
 ```
 
@@ -1519,7 +1519,7 @@ interface IBondTreasury {
 }
 ```
 
-This allows different sponsors with different policies (access lists, geographic restrictions, per-period quotas, enterprise accounts) to coexist. `FleetTreasuryPaymaster` is the reference implementation.
+This allows different sponsors with different policies (access lists, geographic restrictions, per-period quotas, enterprise accounts) to coexist. `BondTreasuryPaymaster` is the reference implementation.
 
 ### 11.7 Events & Errors
 
@@ -1527,16 +1527,15 @@ This allows different sponsors with different policies (access lists, geographic
 | :----------------------------------- | :---- | :--------------------------------------------------------------------------------------------------------------------------------------- |
 | `WhitelistedUsersAdded(users)`       | Event | Emitted when users are added to the whitelist                                                                                            |
 | `WhitelistedUsersRemoved(users)`     | Event | Emitted when users are removed from the whitelist                                                                                        |
-| `WhitelistedContractsAdded(contracts)` | Event | Emitted when contract destinations are added (including constructor seed for `fleetIdentity`)                                       |
+| `WhitelistedContractsAdded(contracts)` | Event | Emitted when contract destinations are added (including non-empty constructor `initialWhitelistedContracts`)                    |
 | `WhitelistedContractsRemoved(contracts)` | Event | Emitted when contract destinations are removed                                                                                           |
 | `TokensWithdrawn(token, to, amount)` | Event | Emitted on ERC-20 withdrawal                                                                                                             |
 | `UserIsNotWhitelisted()`             | Error | User not in whitelist (bond or gas validation)                                                                                           |
-| `DestIsNotWhitelisted()`             | Error | `to` is not `address(this)` and not in `isWhitelistedContract`                                                                            |
-| `DestinationNotAllowed()`            | Error | `to == address(this)` but `from` lacks `WHITELIST_ADMIN_ROLE`                                                                            |
-| `CannotRemoveFleetIdentity()`        | Error | `removeWhitelistedContracts` attempted to clear `fleetIdentity`                                                                           |
+| `DestIsNotWhitelisted()`             | Error | `to` not in `isWhitelistedContract`                                                                                                      |
 | `PaymasterBalanceTooLow()`           | Error | Insufficient ETH to cover gas                                                                                                            |
-| `NotFleetIdentity()`                 | Error | `consumeSponsoredBond` called by non-FleetIdentity                                                                                       |
+| `CallerNotWhitelistedContract()`     | Error | `consumeSponsoredBond` caller not in `isWhitelistedContract`                                                                              |
 | `InsufficientBondBalance()`          | Error | Paymaster NODL balance below requested bond amount                                                                                       |
+| `ZeroAddress()`                      | Error | Zero `admin`, `withdrawer`, `bondToken`, whitelist entry, ERC-20 withdraw token/recipient, or user/contract added via admin functions   |
 
 ### 11.8 Complete Sponsored Onboarding Flow
 
@@ -1544,7 +1543,7 @@ This allows different sponsors with different policies (access lists, geographic
 sequenceDiagram
     actor User as User (fresh / AA wallet)
     actor Sponsor as Sponsor (Nodle)
-    participant PM as FleetTreasuryPaymaster
+    participant PM as BondTreasuryPaymaster
     participant FI as FleetIdentity
     participant TOKEN as NODL Token
     participant ZK as ZkSync Sequencer
@@ -1563,7 +1562,7 @@ sequenceDiagram
     ZK->>+FI: claimUuidSponsored(uuid, operator, PM)
     FI->>+PM: consumeSponsoredBond(user, BASE_BOND)
     Note over PM: whitelist ✓, quota ✓, NODL balance ✓
-    PM->>TOKEN: forceApprove(FI, BASE_BOND)
+    PM->>TOKEN: forceApprove(FI, BASE_BOND)  // approves msg.sender (FleetIdentity)
     PM-->>-FI: ok
     FI->>TOKEN: transferFrom(PM, FI, BASE_BOND)
     FI-->>-User: tokenId minted — UUID owned by user

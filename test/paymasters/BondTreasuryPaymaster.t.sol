@@ -6,9 +6,10 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AccessControlUtils} from "../__helpers__/AccessControlUtils.sol";
 import {BasePaymaster} from "../../src/paymasters/BasePaymaster.sol";
-import {FleetTreasuryPaymaster} from "../../src/paymasters/FleetTreasuryPaymaster.sol";
+import {BondTreasuryPaymaster} from "../../src/paymasters/BondTreasuryPaymaster.sol";
 import {QuotaControl} from "../../src/QuotaControl.sol";
 import {FleetIdentityUpgradeable} from "../../src/swarms/FleetIdentityUpgradeable.sol";
 
@@ -20,16 +21,32 @@ contract MockERC20SCP is ERC20 {
     }
 }
 
+/// @dev Any whitelisted contract can pull bond after `consumeSponsoredBond` (integration helper).
+contract SponsoredBondPuller {
+    BondTreasuryPaymaster public immutable paymaster;
+    IERC20 public immutable token;
+
+    constructor(BondTreasuryPaymaster paymaster_, IERC20 token_) {
+        paymaster = paymaster_;
+        token = token_;
+    }
+
+    function pullBond(address user, uint256 amount) external {
+        paymaster.consumeSponsoredBond(user, amount);
+        token.transferFrom(address(paymaster), address(this), amount);
+    }
+}
+
 /// @dev Exposes internal paymaster validation for unit testing.
-contract MockFleetTreasuryPaymaster is FleetTreasuryPaymaster {
+contract MockBondTreasuryPaymaster is BondTreasuryPaymaster {
     constructor(
         address admin,
         address withdrawer,
-        address fleetIdentity_,
+        address[] memory initialWhitelistedContracts,
         address bondToken_,
         uint256 initialQuota,
         uint256 initialPeriod
-    ) FleetTreasuryPaymaster(admin, withdrawer, fleetIdentity_, bondToken_, initialQuota, initialPeriod) {}
+    ) BondTreasuryPaymaster(admin, withdrawer, initialWhitelistedContracts, bondToken_, initialQuota, initialPeriod) {}
 
     function mock_validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) public view {
         _validateAndPayGeneralFlow(from, to, requiredETH);
@@ -38,41 +55,47 @@ contract MockFleetTreasuryPaymaster is FleetTreasuryPaymaster {
     function mock_validateAndPayApprovalBasedFlow(
         address from,
         address to,
-        address token,
+        address token_,
         uint256 amount,
         bytes memory data,
         uint256 requiredETH
     ) public pure {
-        _validateAndPayApprovalBasedFlow(from, to, token, amount, data, requiredETH);
+        _validateAndPayApprovalBasedFlow(from, to, token_, amount, data, requiredETH);
     }
 }
 
-contract FleetTreasuryPaymasterTest is Test {
+contract BondTreasuryPaymasterTest is Test {
     using AccessControlUtils for Vm;
 
     FleetIdentityUpgradeable fleet;
-    MockFleetTreasuryPaymaster paymaster;
+    MockBondTreasuryPaymaster paymaster;
     MockERC20SCP bondToken;
 
     address internal admin = address(0x1111);
     address internal withdrawer = address(0x2222);
     address internal alice = address(0xA);
     address internal bob = address(0xB);
+    address internal attacker = address(0xB33F);
 
     bytes16 constant UUID_1 = bytes16(keccak256("fleet-alpha"));
     bytes16 constant UUID_2 = bytes16(keccak256("fleet-bravo"));
     bytes16 constant UUID_3 = bytes16(keccak256("fleet-charlie"));
 
     uint256 constant BASE_BOND = 100 ether;
-    uint256 constant QUOTA = 1000 ether; // allows 10 claims at BASE_BOND each
+    uint256 constant QUOTA = 1000 ether;
     uint256 constant PERIOD = 1 days;
 
     address[] internal whitelistTargets;
 
+    function _initialContractWhitelist(address fleetAddr) internal pure returns (address[] memory) {
+        address[] memory c = new address[](1);
+        c[0] = fleetAddr;
+        return c;
+    }
+
     function setUp() public {
         bondToken = new MockERC20SCP();
 
-        // Deploy FleetIdentity via proxy
         FleetIdentityUpgradeable impl = new FleetIdentityUpgradeable();
         ERC1967Proxy proxy = new ERC1967Proxy(
             address(impl),
@@ -80,17 +103,19 @@ contract FleetTreasuryPaymasterTest is Test {
         );
         fleet = FleetIdentityUpgradeable(address(proxy));
 
-        // Deploy merged paymaster/treasury
-        paymaster = new MockFleetTreasuryPaymaster(admin, withdrawer, address(fleet), address(bondToken), QUOTA, PERIOD);
+        paymaster = new MockBondTreasuryPaymaster(
+            admin, withdrawer, _initialContractWhitelist(address(fleet)), address(bondToken), QUOTA, PERIOD
+        );
 
-        // Fund paymaster with NODL for bonds
         bondToken.mint(address(paymaster), 10_000 ether);
 
-        // Whitelist alice
+        address[] memory initialUsers = new address[](2);
+        initialUsers[0] = alice;
+        initialUsers[1] = admin;
+        vm.prank(admin);
+        paymaster.addWhitelistedUsers(initialUsers);
         whitelistTargets = new address[](1);
         whitelistTargets[0] = alice;
-        vm.prank(admin);
-        paymaster.addWhitelistedUsers(whitelistTargets);
     }
 
     // ══════════════════════════════════════════════
@@ -104,12 +129,15 @@ contract FleetTreasuryPaymasterTest is Test {
     }
 
     function test_immutables() public view {
-        assertEq(paymaster.fleetIdentity(), address(fleet));
         assertEq(address(paymaster.bondToken()), address(bondToken));
     }
 
-    function test_fleetIdentitySeededAsWhitelistedContract() public view {
+    function test_initialWhitelistedContractIncludesFleet() public view {
         assertTrue(paymaster.isWhitelistedContract(address(fleet)));
+    }
+
+    function test_paymasterSelfSeededAsWhitelistedContract() public view {
+        assertTrue(paymaster.isWhitelistedContract(address(paymaster)));
     }
 
     // ══════════════════════════════════════════════
@@ -125,12 +153,12 @@ contract FleetTreasuryPaymasterTest is Test {
         assertFalse(paymaster.isWhitelistedUser(bob));
 
         vm.expectEmit();
-        emit FleetTreasuryPaymaster.WhitelistedUsersAdded(targets);
+        emit BondTreasuryPaymaster.WhitelistedUsersAdded(targets);
         paymaster.addWhitelistedUsers(targets);
         assertTrue(paymaster.isWhitelistedUser(bob));
 
         vm.expectEmit();
-        emit FleetTreasuryPaymaster.WhitelistedUsersRemoved(targets);
+        emit BondTreasuryPaymaster.WhitelistedUsersRemoved(targets);
         paymaster.removeWhitelistedUsers(targets);
         assertFalse(paymaster.isWhitelistedUser(bob));
 
@@ -163,14 +191,14 @@ contract FleetTreasuryPaymasterTest is Test {
         paymaster.mock_validateAndPayGeneralFlow(admin, address(paymaster), 1 ether);
     }
 
-    function test_RevertIf_nonAdminToSelf_destinationNotAllowed() public {
+    function test_RevertIf_nonWhitelistedUser_toPaymaster() public {
         vm.deal(address(paymaster), 10 ether);
-        vm.expectRevert(FleetTreasuryPaymaster.DestinationNotAllowed.selector);
-        paymaster.mock_validateAndPayGeneralFlow(alice, address(paymaster), 1 ether);
+        vm.expectRevert(BondTreasuryPaymaster.UserIsNotWhitelisted.selector);
+        paymaster.mock_validateAndPayGeneralFlow(bob, address(paymaster), 1 ether);
     }
 
     function test_RevertIf_adminToSelf_paymasterBalanceTooLow() public {
-        vm.expectRevert(FleetTreasuryPaymaster.PaymasterBalanceTooLow.selector);
+        vm.expectRevert(BondTreasuryPaymaster.PaymasterBalanceTooLow.selector);
         paymaster.mock_validateAndPayGeneralFlow(admin, address(paymaster), 1 ether);
     }
 
@@ -180,7 +208,7 @@ contract FleetTreasuryPaymasterTest is Test {
     }
 
     function test_RevertIf_destIsNotWhitelisted() public {
-        vm.expectRevert(FleetTreasuryPaymaster.DestIsNotWhitelisted.selector);
+        vm.expectRevert(BondTreasuryPaymaster.DestIsNotWhitelisted.selector);
         paymaster.mock_validateAndPayGeneralFlow(alice, address(0xDEAD), 0);
     }
 
@@ -203,7 +231,7 @@ contract FleetTreasuryPaymasterTest is Test {
         vm.prank(admin);
         paymaster.addWhitelistedContracts(contracts_);
 
-        vm.expectRevert(FleetTreasuryPaymaster.UserIsNotWhitelisted.selector);
+        vm.expectRevert(BondTreasuryPaymaster.UserIsNotWhitelisted.selector);
         paymaster.mock_validateAndPayGeneralFlow(bob, extra, 0);
     }
 
@@ -214,32 +242,32 @@ contract FleetTreasuryPaymasterTest is Test {
 
         vm.startPrank(admin);
         vm.expectEmit();
-        emit FleetTreasuryPaymaster.WhitelistedContractsAdded(contracts_);
+        emit BondTreasuryPaymaster.WhitelistedContractsAdded(contracts_);
         paymaster.addWhitelistedContracts(contracts_);
         assertTrue(paymaster.isWhitelistedContract(extra));
 
         vm.expectEmit();
-        emit FleetTreasuryPaymaster.WhitelistedContractsRemoved(contracts_);
+        emit BondTreasuryPaymaster.WhitelistedContractsRemoved(contracts_);
         paymaster.removeWhitelistedContracts(contracts_);
         assertFalse(paymaster.isWhitelistedContract(extra));
         vm.stopPrank();
     }
 
-    function test_RevertIf_removeFleetIdentityFromContractWhitelist() public {
+    function test_removeWhitelistedContract_canRemoveFleet() public {
         address[] memory contracts_ = new address[](1);
         contracts_[0] = address(fleet);
         vm.prank(admin);
-        vm.expectRevert(FleetTreasuryPaymaster.CannotRemoveFleetIdentity.selector);
         paymaster.removeWhitelistedContracts(contracts_);
+        assertFalse(paymaster.isWhitelistedContract(address(fleet)));
     }
 
     function test_RevertIf_userIsNotWhitelisted_paymaster() public {
-        vm.expectRevert(FleetTreasuryPaymaster.UserIsNotWhitelisted.selector);
+        vm.expectRevert(BondTreasuryPaymaster.UserIsNotWhitelisted.selector);
         paymaster.mock_validateAndPayGeneralFlow(bob, address(fleet), 0);
     }
 
     function test_RevertIf_paymasterBalanceTooLow() public {
-        vm.expectRevert(FleetTreasuryPaymaster.PaymasterBalanceTooLow.selector);
+        vm.expectRevert(BondTreasuryPaymaster.PaymasterBalanceTooLow.selector);
         paymaster.mock_validateAndPayGeneralFlow(alice, address(fleet), 1 ether);
     }
 
@@ -248,32 +276,44 @@ contract FleetTreasuryPaymasterTest is Test {
     // ══════════════════════════════════════════════
 
     function test_consumeSponsoredBond_success() public {
-        // Only FleetIdentity can call consumeSponsoredBond
         vm.prank(address(fleet));
         paymaster.consumeSponsoredBond(alice, BASE_BOND);
         assertEq(paymaster.claimed(), BASE_BOND);
     }
 
-    function test_RevertIf_consumeSponsoredBond_notFleetIdentity() public {
+    function test_consumeSponsoredBond_anyWhitelistedContract() public {
+        SponsoredBondPuller puller = new SponsoredBondPuller(paymaster, IERC20(address(bondToken)));
+        address[] memory contracts_ = new address[](1);
+        contracts_[0] = address(puller);
+        vm.prank(admin);
+        paymaster.addWhitelistedContracts(contracts_);
+
+        uint256 beforePm = bondToken.balanceOf(address(paymaster));
+        puller.pullBond(alice, BASE_BOND);
+        assertEq(bondToken.balanceOf(address(puller)), BASE_BOND);
+        assertEq(bondToken.balanceOf(address(paymaster)), beforePm - BASE_BOND);
+        assertEq(paymaster.claimed(), BASE_BOND);
+    }
+
+    function test_RevertIf_consumeSponsoredBond_callerNotWhitelistedContract() public {
         vm.prank(alice);
-        vm.expectRevert(FleetTreasuryPaymaster.NotFleetIdentity.selector);
+        vm.expectRevert(BondTreasuryPaymaster.CallerNotWhitelistedContract.selector);
         paymaster.consumeSponsoredBond(alice, BASE_BOND);
     }
 
     function test_RevertIf_consumeSponsoredBond_notWhitelisted() public {
         vm.prank(address(fleet));
-        vm.expectRevert(FleetTreasuryPaymaster.UserIsNotWhitelisted.selector);
+        vm.expectRevert(BondTreasuryPaymaster.UserIsNotWhitelisted.selector);
         paymaster.consumeSponsoredBond(bob, BASE_BOND);
     }
 
     function test_RevertIf_consumeSponsoredBond_insufficientBalance() public {
-        // Withdraw all NODL from paymaster
         vm.startPrank(withdrawer);
         paymaster.withdrawTokens(address(bondToken), withdrawer, bondToken.balanceOf(address(paymaster)));
         vm.stopPrank();
 
         vm.prank(address(fleet));
-        vm.expectRevert(FleetTreasuryPaymaster.InsufficientBondBalance.selector);
+        vm.expectRevert(BondTreasuryPaymaster.InsufficientBondBalance.selector);
         paymaster.consumeSponsoredBond(alice, BASE_BOND);
     }
 
@@ -343,7 +383,6 @@ contract FleetTreasuryPaymasterTest is Test {
         vm.prank(alice);
         fleet.burn(tokenId);
 
-        // Refund goes to alice (uuidOwner = msg.sender)
         assertEq(bondToken.balanceOf(alice), aliceBefore + BASE_BOND);
     }
 
@@ -359,26 +398,22 @@ contract FleetTreasuryPaymasterTest is Test {
     function test_RevertIf_quotaExceeded() public {
         bondToken.mint(address(paymaster), 100_000 ether);
 
-        // Quota is 1000 ether, each claim costs BASE_BOND (100 ether), so 10 claims exhaust it
         for (uint256 i = 0; i < 10; i++) {
             bytes16 uuid = bytes16(keccak256(abi.encodePacked("uuid-", i)));
             vm.prank(alice);
             fleet.claimUuidSponsored(uuid, address(0), address(paymaster));
         }
 
-        // 11th claim should exceed quota
         vm.prank(alice);
         vm.expectRevert(QuotaControl.QuotaExceeded.selector);
         fleet.claimUuidSponsored(UUID_3, address(0), address(paymaster));
     }
 
     function test_quotaTracksBaseBondNotClaimCount() public {
-        // Deploy paymaster with quota smaller than a single BASE_BOND
-        MockFleetTreasuryPaymaster tightPaymaster = new MockFleetTreasuryPaymaster(
-            admin, withdrawer, address(fleet), address(bondToken), BASE_BOND / 2, PERIOD
+        MockBondTreasuryPaymaster tightPaymaster = new MockBondTreasuryPaymaster(
+            admin, withdrawer, _initialContractWhitelist(address(fleet)), address(bondToken), BASE_BOND / 2, PERIOD
         );
 
-        // Whitelist alice on the tight paymaster
         address[] memory targets = new address[](1);
         targets[0] = alice;
         vm.prank(admin);
@@ -386,7 +421,6 @@ contract FleetTreasuryPaymasterTest is Test {
 
         bondToken.mint(address(tightPaymaster), 10_000 ether);
 
-        // BASE_BOND (100 ether) > quota (50 ether), so first claim must revert
         vm.prank(alice);
         vm.expectRevert(QuotaControl.QuotaExceeded.selector);
         fleet.claimUuidSponsored(UUID_1, address(0), address(tightPaymaster));
@@ -395,22 +429,18 @@ contract FleetTreasuryPaymasterTest is Test {
     function test_quotaResetsAfterPeriod() public {
         bondToken.mint(address(paymaster), 100_000 ether);
 
-        // Exhaust quota (10 claims × 100 ether = 1000 ether)
         for (uint256 i = 0; i < 10; i++) {
             bytes16 uuid = bytes16(keccak256(abi.encodePacked("uuid-", i)));
             vm.prank(alice);
             fleet.claimUuidSponsored(uuid, address(0), address(paymaster));
         }
 
-        // Verify quota is exhausted
         vm.prank(alice);
         vm.expectRevert(QuotaControl.QuotaExceeded.selector);
         fleet.claimUuidSponsored(UUID_3, address(0), address(paymaster));
 
-        // Advance past period
         vm.warp(block.timestamp + PERIOD + 1);
 
-        // Should succeed again after reset
         vm.prank(alice);
         fleet.claimUuidSponsored(UUID_3, address(0), address(paymaster));
         assertEq(fleet.uuidOwner(UUID_3), alice);
@@ -459,12 +489,14 @@ contract FleetTreasuryPaymasterTest is Test {
 
     function test_RevertIf_constructorZeroPeriod() public {
         vm.expectRevert(QuotaControl.ZeroPeriod.selector);
-        new MockFleetTreasuryPaymaster(admin, withdrawer, address(fleet), address(bondToken), QUOTA, 0);
+        new MockBondTreasuryPaymaster(admin, withdrawer, _initialContractWhitelist(address(fleet)), address(bondToken), QUOTA, 0);
     }
 
     function test_RevertIf_constructorTooLongPeriod() public {
         vm.expectRevert(QuotaControl.TooLongPeriod.selector);
-        new MockFleetTreasuryPaymaster(admin, withdrawer, address(fleet), address(bondToken), QUOTA, 31 days);
+        new MockBondTreasuryPaymaster(
+            admin, withdrawer, _initialContractWhitelist(address(fleet)), address(bondToken), QUOTA, 31 days
+        );
     }
 
     // ══════════════════════════════════════════════
@@ -490,9 +522,125 @@ contract FleetTreasuryPaymasterTest is Test {
         uint256 amount = 500 ether;
 
         vm.expectEmit(true, true, true, true);
-        emit FleetTreasuryPaymaster.TokensWithdrawn(address(bondToken), withdrawer, amount);
+        emit BondTreasuryPaymaster.TokensWithdrawn(address(bondToken), withdrawer, amount);
 
         vm.prank(withdrawer);
         paymaster.withdrawTokens(address(bondToken), withdrawer, amount);
+    }
+
+    // ══════════════════════════════════════════════
+    // Security: deployment & access boundaries
+    // ══════════════════════════════════════════════
+
+    function test_RevertIf_constructor_zeroBondToken() public {
+        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
+        new MockBondTreasuryPaymaster(admin, withdrawer, _initialContractWhitelist(address(fleet)), address(0), QUOTA, PERIOD);
+    }
+
+    function test_RevertIf_constructor_zeroAdmin() public {
+        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
+        new MockBondTreasuryPaymaster(
+            address(0), withdrawer, _initialContractWhitelist(address(fleet)), address(bondToken), QUOTA, PERIOD
+        );
+    }
+
+    function test_RevertIf_constructor_zeroWithdrawer() public {
+        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
+        new MockBondTreasuryPaymaster(
+            admin, address(0), _initialContractWhitelist(address(fleet)), address(bondToken), QUOTA, PERIOD
+        );
+    }
+
+    function test_RevertIf_constructor_initialWhitelistContainsZeroAddress() public {
+        address[] memory bad = new address[](1);
+        bad[0] = address(0);
+        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
+        new MockBondTreasuryPaymaster(admin, withdrawer, bad, address(bondToken), QUOTA, PERIOD);
+    }
+
+    function test_RevertIf_addWhitelistedUsers_zeroAddress() public {
+        address[] memory bad = new address[](1);
+        bad[0] = address(0);
+        vm.prank(admin);
+        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
+        paymaster.addWhitelistedUsers(bad);
+    }
+
+    function test_RevertIf_addWhitelistedContracts_zeroAddress() public {
+        address[] memory bad = new address[](1);
+        bad[0] = address(0);
+        vm.prank(admin);
+        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
+        paymaster.addWhitelistedContracts(bad);
+    }
+
+    function test_RevertIf_withdrawTokens_zeroToken() public {
+        vm.prank(withdrawer);
+        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
+        paymaster.withdrawTokens(address(0), withdrawer, 1 ether);
+    }
+
+    function test_RevertIf_withdrawTokens_zeroRecipient() public {
+        vm.prank(withdrawer);
+        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
+        paymaster.withdrawTokens(address(bondToken), address(0), 1 ether);
+    }
+
+    function test_RevertIf_attacker_cannot_mutate_whitelists() public {
+        vm.startPrank(attacker);
+        vm.expectRevert_AccessControlUnauthorizedAccount(attacker, paymaster.WHITELIST_ADMIN_ROLE());
+        paymaster.addWhitelistedUsers(whitelistTargets);
+        vm.expectRevert_AccessControlUnauthorizedAccount(attacker, paymaster.WHITELIST_ADMIN_ROLE());
+        paymaster.removeWhitelistedUsers(whitelistTargets);
+        address[] memory c = new address[](1);
+        c[0] = address(fleet);
+        vm.expectRevert_AccessControlUnauthorizedAccount(attacker, paymaster.WHITELIST_ADMIN_ROLE());
+        paymaster.addWhitelistedContracts(c);
+        vm.expectRevert_AccessControlUnauthorizedAccount(attacker, paymaster.WHITELIST_ADMIN_ROLE());
+        paymaster.removeWhitelistedContracts(c);
+        vm.stopPrank();
+    }
+
+    function test_RevertIf_attacker_cannot_withdrawTokens() public {
+        vm.prank(attacker);
+        vm.expectRevert();
+        paymaster.withdrawTokens(address(bondToken), attacker, 1 ether);
+    }
+
+    function test_RevertIf_attacker_cannot_withdrawETH() public {
+        vm.deal(address(paymaster), 1 ether);
+        vm.prank(attacker);
+        vm.expectRevert();
+        paymaster.withdraw(attacker, 1 ether);
+    }
+
+    function test_RevertIf_admin_cannot_withdrawETH_without_withdrawer_role() public {
+        vm.deal(address(paymaster), 1 ether);
+        vm.prank(admin);
+        vm.expectRevert();
+        paymaster.withdraw(admin, 1 ether);
+    }
+
+    function test_RevertIf_removePaymasterFromWhitelist_blocksSponsoredSelfValidation() public {
+        vm.deal(address(paymaster), 10 ether);
+        address[] memory self = new address[](1);
+        self[0] = address(paymaster);
+        vm.prank(admin);
+        paymaster.removeWhitelistedContracts(self);
+
+        vm.expectRevert(BondTreasuryPaymaster.DestIsNotWhitelisted.selector);
+        paymaster.mock_validateAndPayGeneralFlow(admin, address(paymaster), 1 ether);
+    }
+
+    function test_RevertIf_whitelistedBondPuller_cannot_change_whitelists() public {
+        SponsoredBondPuller puller = new SponsoredBondPuller(paymaster, IERC20(address(bondToken)));
+        address[] memory contracts_ = new address[](1);
+        contracts_[0] = address(puller);
+        vm.prank(admin);
+        paymaster.addWhitelistedContracts(contracts_);
+
+        vm.expectRevert_AccessControlUnauthorizedAccount(address(puller), paymaster.WHITELIST_ADMIN_ROLE());
+        vm.prank(address(puller));
+        paymaster.addWhitelistedUsers(whitelistTargets);
     }
 }

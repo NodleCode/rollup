@@ -7,24 +7,22 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {BasePaymaster} from "./BasePaymaster.sol";
 import {QuotaControl} from "../QuotaControl.sol";
 
-/// @notice Combined paymaster + bond treasury for FleetIdentity operations.
-/// @dev Holds ETH (to sponsor gas) and NODL (to sponsor bonds). Whitelisted
-///      users call FleetIdentityUpgradeable.claimUuidSponsored(), which calls
-///      this contract's `consumeSponsoredBond` to validate + consume quota,
-///      then pulls the NODL bond via `transferFrom`.
-///      Gas sponsorship: `fleetIdentity` is seeded into `isWhitelistedContract` at
-///      deploy; admins add more destinations the same way. Admin-only calls to this
-///      contract use `WHITELIST_ADMIN_ROLE` instead of user whitelist.
-contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
+/// @notice ZkSync paymaster plus ERC-20 bond treasury for whitelisted contracts (e.g. `IBondTreasury` implementers).
+/// @dev Holds ETH (sponsored gas) and bond token balance. Whitelisted users interact with `isWhitelistedContract`
+///      destinations; bond consumers call `consumeSponsoredBond`, which checks caller + user whitelist, quota, balance,
+///      then `forceApprove(msg.sender, amount)` for `transferFrom`.
+///      Gas: `isWhitelistedContract[to] && isWhitelistedUser[from]`. Constructor seeds `address(this)` so management
+///      txs can be sponsored once those EOAs are user-whitelisted. On-chain mutators use `WHITELIST_ADMIN_ROLE` /
+///      `WITHDRAWER_ROLE` / `DEFAULT_ADMIN_ROLE`.
+contract BondTreasuryPaymaster is BasePaymaster, QuotaControl {
     using SafeERC20 for IERC20;
 
     bytes32 public constant WHITELIST_ADMIN_ROLE = keccak256("WHITELIST_ADMIN_ROLE");
 
-    address public immutable fleetIdentity;
     IERC20 public immutable bondToken;
 
     mapping(address => bool) public isWhitelistedUser;
-    /// @notice Allowed destinations for sponsored txs; always includes `fleetIdentity` (set in constructor).
+    /// @notice Sponsored tx destinations and allowed `consumeSponsoredBond` callers.
     mapping(address => bool) public isWhitelistedContract;
 
     event WhitelistedUsersAdded(address[] users);
@@ -35,46 +33,55 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
 
     error UserIsNotWhitelisted();
     error DestIsNotWhitelisted();
-    error DestinationNotAllowed();
     error PaymasterBalanceTooLow();
-    error NotFleetIdentity();
+    error CallerNotWhitelistedContract();
     error InsufficientBondBalance();
-    error CannotRemoveFleetIdentity();
+    error ZeroAddress();
 
     constructor(
         address admin,
         address withdrawer,
-        address fleetIdentity_,
+        address[] memory initialWhitelistedContracts,
         address bondToken_,
         uint256 initialQuota,
         uint256 initialPeriod
     ) BasePaymaster(admin, withdrawer) QuotaControl(initialQuota, initialPeriod, admin) {
+        if (admin == address(0) || withdrawer == address(0)) revert ZeroAddress();
+        if (bondToken_ == address(0)) revert ZeroAddress();
+
         _grantRole(WHITELIST_ADMIN_ROLE, admin);
-        fleetIdentity = fleetIdentity_;
         bondToken = IERC20(bondToken_);
-        isWhitelistedContract[fleetIdentity_] = true;
-        address[] memory seeded = new address[](1);
-        seeded[0] = fleetIdentity_;
-        emit WhitelistedContractsAdded(seeded);
+        uint256 n = initialWhitelistedContracts.length;
+        for (uint256 i = 0; i < n; i++) {
+            if (initialWhitelistedContracts[i] == address(0)) revert ZeroAddress();
+            isWhitelistedContract[initialWhitelistedContracts[i]] = true;
+        }
+        if (n > 0) {
+            emit WhitelistedContractsAdded(initialWhitelistedContracts);
+        }
+        if (!isWhitelistedContract[address(this)]) {
+            isWhitelistedContract[address(this)] = true;
+            address[] memory selfDest = new address[](1);
+            selfDest[0] = address(this);
+            emit WhitelistedContractsAdded(selfDest);
+        }
     }
 
     // ──────────────────────────────────────────────
-    // Bond Treasury (called by FleetIdentity)
+    // Bond Treasury (whitelisted contracts)
     // ──────────────────────────────────────────────
 
     /// @notice Validate whitelist + consume quota for a sponsored bond.
-    /// @dev Only callable by the FleetIdentity contract during claimUuidSponsored.
-    ///      The actual NODL transfer is done separately by FleetIdentity via transferFrom.
+    /// @dev Callable only by `isWhitelistedContract`. Caller pulls via `transferFrom`.
     function consumeSponsoredBond(address user, uint256 amount) external {
-        if (msg.sender != fleetIdentity) revert NotFleetIdentity();
+        if (!isWhitelistedContract[msg.sender]) revert CallerNotWhitelistedContract();
         if (!isWhitelistedUser[user]) revert UserIsNotWhitelisted();
         if (bondToken.balanceOf(address(this)) < amount) revert InsufficientBondBalance();
 
         _checkedResetClaimed();
         _checkedUpdateClaimed(amount);
 
-        // Approve only the exact amount needed for this claim
-        bondToken.forceApprove(fleetIdentity, amount);
+        bondToken.forceApprove(msg.sender, amount);
     }
 
     // ──────────────────────────────────────────────
@@ -84,6 +91,7 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     function addWhitelistedUsers(address[] calldata users) external {
         _checkRole(WHITELIST_ADMIN_ROLE);
         for (uint256 i = 0; i < users.length; i++) {
+            if (users[i] == address(0)) revert ZeroAddress();
             isWhitelistedUser[users[i]] = true;
         }
         emit WhitelistedUsersAdded(users);
@@ -100,6 +108,7 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     function addWhitelistedContracts(address[] calldata contracts_) external {
         _checkRole(WHITELIST_ADMIN_ROLE);
         for (uint256 i = 0; i < contracts_.length; i++) {
+            if (contracts_[i] == address(0)) revert ZeroAddress();
             isWhitelistedContract[contracts_[i]] = true;
         }
         emit WhitelistedContractsAdded(contracts_);
@@ -108,7 +117,6 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     function removeWhitelistedContracts(address[] calldata contracts_) external {
         _checkRole(WHITELIST_ADMIN_ROLE);
         for (uint256 i = 0; i < contracts_.length; i++) {
-            if (contracts_[i] == fleetIdentity) revert CannotRemoveFleetIdentity();
             isWhitelistedContract[contracts_[i]] = false;
         }
         emit WhitelistedContractsRemoved(contracts_);
@@ -118,9 +126,10 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     // ERC-20 Withdrawal
     // ──────────────────────────────────────────────
 
-    /// @notice Withdraw ERC-20 tokens (e.g. excess NODL) from this contract.
+    /// @notice Withdraw ERC-20 tokens (e.g. excess bond token) from this contract.
     function withdrawTokens(address token, address to, uint256 amount) external {
         _checkRole(WITHDRAWER_ROLE);
+        if (token == address(0) || to == address(0)) revert ZeroAddress();
         IERC20(token).safeTransfer(to, amount);
         emit TokensWithdrawn(token, to, amount);
     }
@@ -130,21 +139,9 @@ contract FleetTreasuryPaymaster is BasePaymaster, QuotaControl {
     // ──────────────────────────────────────────────
 
     function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) internal view override {
-        if (to == address(this)) {
-            if (!hasRole(WHITELIST_ADMIN_ROLE, from)) {
-                revert DestinationNotAllowed();
-            }
-        } else if (isWhitelistedContract[to]) {
-            if (!isWhitelistedUser[from]) {
-                revert UserIsNotWhitelisted();
-            }
-        } else {
-            revert DestIsNotWhitelisted();
-        }
-
-        if (address(this).balance < requiredETH) {
-            revert PaymasterBalanceTooLow();
-        }
+        if (!isWhitelistedContract[to]) revert DestIsNotWhitelisted();
+        if (!isWhitelistedUser[from]) revert UserIsNotWhitelisted();
+        if (address(this).balance < requiredETH) revert PaymasterBalanceTooLow();
     }
 
     function _validateAndPayApprovalBasedFlow(address, address, address, uint256, bytes memory, uint256)
