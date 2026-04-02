@@ -89,7 +89,7 @@ graph TB
 | **ServiceProvider**        | Backend URL registry (ERC-721)           | `keccak256(url)`                                | SSV   |
 | **SwarmRegistryL1**        | Tag group registry (Ethereum L1)         | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
 | **SwarmRegistryUniversal** | Tag group registry (ZkSync Era, all EVM) | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
-| **BondTreasuryPaymaster** | ZkSync paymaster + bond treasury         | —                                               | —     |
+| **BondTreasuryPaymaster** | `WhitelistPaymaster` + `QuotaControl` + bond treasury | —                                               | —     |
 
 All contracts are **DAO-owned** (UUPS upgradeable) during initial operation, allowing parameter tuning and bug fixes. Once mature and stable, an upgrade can renounce ownership to make them fully **permissionless**. Access control is via NFT ownership; FleetIdentity requires an ERC-20 bond (e.g., NODL) as an anti-spam mechanism.
 
@@ -650,7 +650,7 @@ sequenceDiagram
 
 #### Treasury Quota Control
 
-`BondTreasuryPaymaster` inherits `QuotaControl`, which limits total NODL disbursed per period:
+`BondTreasuryPaymaster` extends `WhitelistPaymaster` (gas + user/contract whitelists) and `QuotaControl`, which limits total NODL disbursed per period:
 
 ```solidity
 // Deployment example (Nodle onboarding treasury)
@@ -1405,7 +1405,7 @@ Deployment order is dictated by contract dependencies:
 1. **ServiceProviderUpgradeable** — No dependencies
 2. **FleetIdentityUpgradeable** — Requires bond token address
 3. **SwarmRegistry (L1 or Universal)** — Requires both ServiceProvider and FleetIdentity
-4. **BondTreasuryPaymaster** — Requires initial `isWhitelistedContract` list (often FleetIdentity proxy) and bond token address
+4. **BondTreasuryPaymaster** — Extends `WhitelistPaymaster` + `QuotaControl`; requires initial `isWhitelistedContract` list (often FleetIdentity proxy), bond token address, quota, and period
 
 Each step deploys an implementation contract followed by an ERC1967Proxy pointing to it.
 
@@ -1432,7 +1432,7 @@ Each step deploys an implementation contract followed by an ERC1967Proxy pointin
 
 ### 11.1 Overview
 
-`BondTreasuryPaymaster` is a **ZkSync paymaster combined with a bond treasury** that enables fully sponsored fleet UUID claims. A single contract holds:
+`BondTreasuryPaymaster` is a **ZkSync paymaster combined with a bond treasury** (it extends `WhitelistPaymaster` for gas and access-list logic, and `QuotaControl` for per-period bond limits) that enables fully sponsored fleet UUID claims. A single contract holds:
 
 - **ETH** — used to pay ZkSync gas fees on behalf of whitelisted users.
 - **NODL** — used to pay the `BASE_BOND` required by `FleetIdentity.claimUuidSponsored()`.
@@ -1447,37 +1447,27 @@ This enables a **Web2-style onboarding experience with full Web3 ownership**: a 
 | **Bond sponsorship** | Pays `BASE_BOND` NODL from its own balance via `claimUuidSponsored`                                  |
 | **Allowed targets**  | `isWhitelistedContract[to] && isWhitelistedUser[from]`. Constructor seeds `initialWhitelistedContracts` and always seeds `address(this)` for sponsored admin txs. Bond pullers use the same contract whitelist. |
 | **Access control**   | `admin`, `WHITELIST_ADMIN_ROLE`, `WITHDRAWER_ROLE`                                                   |
-| **Quota control**    | Inherits `QuotaControl` — configurable daily/weekly NODL cap                                         |
+| **Quota control**    | Inherits `QuotaControl` — configurable per-period NODL cap                                         |
+| **Paymaster base**   | Inherits `WhitelistPaymaster` → `BasePaymaster` (shared whitelist paymaster implementation)         |
 | **Paymaster flow**   | General flow only — approval-based flow not supported                                                |
 
 ### 11.3 Contract Interface
 
+`BondTreasuryPaymaster` is `WhitelistPaymaster, QuotaControl`. Whitelist state, paymaster validation, and ETH withdrawal come from `WhitelistPaymaster` / `BasePaymaster`; quota state and admin functions come from `QuotaControl`. The bond layer adds `bondToken`, `consumeSponsoredBond`, and ERC-20 `withdrawTokens`.
+
 ```solidity
-contract BondTreasuryPaymaster is BasePaymaster, QuotaControl {
+contract BondTreasuryPaymaster is WhitelistPaymaster, QuotaControl {
 
-    bytes32 public constant WHITELIST_ADMIN_ROLE = keccak256("WHITELIST_ADMIN_ROLE");
-
-    IERC20  public immutable bondToken;
-
-    mapping(address => bool) public isWhitelistedUser;
-    mapping(address => bool) public isWhitelistedContract; // gas destinations + bond pullers
-
-    // ── Bond Treasury (called by any whitelisted contract) ─────────
+    IERC20 public immutable bondToken;
 
     /// @notice Validates whitelist + quota; approves exact bond amount for msg.sender.
     function consumeSponsoredBond(address user, uint256 amount) external;
 
-    // ── Whitelist Management ─────────────────────────────────────────
-
-    function addWhitelistedUsers(address[] calldata users) external; // WHITELIST_ADMIN_ROLE
-    function removeWhitelistedUsers(address[] calldata users) external; // WHITELIST_ADMIN_ROLE
-    function addWhitelistedContracts(address[] calldata contracts) external; // WHITELIST_ADMIN_ROLE
-    function removeWhitelistedContracts(address[] calldata contracts) external; // WHITELIST_ADMIN_ROLE
-
-    // ── Withdrawals ──────────────────────────────────────────────────
-
     function withdrawTokens(address token, address to, uint256 amount) external; // WITHDRAWER_ROLE
-    // ETH withdrawal: inherited from BasePaymaster
+
+    // From WhitelistPaymaster: WHITELIST_ADMIN_ROLE, isWhitelistedUser, isWhitelistedContract,
+    // add/remove whitelist functions, _validateAndPayGeneralFlow (general flow only), withdraw (ETH)
+    // From QuotaControl: quota, period, claimed, setQuota, setPeriod, etc.
 }
 ```
 
@@ -1530,12 +1520,11 @@ This allows different sponsors with different policies (access lists, geographic
 | `WhitelistedContractsAdded(contracts)` | Event | Emitted when contract destinations are added (including non-empty constructor `initialWhitelistedContracts`)                    |
 | `WhitelistedContractsRemoved(contracts)` | Event | Emitted when contract destinations are removed                                                                                           |
 | `TokensWithdrawn(token, to, amount)` | Event | Emitted on ERC-20 withdrawal                                                                                                             |
-| `UserIsNotWhitelisted()`             | Error | User not in whitelist (bond or gas validation)                                                                                           |
-| `DestIsNotWhitelisted()`             | Error | `to` not in `isWhitelistedContract`                                                                                                      |
-| `PaymasterBalanceTooLow()`           | Error | Insufficient ETH to cover gas                                                                                                            |
+| `UserIsNotWhitelisted()`             | Error | User not in whitelist (bond or gas validation); defined on `WhitelistPaymaster`                                                          |
+| `DestIsNotWhitelisted()`             | Error | `to` not in `isWhitelistedContract`; defined on `WhitelistPaymaster`                                                                     |
+| `PaymasterBalanceTooLow()`           | Error | Insufficient ETH to cover gas; defined on `WhitelistPaymaster`                                                                          |
 | `CallerNotWhitelistedContract()`     | Error | `consumeSponsoredBond` caller not in `isWhitelistedContract`                                                                              |
 | `InsufficientBondBalance()`          | Error | Paymaster NODL balance below requested bond amount                                                                                       |
-| `ZeroAddress()`                      | Error | Zero `admin`, `withdrawer`, `bondToken`, whitelist entry, ERC-20 withdraw token/recipient, or user/contract added via admin functions   |
 
 ### 11.8 Complete Sponsored Onboarding Flow
 
@@ -1556,7 +1545,7 @@ sequenceDiagram
     Note over User: At onboarding time
     User->>ZK: submit claimUuidSponsored(uuid, operator, PM)
     ZK->>+PM: validateAndPayForPaymasterTransaction
-    Note over PM: isWhitelistedContract[FI] ✓, isWhitelisted[user] ✓, ETH balance ✓
+    Note over PM: isWhitelistedContract[FI] ✓, isWhitelistedUser[user] ✓, ETH balance ✓
     PM-->>-ZK: ok (PM pays gas)
 
     ZK->>+FI: claimUuidSponsored(uuid, operator, PM)

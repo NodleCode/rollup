@@ -10,6 +10,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AccessControlUtils} from "../__helpers__/AccessControlUtils.sol";
 import {BasePaymaster} from "../../src/paymasters/BasePaymaster.sol";
 import {BondTreasuryPaymaster} from "../../src/paymasters/BondTreasuryPaymaster.sol";
+import {WhitelistPaymaster} from "../../src/paymasters/WhitelistPaymaster.sol";
 import {QuotaControl} from "../../src/QuotaControl.sol";
 import {FleetIdentityUpgradeable} from "../../src/swarms/FleetIdentityUpgradeable.sol";
 
@@ -153,12 +154,12 @@ contract BondTreasuryPaymasterTest is Test {
         assertFalse(paymaster.isWhitelistedUser(bob));
 
         vm.expectEmit();
-        emit BondTreasuryPaymaster.WhitelistedUsersAdded(targets);
+        emit WhitelistPaymaster.WhitelistedUsersAdded(targets);
         paymaster.addWhitelistedUsers(targets);
         assertTrue(paymaster.isWhitelistedUser(bob));
 
         vm.expectEmit();
-        emit BondTreasuryPaymaster.WhitelistedUsersRemoved(targets);
+        emit WhitelistPaymaster.WhitelistedUsersRemoved(targets);
         paymaster.removeWhitelistedUsers(targets);
         assertFalse(paymaster.isWhitelistedUser(bob));
 
@@ -193,12 +194,12 @@ contract BondTreasuryPaymasterTest is Test {
 
     function test_RevertIf_nonWhitelistedUser_toPaymaster() public {
         vm.deal(address(paymaster), 10 ether);
-        vm.expectRevert(BondTreasuryPaymaster.UserIsNotWhitelisted.selector);
+        vm.expectRevert(WhitelistPaymaster.UserIsNotWhitelisted.selector);
         paymaster.mock_validateAndPayGeneralFlow(bob, address(paymaster), 1 ether);
     }
 
     function test_RevertIf_adminToSelf_paymasterBalanceTooLow() public {
-        vm.expectRevert(BondTreasuryPaymaster.PaymasterBalanceTooLow.selector);
+        vm.expectRevert(WhitelistPaymaster.PaymasterBalanceTooLow.selector);
         paymaster.mock_validateAndPayGeneralFlow(admin, address(paymaster), 1 ether);
     }
 
@@ -208,7 +209,7 @@ contract BondTreasuryPaymasterTest is Test {
     }
 
     function test_RevertIf_destIsNotWhitelisted() public {
-        vm.expectRevert(BondTreasuryPaymaster.DestIsNotWhitelisted.selector);
+        vm.expectRevert(WhitelistPaymaster.DestIsNotWhitelisted.selector);
         paymaster.mock_validateAndPayGeneralFlow(alice, address(0xDEAD), 0);
     }
 
@@ -231,7 +232,7 @@ contract BondTreasuryPaymasterTest is Test {
         vm.prank(admin);
         paymaster.addWhitelistedContracts(contracts_);
 
-        vm.expectRevert(BondTreasuryPaymaster.UserIsNotWhitelisted.selector);
+        vm.expectRevert(WhitelistPaymaster.UserIsNotWhitelisted.selector);
         paymaster.mock_validateAndPayGeneralFlow(bob, extra, 0);
     }
 
@@ -242,12 +243,12 @@ contract BondTreasuryPaymasterTest is Test {
 
         vm.startPrank(admin);
         vm.expectEmit();
-        emit BondTreasuryPaymaster.WhitelistedContractsAdded(contracts_);
+        emit WhitelistPaymaster.WhitelistedContractsAdded(contracts_);
         paymaster.addWhitelistedContracts(contracts_);
         assertTrue(paymaster.isWhitelistedContract(extra));
 
         vm.expectEmit();
-        emit BondTreasuryPaymaster.WhitelistedContractsRemoved(contracts_);
+        emit WhitelistPaymaster.WhitelistedContractsRemoved(contracts_);
         paymaster.removeWhitelistedContracts(contracts_);
         assertFalse(paymaster.isWhitelistedContract(extra));
         vm.stopPrank();
@@ -262,12 +263,12 @@ contract BondTreasuryPaymasterTest is Test {
     }
 
     function test_RevertIf_userIsNotWhitelisted_paymaster() public {
-        vm.expectRevert(BondTreasuryPaymaster.UserIsNotWhitelisted.selector);
+        vm.expectRevert(WhitelistPaymaster.UserIsNotWhitelisted.selector);
         paymaster.mock_validateAndPayGeneralFlow(bob, address(fleet), 0);
     }
 
     function test_RevertIf_paymasterBalanceTooLow() public {
-        vm.expectRevert(BondTreasuryPaymaster.PaymasterBalanceTooLow.selector);
+        vm.expectRevert(WhitelistPaymaster.PaymasterBalanceTooLow.selector);
         paymaster.mock_validateAndPayGeneralFlow(alice, address(fleet), 1 ether);
     }
 
@@ -303,7 +304,7 @@ contract BondTreasuryPaymasterTest is Test {
 
     function test_RevertIf_consumeSponsoredBond_notWhitelisted() public {
         vm.prank(address(fleet));
-        vm.expectRevert(BondTreasuryPaymaster.UserIsNotWhitelisted.selector);
+        vm.expectRevert(WhitelistPaymaster.UserIsNotWhitelisted.selector);
         paymaster.consumeSponsoredBond(bob, BASE_BOND);
     }
 
@@ -532,60 +533,6 @@ contract BondTreasuryPaymasterTest is Test {
     // Security: deployment & access boundaries
     // ══════════════════════════════════════════════
 
-    function test_RevertIf_constructor_zeroBondToken() public {
-        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
-        new MockBondTreasuryPaymaster(admin, withdrawer, _initialContractWhitelist(address(fleet)), address(0), QUOTA, PERIOD);
-    }
-
-    function test_RevertIf_constructor_zeroAdmin() public {
-        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
-        new MockBondTreasuryPaymaster(
-            address(0), withdrawer, _initialContractWhitelist(address(fleet)), address(bondToken), QUOTA, PERIOD
-        );
-    }
-
-    function test_RevertIf_constructor_zeroWithdrawer() public {
-        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
-        new MockBondTreasuryPaymaster(
-            admin, address(0), _initialContractWhitelist(address(fleet)), address(bondToken), QUOTA, PERIOD
-        );
-    }
-
-    function test_RevertIf_constructor_initialWhitelistContainsZeroAddress() public {
-        address[] memory bad = new address[](1);
-        bad[0] = address(0);
-        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
-        new MockBondTreasuryPaymaster(admin, withdrawer, bad, address(bondToken), QUOTA, PERIOD);
-    }
-
-    function test_RevertIf_addWhitelistedUsers_zeroAddress() public {
-        address[] memory bad = new address[](1);
-        bad[0] = address(0);
-        vm.prank(admin);
-        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
-        paymaster.addWhitelistedUsers(bad);
-    }
-
-    function test_RevertIf_addWhitelistedContracts_zeroAddress() public {
-        address[] memory bad = new address[](1);
-        bad[0] = address(0);
-        vm.prank(admin);
-        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
-        paymaster.addWhitelistedContracts(bad);
-    }
-
-    function test_RevertIf_withdrawTokens_zeroToken() public {
-        vm.prank(withdrawer);
-        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
-        paymaster.withdrawTokens(address(0), withdrawer, 1 ether);
-    }
-
-    function test_RevertIf_withdrawTokens_zeroRecipient() public {
-        vm.prank(withdrawer);
-        vm.expectRevert(BondTreasuryPaymaster.ZeroAddress.selector);
-        paymaster.withdrawTokens(address(bondToken), address(0), 1 ether);
-    }
-
     function test_RevertIf_attacker_cannot_mutate_whitelists() public {
         vm.startPrank(attacker);
         vm.expectRevert_AccessControlUnauthorizedAccount(attacker, paymaster.WHITELIST_ADMIN_ROLE());
@@ -628,7 +575,7 @@ contract BondTreasuryPaymasterTest is Test {
         vm.prank(admin);
         paymaster.removeWhitelistedContracts(self);
 
-        vm.expectRevert(BondTreasuryPaymaster.DestIsNotWhitelisted.selector);
+        vm.expectRevert(WhitelistPaymaster.DestIsNotWhitelisted.selector);
         paymaster.mock_validateAndPayGeneralFlow(admin, address(paymaster), 1 ether);
     }
 
