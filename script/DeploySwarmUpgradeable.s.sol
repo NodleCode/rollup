@@ -32,7 +32,8 @@ import {SwarmRegistryL1Upgradeable} from "../src/swarms/SwarmRegistryL1Upgradeab
  *   - DEPLOYER_PRIVATE_KEY: Private key for deployment
  *   - BOND_TOKEN: Address of the ERC20 bond token
  *   - BASE_BOND: Base bond amount in wei
- *   - OWNER: Owner address for upgrade authorization (defaults to deployer)
+ *   - COUNTRY_MULTIPLIER: (optional) Country multiplier for bond calculation (0 = use default)
+ *   - NODL_ADMIN: (optional) Owner address for all deployed contracts (defaults to deployer)
  */
 contract DeploySwarmUpgradeableL1 is Script {
     // Deployment artifacts
@@ -49,7 +50,7 @@ contract DeploySwarmUpgradeableL1 is Script {
         address bondToken = vm.envAddress("BOND_TOKEN");
         uint256 baseBond = vm.envUint("BASE_BOND");
         uint256 countryMultiplier = vm.envOr("COUNTRY_MULTIPLIER", uint256(0)); // 0 means use the default
-        address owner = vm.envOr("OWNER", vm.addr(deployerPrivateKey));
+        address owner = vm.envOr("NODL_ADMIN", vm.addr(deployerPrivateKey));
 
         console.log("=== Deploying Upgradeable Swarm Contracts (L1) ===");
         console.log("Bond Token:", bondToken);

@@ -47,8 +47,13 @@
 # The script loads from .env-test (testnet) or .env-prod (mainnet):
 #   - DEPLOYER_PRIVATE_KEY: Private key with ETH for gas
 #   - NODL: Address of the NODL token (used as bond token)
+#   - FLEET_OPERATOR: Address of the backend swarm operator (whitelisted user)
 #   - BASE_BOND: Bond amount in wei (e.g., 100000000000000000000 for 100 NODL)
-#   - OWNER: (optional) Contract owner address, defaults to deployer
+#   - NODL_ADMIN: (optional) Owner address for all deployed contracts, defaults to deployer
+#   - PAYMASTER_WITHDRAWER: (optional) Address allowed to withdraw tokens from paymaster, defaults to NODL_ADMIN
+#   - COUNTRY_MULTIPLIER: (optional) Country multiplier for bond calculation (0 = use default)
+#   - BOND_QUOTA: (optional) Max bond amount sponsorable per period in wei
+#   - BOND_PERIOD: (optional) Quota renewal period in seconds
 #
 # =============================================================================
 
@@ -158,14 +163,26 @@ preflight_checks() {
     exit 1
   fi
 
+  if [ -z "$FLEET_OPERATOR" ]; then
+    log_error "FLEET_OPERATOR not set in $ENV_FILE"
+    exit 1
+  fi
+
   # Ensure DEPLOYER_PRIVATE_KEY has 0x prefix (required by forge vm.envUint)
   if [[ "$DEPLOYER_PRIVATE_KEY" != 0x* ]]; then
     export DEPLOYER_PRIVATE_KEY="0x${DEPLOYER_PRIVATE_KEY}"
   fi
 
+  # Derive deployer address for defaults
+  DEPLOYER_ADDRESS=$(cast wallet address "$DEPLOYER_PRIVATE_KEY")
+
   # Set defaults
   export BOND_TOKEN="${BOND_TOKEN:-$NODL}"
-  export BASE_BOND="${BASE_BOND:-100000000000000000000}"  # 100 NODL default
+  export BASE_BOND="${BASE_BOND:-1000000000000000000000}"  # 1000 NODL default
+  export NODL_ADMIN="${NODL_ADMIN:-$DEPLOYER_ADDRESS}"
+  export PAYMASTER_WITHDRAWER="${PAYMASTER_WITHDRAWER:-$NODL_ADMIN}"
+  export BOND_QUOTA="${BOND_QUOTA:-100000000000000000000000}"  # 100000 NODL default
+  export BOND_PERIOD="${BOND_PERIOD:-86400}"  # 1 day default
 
   log_success "Pre-flight checks passed"
 }
@@ -319,7 +336,11 @@ deploy_contracts() {
     log_info "Would deploy with:"
     log_info "  BOND_TOKEN: $BOND_TOKEN"
     log_info "  BASE_BOND: $BASE_BOND"
-    log_info "  OWNER: ${OWNER:-deployer}"
+    log_info "  NODL_ADMIN: ${NODL_ADMIN:-deployer}"
+    log_info "  PAYMASTER_WITHDRAWER: ${PAYMASTER_WITHDRAWER:-deployer}"
+    log_info "  FLEET_OPERATOR: $FLEET_OPERATOR"
+    log_info "  BOND_QUOTA: $BOND_QUOTA"
+    log_info "  BOND_PERIOD: $BOND_PERIOD"
     log_info "  RPC: $RPC_URL"
     return 0
   fi
@@ -338,9 +359,10 @@ deploy_contracts() {
     FLEET_IDENTITY_IMPL=$(grep -o 'FleetIdentity Implementation: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
     SWARM_REGISTRY_PROXY=$(grep -o 'SwarmRegistry Proxy: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
     SWARM_REGISTRY_IMPL=$(grep -o 'SwarmRegistry Implementation: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
+    BOND_TREASURY_PAYMASTER=$(grep -o 'BondTreasuryPaymaster: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
     
     # Validate we got addresses
-    if [ -z "$SERVICE_PROVIDER_PROXY" ] || [ -z "$FLEET_IDENTITY_PROXY" ] || [ -z "$SWARM_REGISTRY_PROXY" ]; then
+    if [ -z "$SERVICE_PROVIDER_PROXY" ] || [ -z "$FLEET_IDENTITY_PROXY" ] || [ -z "$SWARM_REGISTRY_PROXY" ] || [ -z "$BOND_TREASURY_PAYMASTER" ]; then
       log_error "Could not extract all addresses from output"
       log_info "Full output saved to: $DEPLOY_LOG"
       cat "$DEPLOY_LOG"
@@ -401,6 +423,13 @@ verify_deployment() {
   SR_OWNER=$(cast call "$SWARM_REGISTRY_PROXY" "owner()(address)" --rpc-url "$RPC_URL")
   log_success "SwarmRegistry owner: $SR_OWNER"
   
+  # Test BondTreasuryPaymaster
+  log_info "Testing BondTreasuryPaymaster..."
+  BTP_TOKEN=$(cast call "$BOND_TREASURY_PAYMASTER" "bondToken()(address)" --rpc-url "$RPC_URL")
+  BTP_QUOTA=$(cast call "$BOND_TREASURY_PAYMASTER" "quota()(uint256)" --rpc-url "$RPC_URL")
+  log_success "BondTreasuryPaymaster bondToken: $BTP_TOKEN"
+  log_success "BondTreasuryPaymaster quota: $BTP_QUOTA"
+  
   log_success "All contracts verified successfully!"
 }
 
@@ -438,6 +467,9 @@ update_env_file() {
     sed -i.bak '/^SWARM_REGISTRY_PROXY=/d' "$ENV_FILE"
     sed -i.bak '/^SWARM_REGISTRY_IMPL=/d' "$ENV_FILE"
     sed -i.bak '/^BASE_BOND=/d' "$ENV_FILE"
+    sed -i.bak '/^BOND_TREASURY_PAYMASTER=/d' "$ENV_FILE"
+    sed -i.bak '/^BOND_QUOTA=/d' "$ENV_FILE"
+    sed -i.bak '/^BOND_PERIOD=/d' "$ENV_FILE"
     # Clean up trailing blank lines
     sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$ENV_FILE"
     rm -f "${ENV_FILE}.bak"
@@ -453,7 +485,10 @@ FLEET_IDENTITY_PROXY=$FLEET_IDENTITY_PROXY
 FLEET_IDENTITY_IMPL=$FLEET_IDENTITY_IMPL
 SWARM_REGISTRY_PROXY=$SWARM_REGISTRY_PROXY
 SWARM_REGISTRY_IMPL=$SWARM_REGISTRY_IMPL
+BOND_TREASURY_PAYMASTER=$BOND_TREASURY_PAYMASTER
 BASE_BOND=$BASE_BOND
+BOND_QUOTA=$BOND_QUOTA
+BOND_PERIOD=$BOND_PERIOD
 EOF
   
   log_success "Environment file updated"
@@ -499,10 +534,18 @@ print_summary() {
   echo "  Implementation: $SWARM_REGISTRY_IMPL"
   echo "  Explorer:       $EXPLORER_URL/address/$SWARM_REGISTRY_PROXY"
   echo ""
+  echo "BondTreasuryPaymaster:"
+  echo "  Address:        $BOND_TREASURY_PAYMASTER"
+  echo "  Explorer:       $EXPLORER_URL/address/$BOND_TREASURY_PAYMASTER"
+  echo ""
   echo "Configuration:"
-  echo "  Owner:      ${OWNER:-deployer}"
-  echo "  Bond Token: $BOND_TOKEN"
-  echo "  Base Bond:  $BASE_BOND wei"
+  echo "  Owner:                ${NODL_ADMIN:-deployer}"
+  echo "  Withdrawer:           ${PAYMASTER_WITHDRAWER:-deployer}"
+  echo "  Fleet Operator:       $FLEET_OPERATOR"
+  echo "  Bond Token:           $BOND_TOKEN"
+  echo "  Base Bond:            $BASE_BOND wei"
+  echo "  Bond Quota:           $BOND_QUOTA wei"
+  echo "  Bond Period:          $BOND_PERIOD seconds"
   echo ""
   echo "=============================================="
 }

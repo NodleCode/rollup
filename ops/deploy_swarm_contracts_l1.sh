@@ -44,7 +44,8 @@
 #   - DEPLOYER_PRIVATE_KEY: Private key with ETH for gas
 #   - BOND_TOKEN: Address of the ERC20 bond token (NODL)
 #   - BASE_BOND: Bond amount in wei (e.g., 100000000000000000000 for 100 NODL)
-#   - OWNER: (optional) Contract owner address, defaults to deployer
+#   - NODL_ADMIN: (optional) Owner address for all deployed contracts, defaults to deployer
+#   - COUNTRY_MULTIPLIER: (optional) Country multiplier for bond calculation (0 = use default)
 #   - L1_RPC: RPC URL for L1 (Sepolia or Mainnet)
 #   - ETHERSCAN_API_KEY: For contract verification
 #
@@ -157,9 +158,18 @@ preflight_checks() {
     exit 1
   fi
 
+  # Ensure DEPLOYER_PRIVATE_KEY has 0x prefix
+  if [[ "$DEPLOYER_PRIVATE_KEY" != 0x* ]]; then
+    export DEPLOYER_PRIVATE_KEY="0x${DEPLOYER_PRIVATE_KEY}"
+  fi
+
+  # Derive deployer address for defaults
+  DEPLOYER_ADDRESS=$(cast wallet address "$DEPLOYER_PRIVATE_KEY")
+
   # Set defaults
   export BOND_TOKEN="${BOND_TOKEN:-$NODL}"
   export BASE_BOND="${BASE_BOND:-100000000000000000000}"  # 100 NODL default
+  export NODL_ADMIN="${NODL_ADMIN:-$DEPLOYER_ADDRESS}"
 
   log_success "Pre-flight checks passed"
 }
@@ -214,7 +224,7 @@ deploy_contracts() {
     log_info "Would deploy with:"
     log_info "  BOND_TOKEN: $BOND_TOKEN"
     log_info "  BASE_BOND: $BASE_BOND"
-    log_info "  OWNER: ${OWNER:-deployer}"
+    log_info "  NODL_ADMIN: ${NODL_ADMIN:-deployer}"
     log_info "  RPC: $L1_RPC"
   fi
   
@@ -372,7 +382,7 @@ print_summary() {
   echo "  Explorer:       $EXPLORER_URL/address/$SWARM_REGISTRY_PROXY"
   echo ""
   echo "Configuration:"
-  echo "  Owner:      ${OWNER:-deployer}"
+  echo "  Owner:      ${NODL_ADMIN:-deployer}"
   echo "  Bond Token: $BOND_TOKEN"
   echo "  Base Bond:  $BASE_BOND wei"
   echo ""
