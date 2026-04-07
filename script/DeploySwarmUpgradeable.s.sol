@@ -77,8 +77,9 @@ contract DeploySwarmUpgradeableL1 is Script {
         fleetIdentityImpl = address(new FleetIdentityUpgradeable());
         console.log("   Implementation:", fleetIdentityImpl);
 
-        bytes memory fleetIdentityInitData =
-            abi.encodeWithSelector(FleetIdentityUpgradeable.initialize.selector, owner, bondToken, baseBond, countryMultiplier);
+        bytes memory fleetIdentityInitData = abi.encodeWithSelector(
+            FleetIdentityUpgradeable.initialize.selector, owner, bondToken, baseBond, countryMultiplier
+        );
         fleetIdentityProxy = address(new ERC1967Proxy(fleetIdentityImpl, fleetIdentityInitData));
         console.log("   Proxy:", fleetIdentityProxy);
         console.log("");

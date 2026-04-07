@@ -83,13 +83,13 @@ graph TB
 
 ### 1.3 Core Components
 
-| Contract                   | Role                                     | Identity                                        | Token |
-| :------------------------- | :--------------------------------------- | :---------------------------------------------- | :---- |
-| **FleetIdentity**          | Fleet registry (ERC-721 Enumerable)      | `(regionKey << 128) \| uint128(uuid)`           | SFID  |
-| **ServiceProvider**        | Backend URL registry (ERC-721)           | `keccak256(url)`                                | SSV   |
-| **SwarmRegistryL1**        | Tag group registry (Ethereum L1)         | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
-| **SwarmRegistryUniversal** | Tag group registry (ZkSync Era, all EVM) | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
-| **BondTreasuryPaymaster** | `WhitelistPaymaster` + `QuotaControl` + bond treasury | —                                               | —     |
+| Contract                   | Role                                                  | Identity                                        | Token |
+| :------------------------- | :---------------------------------------------------- | :---------------------------------------------- | :---- |
+| **FleetIdentity**          | Fleet registry (ERC-721 Enumerable)                   | `(regionKey << 128) \| uint128(uuid)`           | SFID  |
+| **ServiceProvider**        | Backend URL registry (ERC-721)                        | `keccak256(url)`                                | SSV   |
+| **SwarmRegistryL1**        | Tag group registry (Ethereum L1)                      | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
+| **SwarmRegistryUniversal** | Tag group registry (ZkSync Era, all EVM)              | `keccak256(fleetUuid, filter, fpSize, tagType)` | —     |
+| **BondTreasuryPaymaster**  | `WhitelistPaymaster` + `QuotaControl` + bond treasury | —                                               | —     |
 
 All contracts are **DAO-owned** (UUPS upgradeable) during initial operation, allowing parameter tuning and bug fixes. Once mature and stable, an upgrade can renounce ownership to make them fully **permissionless**. Access control is via NFT ownership; FleetIdentity requires an ERC-20 bond (e.g., NODL) as an anti-spam mechanism.
 
@@ -656,10 +656,13 @@ sequenceDiagram
 // Deployment example (Nodle onboarding treasury)
 address[] memory initialContracts = new address[](1);
 initialContracts[0] = fleetIdentityProxy;
+address[] memory initialUsers = new address[](1);
+initialUsers[0] = nodleSwarmOperator;
 new BondTreasuryPaymaster(
     admin,
     withdrawer,
     initialContracts,
+    initialUsers,
     nodlTokenAddress,
     100_000e18,   // quota: 100,000 NODL per period
     7 days        // period length
@@ -1441,15 +1444,15 @@ This enables a **Web2-style onboarding experience with full Web3 ownership**: a 
 
 ### 11.2 Key Properties
 
-| Property             | Value                                                                                                |
-| :------------------- | :--------------------------------------------------------------------------------------------------- |
-| **Gas sponsorship**  | Pays ZkSync gas for calls to whitelisted destinations by whitelisted users; also sponsors admin calls to itself |
-| **Bond sponsorship** | Pays `BASE_BOND` NODL from its own balance via `claimUuidSponsored`                                  |
+| Property             | Value                                                                                                                                                                                                           |
+| :------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Gas sponsorship**  | Pays ZkSync gas for calls to whitelisted destinations by whitelisted users; also sponsors admin calls to itself                                                                                                 |
+| **Bond sponsorship** | Pays `BASE_BOND` NODL from its own balance via `claimUuidSponsored`                                                                                                                                             |
 | **Allowed targets**  | `isWhitelistedContract[to] && isWhitelistedUser[from]`. Constructor seeds `initialWhitelistedContracts` and always seeds `address(this)` for sponsored admin txs. Bond pullers use the same contract whitelist. |
-| **Access control**   | `admin`, `WHITELIST_ADMIN_ROLE`, `WITHDRAWER_ROLE`                                                   |
-| **Quota control**    | Inherits `QuotaControl` — configurable per-period NODL cap                                         |
-| **Paymaster base**   | Inherits `WhitelistPaymaster` → `BasePaymaster` (shared whitelist paymaster implementation)         |
-| **Paymaster flow**   | General flow only — approval-based flow not supported                                                |
+| **Access control**   | `admin`, `WHITELIST_ADMIN_ROLE`, `WITHDRAWER_ROLE`                                                                                                                                                              |
+| **Quota control**    | Inherits `QuotaControl` — configurable per-period NODL cap                                                                                                                                                      |
+| **Paymaster base**   | Inherits `WhitelistPaymaster` → `BasePaymaster` (shared whitelist paymaster implementation)                                                                                                                     |
+| **Paymaster flow**   | General flow only — approval-based flow not supported                                                                                                                                                           |
 
 ### 11.3 Contract Interface
 
@@ -1513,18 +1516,18 @@ This allows different sponsors with different policies (access lists, geographic
 
 ### 11.7 Events & Errors
 
-| Event / Error                        | Type  | Description                                                                                                                              |
-| :----------------------------------- | :---- | :--------------------------------------------------------------------------------------------------------------------------------------- |
-| `WhitelistedUsersAdded(users)`       | Event | Emitted when users are added to the whitelist                                                                                            |
-| `WhitelistedUsersRemoved(users)`     | Event | Emitted when users are removed from the whitelist                                                                                        |
-| `WhitelistedContractsAdded(contracts)` | Event | Emitted when contract destinations are added (including non-empty constructor `initialWhitelistedContracts`)                    |
-| `WhitelistedContractsRemoved(contracts)` | Event | Emitted when contract destinations are removed                                                                                           |
-| `TokensWithdrawn(token, to, amount)` | Event | Emitted on ERC-20 withdrawal                                                                                                             |
-| `UserIsNotWhitelisted()`             | Error | User not in whitelist (bond or gas validation); defined on `WhitelistPaymaster`                                                          |
-| `DestIsNotWhitelisted()`             | Error | `to` not in `isWhitelistedContract`; defined on `WhitelistPaymaster`                                                                     |
-| `PaymasterBalanceTooLow()`           | Error | Insufficient ETH to cover gas; defined on `WhitelistPaymaster`                                                                          |
-| `CallerNotWhitelistedContract()`     | Error | `consumeSponsoredBond` caller not in `isWhitelistedContract`                                                                              |
-| `InsufficientBondBalance()`          | Error | Paymaster NODL balance below requested bond amount                                                                                       |
+| Event / Error                            | Type  | Description                                                                                                  |
+| :--------------------------------------- | :---- | :----------------------------------------------------------------------------------------------------------- |
+| `WhitelistedUsersAdded(users)`           | Event | Emitted when users are added to the whitelist                                                                |
+| `WhitelistedUsersRemoved(users)`         | Event | Emitted when users are removed from the whitelist                                                            |
+| `WhitelistedContractsAdded(contracts)`   | Event | Emitted when contract destinations are added (including non-empty constructor `initialWhitelistedContracts`) |
+| `WhitelistedContractsRemoved(contracts)` | Event | Emitted when contract destinations are removed                                                               |
+| `TokensWithdrawn(token, to, amount)`     | Event | Emitted on ERC-20 withdrawal                                                                                 |
+| `UserIsNotWhitelisted()`                 | Error | User not in whitelist (bond or gas validation); defined on `WhitelistPaymaster`                              |
+| `DestIsNotWhitelisted()`                 | Error | `to` not in `isWhitelistedContract`; defined on `WhitelistPaymaster`                                         |
+| `PaymasterBalanceTooLow()`               | Error | Insufficient ETH to cover gas; defined on `WhitelistPaymaster`                                               |
+| `CallerNotWhitelistedContract()`         | Error | `consumeSponsoredBond` caller not in `isWhitelistedContract`                                                 |
+| `InsufficientBondBalance()`              | Error | Paymaster NODL balance below requested bond amount                                                           |
 
 ### 11.8 Complete Sponsored Onboarding Flow
 

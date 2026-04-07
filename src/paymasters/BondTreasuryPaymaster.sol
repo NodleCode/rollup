@@ -25,18 +25,27 @@ contract BondTreasuryPaymaster is WhitelistPaymaster, QuotaControl {
         address admin,
         address withdrawer,
         address[] memory initialWhitelistedContracts,
+        address[] memory initialWhitelistedUsers,
         address bondToken_,
         uint256 initialQuota,
         uint256 initialPeriod
     ) WhitelistPaymaster(admin, withdrawer) QuotaControl(initialQuota, initialPeriod, admin) {
         bondToken = IERC20(bondToken_);
         uint256 n = initialWhitelistedContracts.length;
-        for (uint256 i = 0; i < n; i++) {
+        for (uint256 i = 0; i < n; ++i) {
             isWhitelistedContract[initialWhitelistedContracts[i]] = true;
         }
         if (n > 0) {
             emit WhitelistedContractsAdded(initialWhitelistedContracts);
         }
+        uint256 m = initialWhitelistedUsers.length;
+        for (uint256 j = 0; j < m; ++j) {
+            isWhitelistedUser[initialWhitelistedUsers[j]] = true;
+        }
+        if (m > 0) {
+            emit WhitelistedUsersAdded(initialWhitelistedUsers);
+        }
+
         if (!isWhitelistedContract[address(this)]) {
             isWhitelistedContract[address(this)] = true;
             address[] memory selfDest = new address[](1);
