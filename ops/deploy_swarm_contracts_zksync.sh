@@ -47,8 +47,13 @@
 # The script loads from .env-test (testnet) or .env-prod (mainnet):
 #   - DEPLOYER_PRIVATE_KEY: Private key with ETH for gas
 #   - NODL: Address of the NODL token (used as bond token)
+#   - FLEET_OPERATOR: Address of the backend swarm operator (whitelisted user)
 #   - BASE_BOND: Bond amount in wei (e.g., 100000000000000000000 for 100 NODL)
-#   - OWNER: (optional) Contract owner address, defaults to deployer
+#   - NODL_ADMIN: (optional) Owner address for all deployed contracts, defaults to deployer
+#   - PAYMASTER_WITHDRAWER: (optional) Address allowed to withdraw tokens from paymaster, defaults to NODL_ADMIN
+#   - COUNTRY_MULTIPLIER: (optional) Country multiplier for bond calculation (0 = use default)
+#   - BOND_QUOTA: (optional) Max bond amount sponsorable per period in wei
+#   - BOND_PERIOD: (optional) Quota renewal period in seconds
 #
 # =============================================================================
 
@@ -71,11 +76,15 @@ case "$NETWORK" in
     ENV_FILE=".env-test"
     HARDHAT_NETWORK="zkSyncSepoliaTestnet"
     EXPLORER_URL="https://sepolia.explorer.zksync.io"
+    VERIFIER_URL="https://explorer.sepolia.era.zksync.dev/contract_verification"
+    FORGE_CHAIN="zksync-testnet"
     ;;
   mainnet)
     ENV_FILE=".env-prod"
     HARDHAT_NETWORK="zkSyncMainnet"
     EXPLORER_URL="https://explorer.zksync.io"
+    VERIFIER_URL="https://zksync2-mainnet-explorer.zksync.io/contract_verification"
+    FORGE_CHAIN="zksync"
     ;;
   *)
     echo "Error: Unknown network '$NETWORK'. Use 'testnet' or 'mainnet'."
@@ -158,14 +167,26 @@ preflight_checks() {
     exit 1
   fi
 
+  if [ -z "$FLEET_OPERATOR" ]; then
+    log_error "FLEET_OPERATOR not set in $ENV_FILE"
+    exit 1
+  fi
+
   # Ensure DEPLOYER_PRIVATE_KEY has 0x prefix (required by forge vm.envUint)
   if [[ "$DEPLOYER_PRIVATE_KEY" != 0x* ]]; then
     export DEPLOYER_PRIVATE_KEY="0x${DEPLOYER_PRIVATE_KEY}"
   fi
 
+  # Derive deployer address for defaults
+  DEPLOYER_ADDRESS=$(cast wallet address "$DEPLOYER_PRIVATE_KEY")
+
   # Set defaults
   export BOND_TOKEN="${BOND_TOKEN:-$NODL}"
-  export BASE_BOND="${BASE_BOND:-100000000000000000000}"  # 100 NODL default
+  export BASE_BOND="${BASE_BOND:-1000000000000000000000}"  # 1000 NODL default
+  export NODL_ADMIN="${NODL_ADMIN:-$DEPLOYER_ADDRESS}"
+  export PAYMASTER_WITHDRAWER="${PAYMASTER_WITHDRAWER:-$NODL_ADMIN}"
+  export BOND_QUOTA="${BOND_QUOTA:-100000000000000000000000}"  # 100000 NODL default
+  export BOND_PERIOD="${BOND_PERIOD:-86400}"  # 1 day default
 
   log_success "Pre-flight checks passed"
 }
@@ -309,17 +330,20 @@ deploy_contracts() {
   
   if [ "$BROADCAST" = "--broadcast" ]; then
     FORGE_ARGS+=("--broadcast" "--slow")
-    
-    # Add ZkSync-specific verification
-    if [ -n "$L2_VERIFIER_URL" ]; then
-      FORGE_ARGS+=("--verify" "--verifier" "zksync" "--verifier-url" "$L2_VERIFIER_URL")
-    fi
+    # NOTE: We do NOT add --verify here. forge script --verify sends absolute
+    # source paths which the ZkSync verifier rejects with "import with absolute
+    # or traversal path". Source code verification is handled separately in
+    # verify_source_code() using forge flatten + forge verify-contract.
   else
     log_warning "DRY RUN MODE - Add '--broadcast' to actually deploy"
     log_info "Would deploy with:"
     log_info "  BOND_TOKEN: $BOND_TOKEN"
     log_info "  BASE_BOND: $BASE_BOND"
-    log_info "  OWNER: ${OWNER:-deployer}"
+    log_info "  NODL_ADMIN: ${NODL_ADMIN:-deployer}"
+    log_info "  PAYMASTER_WITHDRAWER: ${PAYMASTER_WITHDRAWER:-deployer}"
+    log_info "  FLEET_OPERATOR: $FLEET_OPERATOR"
+    log_info "  BOND_QUOTA: $BOND_QUOTA"
+    log_info "  BOND_PERIOD: $BOND_PERIOD"
     log_info "  RPC: $RPC_URL"
     return 0
   fi
@@ -338,9 +362,10 @@ deploy_contracts() {
     FLEET_IDENTITY_IMPL=$(grep -o 'FleetIdentity Implementation: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
     SWARM_REGISTRY_PROXY=$(grep -o 'SwarmRegistry Proxy: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
     SWARM_REGISTRY_IMPL=$(grep -o 'SwarmRegistry Implementation: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
+    BOND_TREASURY_PAYMASTER=$(grep -o 'BondTreasuryPaymaster: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | grep -o '0x[0-9a-fA-F]*')
     
     # Validate we got addresses
-    if [ -z "$SERVICE_PROVIDER_PROXY" ] || [ -z "$FLEET_IDENTITY_PROXY" ] || [ -z "$SWARM_REGISTRY_PROXY" ]; then
+    if [ -z "$SERVICE_PROVIDER_PROXY" ] || [ -z "$FLEET_IDENTITY_PROXY" ] || [ -z "$SWARM_REGISTRY_PROXY" ] || [ -z "$BOND_TREASURY_PAYMASTER" ]; then
       log_error "Could not extract all addresses from output"
       log_info "Full output saved to: $DEPLOY_LOG"
       cat "$DEPLOY_LOG"
@@ -401,7 +426,149 @@ verify_deployment() {
   SR_OWNER=$(cast call "$SWARM_REGISTRY_PROXY" "owner()(address)" --rpc-url "$RPC_URL")
   log_success "SwarmRegistry owner: $SR_OWNER"
   
+  # Test BondTreasuryPaymaster
+  log_info "Testing BondTreasuryPaymaster..."
+  BTP_TOKEN=$(cast call "$BOND_TREASURY_PAYMASTER" "bondToken()(address)" --rpc-url "$RPC_URL")
+  BTP_QUOTA=$(cast call "$BOND_TREASURY_PAYMASTER" "quota()(uint256)" --rpc-url "$RPC_URL")
+  log_success "BondTreasuryPaymaster bondToken: $BTP_TOKEN"
+  log_success "BondTreasuryPaymaster quota: $BTP_QUOTA"
+  
   log_success "All contracts verified successfully!"
+}
+
+# =============================================================================
+# Step 4b: Verify Source Code on Block Explorer
+# =============================================================================
+#
+# Why a separate step:
+#   forge script --verify sends absolute file paths (e.g. /Users/me/project/src/...)
+#   which the ZkSync verifier rejects: "import with absolute or traversal path".
+#
+# Workaround:
+#   1. Flatten each contract into a single .sol file (no imports)
+#   2. Use forge verify-contract with the flattened file
+#   3. Clean up temporary flat files
+#
+# Constructor args are extracted from the broadcast JSON using the ZkSync
+# ContractDeployer ABI: create(bytes32 salt, bytes32 bytecodeHash, bytes ctorInput)
+#
+# =============================================================================
+
+verify_source_code() {
+  if [ "$BROADCAST" != "--broadcast" ]; then
+    return 0
+  fi
+
+  log_info "Verifying source code on block explorer..."
+
+  # Get RPC URL for chain detection
+  if [ "$NETWORK" = "mainnet" ]; then
+    RPC_URL="${L2_RPC:-https://mainnet.era.zksync.io}"
+    CHAIN_ID="324"
+  else
+    RPC_URL="${L2_RPC:-https://rpc.ankr.com/zksync_era_sepolia}"
+    CHAIN_ID="300"
+  fi
+
+  BROADCAST_JSON="broadcast/DeploySwarmUpgradeableZkSync.s.sol/${CHAIN_ID}/run-latest.json"
+  if [ ! -f "$BROADCAST_JSON" ]; then
+    log_error "Broadcast file not found: $BROADCAST_JSON"
+    log_warning "Skipping source code verification"
+    return 1
+  fi
+
+  # Extract constructor args from broadcast JSON
+  # ZkSync ContractDeployer.create(): 0x9c4d535b + salt(32) + hash(32) + offset_to_ctor(32) + len(32) + ctor_data
+  log_info "Extracting constructor args from broadcast..."
+  CTOR_ARGS=$(python3 -c "
+import json, sys
+with open('$BROADCAST_JSON') as f:
+    data = json.load(f)
+for tx in data['transactions']:
+    addr = (tx.get('additionalContracts') or [{}])[0].get('address', '')
+    inp = tx['transaction'].get('input', '')
+    payload = inp[10:]  # skip 0x + 9c4d535b
+    offset = int(payload[128:192], 16)
+    ctor_start = offset * 2
+    ctor_len = int(payload[ctor_start:ctor_start+64], 16)
+    ctor_args = payload[ctor_start+64:ctor_start+64+ctor_len*2]
+    print(f'{addr}:{ctor_args}')
+")
+
+  # Build lookup of address -> constructor args
+  declare -A CTOR_MAP
+  while IFS=: read -r addr args; do
+    CTOR_MAP["$addr"]="$args"
+  done <<< "$CTOR_ARGS"
+
+  # Create temporary directory for flattened sources
+  FLAT_DIR=$(mktemp -d)
+
+  # Flatten all unique contract sources
+  log_info "Flattening contract sources..."
+  forge flatten src/swarms/ServiceProviderUpgradeable.sol > "$FLAT_DIR/FlatSP.sol"
+  forge flatten src/swarms/FleetIdentityUpgradeable.sol > "$FLAT_DIR/FlatFI.sol"
+  forge flatten src/swarms/SwarmRegistryUniversalUpgradeable.sol > "$FLAT_DIR/FlatSR.sol"
+  forge flatten lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol > "$FLAT_DIR/FlatProxy.sol"
+  forge flatten src/paymasters/BondTreasuryPaymaster.sol > "$FLAT_DIR/FlatBTP.sol"
+
+  # Copy flat files into src/ so forge can find them
+  cp "$FLAT_DIR/FlatSP.sol" src/FlatSP.sol
+  cp "$FLAT_DIR/FlatFI.sol" src/FlatFI.sol
+  cp "$FLAT_DIR/FlatSR.sol" src/FlatSR.sol
+  cp "$FLAT_DIR/FlatProxy.sol" src/FlatProxy.sol
+  cp "$FLAT_DIR/FlatBTP.sol" src/FlatBTP.sol
+
+  VERIFY_FAILED=0
+
+  # Helper to verify a single contract
+  verify_one() {
+    local address="$1"
+    local source="$2"
+    local label="$3"
+    local ctor_key
+    ctor_key=$(echo "$address" | tr '[:upper:]' '[:lower:]')
+    local args="${CTOR_MAP[$ctor_key]}"
+
+    local VARGS=(
+      --zksync
+      --chain "$FORGE_CHAIN"
+      --verifier zksync
+      --verifier-url "$VERIFIER_URL"
+      "$address"
+      "$source"
+    )
+    if [ -n "$args" ]; then
+      VARGS+=(--constructor-args "$args")
+    fi
+
+    log_info "Verifying $label at $address..."
+    if forge verify-contract "${VARGS[@]}" 2>&1; then
+      log_success "$label verified"
+    else
+      log_error "$label verification failed (can retry manually)"
+      VERIFY_FAILED=$((VERIFY_FAILED + 1))
+    fi
+  }
+
+  # Verify all 7 contracts
+  verify_one "$SERVICE_PROVIDER_IMPL" "src/FlatSP.sol:ServiceProviderUpgradeable" "ServiceProvider Implementation"
+  verify_one "$SERVICE_PROVIDER_PROXY" "src/FlatProxy.sol:ERC1967Proxy" "ServiceProvider Proxy"
+  verify_one "$FLEET_IDENTITY_IMPL" "src/FlatFI.sol:FleetIdentityUpgradeable" "FleetIdentity Implementation"
+  verify_one "$FLEET_IDENTITY_PROXY" "src/FlatProxy.sol:ERC1967Proxy" "FleetIdentity Proxy"
+  verify_one "$SWARM_REGISTRY_IMPL" "src/FlatSR.sol:SwarmRegistryUniversalUpgradeable" "SwarmRegistry Implementation"
+  verify_one "$SWARM_REGISTRY_PROXY" "src/FlatProxy.sol:ERC1967Proxy" "SwarmRegistry Proxy"
+  verify_one "$BOND_TREASURY_PAYMASTER" "src/FlatBTP.sol:BondTreasuryPaymaster" "BondTreasuryPaymaster"
+
+  # Clean up flat files from src/
+  rm -f src/FlatSP.sol src/FlatFI.sol src/FlatSR.sol src/FlatProxy.sol src/FlatBTP.sol
+  rm -rf "$FLAT_DIR"
+
+  if [ "$VERIFY_FAILED" -gt 0 ]; then
+    log_warning "$VERIFY_FAILED contract(s) failed source verification (deployment itself succeeded)"
+  else
+    log_success "All 7 contracts source-code verified on block explorer!"
+  fi
 }
 
 # =============================================================================
@@ -438,6 +605,9 @@ update_env_file() {
     sed -i.bak '/^SWARM_REGISTRY_PROXY=/d' "$ENV_FILE"
     sed -i.bak '/^SWARM_REGISTRY_IMPL=/d' "$ENV_FILE"
     sed -i.bak '/^BASE_BOND=/d' "$ENV_FILE"
+    sed -i.bak '/^BOND_TREASURY_PAYMASTER=/d' "$ENV_FILE"
+    sed -i.bak '/^BOND_QUOTA=/d' "$ENV_FILE"
+    sed -i.bak '/^BOND_PERIOD=/d' "$ENV_FILE"
     # Clean up trailing blank lines
     sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$ENV_FILE"
     rm -f "${ENV_FILE}.bak"
@@ -453,7 +623,10 @@ FLEET_IDENTITY_PROXY=$FLEET_IDENTITY_PROXY
 FLEET_IDENTITY_IMPL=$FLEET_IDENTITY_IMPL
 SWARM_REGISTRY_PROXY=$SWARM_REGISTRY_PROXY
 SWARM_REGISTRY_IMPL=$SWARM_REGISTRY_IMPL
+BOND_TREASURY_PAYMASTER=$BOND_TREASURY_PAYMASTER
 BASE_BOND=$BASE_BOND
+BOND_QUOTA=$BOND_QUOTA
+BOND_PERIOD=$BOND_PERIOD
 EOF
   
   log_success "Environment file updated"
@@ -499,10 +672,18 @@ print_summary() {
   echo "  Implementation: $SWARM_REGISTRY_IMPL"
   echo "  Explorer:       $EXPLORER_URL/address/$SWARM_REGISTRY_PROXY"
   echo ""
+  echo "BondTreasuryPaymaster:"
+  echo "  Address:        $BOND_TREASURY_PAYMASTER"
+  echo "  Explorer:       $EXPLORER_URL/address/$BOND_TREASURY_PAYMASTER"
+  echo ""
   echo "Configuration:"
-  echo "  Owner:      ${OWNER:-deployer}"
-  echo "  Bond Token: $BOND_TOKEN"
-  echo "  Base Bond:  $BASE_BOND wei"
+  echo "  Owner:                ${NODL_ADMIN:-deployer}"
+  echo "  Withdrawer:           ${PAYMASTER_WITHDRAWER:-deployer}"
+  echo "  Fleet Operator:       $FLEET_OPERATOR"
+  echo "  Bond Token:           $BOND_TOKEN"
+  echo "  Base Bond:            $BASE_BOND wei"
+  echo "  Bond Quota:           $BOND_QUOTA wei"
+  echo "  Bond Period:          $BOND_PERIOD seconds"
   echo ""
   echo "=============================================="
 }
@@ -525,6 +706,7 @@ main() {
   compile_contracts
   deploy_contracts
   verify_deployment
+  verify_source_code
   update_env_file
   print_summary
   

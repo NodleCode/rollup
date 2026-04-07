@@ -44,10 +44,21 @@ contract MockBondTreasuryPaymaster is BondTreasuryPaymaster {
         address admin,
         address withdrawer,
         address[] memory initialWhitelistedContracts,
+        address[] memory initialWhitelistedUsers,
         address bondToken_,
         uint256 initialQuota,
         uint256 initialPeriod
-    ) BondTreasuryPaymaster(admin, withdrawer, initialWhitelistedContracts, bondToken_, initialQuota, initialPeriod) {}
+    )
+        BondTreasuryPaymaster(
+            admin,
+            withdrawer,
+            initialWhitelistedContracts,
+            initialWhitelistedUsers,
+            bondToken_,
+            initialQuota,
+            initialPeriod
+        )
+    {}
 
     function mock_validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) public view {
         _validateAndPayGeneralFlow(from, to, requiredETH);
@@ -94,6 +105,16 @@ contract BondTreasuryPaymasterTest is Test {
         return c;
     }
 
+    function _emptyAddresses() internal pure returns (address[] memory) {
+        return new address[](0);
+    }
+
+    function _singleAddress(address a) internal pure returns (address[] memory) {
+        address[] memory arr = new address[](1);
+        arr[0] = a;
+        return arr;
+    }
+
     function setUp() public {
         bondToken = new MockERC20SCP();
 
@@ -104,17 +125,21 @@ contract BondTreasuryPaymasterTest is Test {
         );
         fleet = FleetIdentityUpgradeable(address(proxy));
 
-        paymaster = new MockBondTreasuryPaymaster(
-            admin, withdrawer, _initialContractWhitelist(address(fleet)), address(bondToken), QUOTA, PERIOD
-        );
-
-        bondToken.mint(address(paymaster), 10_000 ether);
-
         address[] memory initialUsers = new address[](2);
         initialUsers[0] = alice;
         initialUsers[1] = admin;
-        vm.prank(admin);
-        paymaster.addWhitelistedUsers(initialUsers);
+
+        paymaster = new MockBondTreasuryPaymaster(
+            admin,
+            withdrawer,
+            _initialContractWhitelist(address(fleet)),
+            initialUsers,
+            address(bondToken),
+            QUOTA,
+            PERIOD
+        );
+
+        bondToken.mint(address(paymaster), 10_000 ether);
         whitelistTargets = new address[](1);
         whitelistTargets[0] = alice;
     }
@@ -139,6 +164,70 @@ contract BondTreasuryPaymasterTest is Test {
 
     function test_paymasterSelfSeededAsWhitelistedContract() public view {
         assertTrue(paymaster.isWhitelistedContract(address(paymaster)));
+    }
+
+    function test_initialWhitelistedUsersSetInConstructor() public view {
+        assertTrue(paymaster.isWhitelistedUser(alice));
+        assertTrue(paymaster.isWhitelistedUser(admin));
+    }
+
+    function test_constructorWithEmptyWhitelistedUsers() public {
+        MockBondTreasuryPaymaster pm = new MockBondTreasuryPaymaster(
+            admin,
+            withdrawer,
+            _initialContractWhitelist(address(fleet)),
+            _emptyAddresses(),
+            address(bondToken),
+            QUOTA,
+            PERIOD
+        );
+        assertFalse(pm.isWhitelistedUser(alice));
+        assertFalse(pm.isWhitelistedUser(admin));
+    }
+
+    function test_constructorWithMultipleWhitelistedUsers() public {
+        address charlie = address(0xC);
+        address[] memory users = new address[](3);
+        users[0] = alice;
+        users[1] = bob;
+        users[2] = charlie;
+
+        MockBondTreasuryPaymaster pm = new MockBondTreasuryPaymaster(
+            admin, withdrawer, _initialContractWhitelist(address(fleet)), users, address(bondToken), QUOTA, PERIOD
+        );
+        assertTrue(pm.isWhitelistedUser(alice));
+        assertTrue(pm.isWhitelistedUser(bob));
+        assertTrue(pm.isWhitelistedUser(charlie));
+    }
+
+    function test_constructorEmitsWhitelistedUsersAdded() public {
+        address[] memory users = new address[](2);
+        users[0] = alice;
+        users[1] = bob;
+
+        vm.expectEmit();
+        emit WhitelistPaymaster.WhitelistedUsersAdded(users);
+        new MockBondTreasuryPaymaster(
+            admin, withdrawer, _initialContractWhitelist(address(fleet)), users, address(bondToken), QUOTA, PERIOD
+        );
+    }
+
+    function test_constructorEmptyUsersDoesNotEmitEvent() public {
+        vm.recordLogs();
+        new MockBondTreasuryPaymaster(
+            admin,
+            withdrawer,
+            _initialContractWhitelist(address(fleet)),
+            _emptyAddresses(),
+            address(bondToken),
+            QUOTA,
+            PERIOD
+        );
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 usersAddedTopic = WhitelistPaymaster.WhitelistedUsersAdded.selector;
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(logs[i].topics[0] != usersAddedTopic, "Should not emit WhitelistedUsersAdded for empty array");
+        }
     }
 
     // ══════════════════════════════════════════════
@@ -412,13 +501,14 @@ contract BondTreasuryPaymasterTest is Test {
 
     function test_quotaTracksBaseBondNotClaimCount() public {
         MockBondTreasuryPaymaster tightPaymaster = new MockBondTreasuryPaymaster(
-            admin, withdrawer, _initialContractWhitelist(address(fleet)), address(bondToken), BASE_BOND / 2, PERIOD
+            admin,
+            withdrawer,
+            _initialContractWhitelist(address(fleet)),
+            _singleAddress(alice),
+            address(bondToken),
+            BASE_BOND / 2,
+            PERIOD
         );
-
-        address[] memory targets = new address[](1);
-        targets[0] = alice;
-        vm.prank(admin);
-        tightPaymaster.addWhitelistedUsers(targets);
 
         bondToken.mint(address(tightPaymaster), 10_000 ether);
 
@@ -490,13 +580,27 @@ contract BondTreasuryPaymasterTest is Test {
 
     function test_RevertIf_constructorZeroPeriod() public {
         vm.expectRevert(QuotaControl.ZeroPeriod.selector);
-        new MockBondTreasuryPaymaster(admin, withdrawer, _initialContractWhitelist(address(fleet)), address(bondToken), QUOTA, 0);
+        new MockBondTreasuryPaymaster(
+            admin,
+            withdrawer,
+            _initialContractWhitelist(address(fleet)),
+            _emptyAddresses(),
+            address(bondToken),
+            QUOTA,
+            0
+        );
     }
 
     function test_RevertIf_constructorTooLongPeriod() public {
         vm.expectRevert(QuotaControl.TooLongPeriod.selector);
         new MockBondTreasuryPaymaster(
-            admin, withdrawer, _initialContractWhitelist(address(fleet)), address(bondToken), QUOTA, 31 days
+            admin,
+            withdrawer,
+            _initialContractWhitelist(address(fleet)),
+            _emptyAddresses(),
+            address(bondToken),
+            QUOTA,
+            31 days
         );
     }
 
