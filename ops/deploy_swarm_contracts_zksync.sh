@@ -76,11 +76,15 @@ case "$NETWORK" in
     ENV_FILE=".env-test"
     HARDHAT_NETWORK="zkSyncSepoliaTestnet"
     EXPLORER_URL="https://sepolia.explorer.zksync.io"
+    VERIFIER_URL="https://explorer.sepolia.era.zksync.dev/contract_verification"
+    FORGE_CHAIN="zksync-testnet"
     ;;
   mainnet)
     ENV_FILE=".env-prod"
     HARDHAT_NETWORK="zkSyncMainnet"
     EXPLORER_URL="https://explorer.zksync.io"
+    VERIFIER_URL="https://zksync2-mainnet-explorer.zksync.io/contract_verification"
+    FORGE_CHAIN="zksync"
     ;;
   *)
     echo "Error: Unknown network '$NETWORK'. Use 'testnet' or 'mainnet'."
@@ -326,11 +330,10 @@ deploy_contracts() {
   
   if [ "$BROADCAST" = "--broadcast" ]; then
     FORGE_ARGS+=("--broadcast" "--slow")
-    
-    # Add ZkSync-specific verification
-    if [ -n "$L2_VERIFIER_URL" ]; then
-      FORGE_ARGS+=("--verify" "--verifier" "zksync" "--verifier-url" "$L2_VERIFIER_URL")
-    fi
+    # NOTE: We do NOT add --verify here. forge script --verify sends absolute
+    # source paths which the ZkSync verifier rejects with "import with absolute
+    # or traversal path". Source code verification is handled separately in
+    # verify_source_code() using forge flatten + forge verify-contract.
   else
     log_warning "DRY RUN MODE - Add '--broadcast' to actually deploy"
     log_info "Would deploy with:"
@@ -431,6 +434,141 @@ verify_deployment() {
   log_success "BondTreasuryPaymaster quota: $BTP_QUOTA"
   
   log_success "All contracts verified successfully!"
+}
+
+# =============================================================================
+# Step 4b: Verify Source Code on Block Explorer
+# =============================================================================
+#
+# Why a separate step:
+#   forge script --verify sends absolute file paths (e.g. /Users/me/project/src/...)
+#   which the ZkSync verifier rejects: "import with absolute or traversal path".
+#
+# Workaround:
+#   1. Flatten each contract into a single .sol file (no imports)
+#   2. Use forge verify-contract with the flattened file
+#   3. Clean up temporary flat files
+#
+# Constructor args are extracted from the broadcast JSON using the ZkSync
+# ContractDeployer ABI: create(bytes32 salt, bytes32 bytecodeHash, bytes ctorInput)
+#
+# =============================================================================
+
+verify_source_code() {
+  if [ "$BROADCAST" != "--broadcast" ]; then
+    return 0
+  fi
+
+  log_info "Verifying source code on block explorer..."
+
+  # Get RPC URL for chain detection
+  if [ "$NETWORK" = "mainnet" ]; then
+    RPC_URL="${L2_RPC:-https://mainnet.era.zksync.io}"
+    CHAIN_ID="324"
+  else
+    RPC_URL="${L2_RPC:-https://rpc.ankr.com/zksync_era_sepolia}"
+    CHAIN_ID="300"
+  fi
+
+  BROADCAST_JSON="broadcast/DeploySwarmUpgradeableZkSync.s.sol/${CHAIN_ID}/run-latest.json"
+  if [ ! -f "$BROADCAST_JSON" ]; then
+    log_error "Broadcast file not found: $BROADCAST_JSON"
+    log_warning "Skipping source code verification"
+    return 1
+  fi
+
+  # Extract constructor args from broadcast JSON
+  # ZkSync ContractDeployer.create(): 0x9c4d535b + salt(32) + hash(32) + offset_to_ctor(32) + len(32) + ctor_data
+  log_info "Extracting constructor args from broadcast..."
+  CTOR_ARGS=$(python3 -c "
+import json, sys
+with open('$BROADCAST_JSON') as f:
+    data = json.load(f)
+for tx in data['transactions']:
+    addr = (tx.get('additionalContracts') or [{}])[0].get('address', '')
+    inp = tx['transaction'].get('input', '')
+    payload = inp[10:]  # skip 0x + 9c4d535b
+    offset = int(payload[128:192], 16)
+    ctor_start = offset * 2
+    ctor_len = int(payload[ctor_start:ctor_start+64], 16)
+    ctor_args = payload[ctor_start+64:ctor_start+64+ctor_len*2]
+    print(f'{addr}:{ctor_args}')
+")
+
+  # Build lookup of address -> constructor args
+  declare -A CTOR_MAP
+  while IFS=: read -r addr args; do
+    CTOR_MAP["$addr"]="$args"
+  done <<< "$CTOR_ARGS"
+
+  # Create temporary directory for flattened sources
+  FLAT_DIR=$(mktemp -d)
+
+  # Flatten all unique contract sources
+  log_info "Flattening contract sources..."
+  forge flatten src/swarms/ServiceProviderUpgradeable.sol > "$FLAT_DIR/FlatSP.sol"
+  forge flatten src/swarms/FleetIdentityUpgradeable.sol > "$FLAT_DIR/FlatFI.sol"
+  forge flatten src/swarms/SwarmRegistryUniversalUpgradeable.sol > "$FLAT_DIR/FlatSR.sol"
+  forge flatten lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol > "$FLAT_DIR/FlatProxy.sol"
+  forge flatten src/paymasters/BondTreasuryPaymaster.sol > "$FLAT_DIR/FlatBTP.sol"
+
+  # Copy flat files into src/ so forge can find them
+  cp "$FLAT_DIR/FlatSP.sol" src/FlatSP.sol
+  cp "$FLAT_DIR/FlatFI.sol" src/FlatFI.sol
+  cp "$FLAT_DIR/FlatSR.sol" src/FlatSR.sol
+  cp "$FLAT_DIR/FlatProxy.sol" src/FlatProxy.sol
+  cp "$FLAT_DIR/FlatBTP.sol" src/FlatBTP.sol
+
+  VERIFY_FAILED=0
+
+  # Helper to verify a single contract
+  verify_one() {
+    local address="$1"
+    local source="$2"
+    local label="$3"
+    local ctor_key
+    ctor_key=$(echo "$address" | tr '[:upper:]' '[:lower:]')
+    local args="${CTOR_MAP[$ctor_key]}"
+
+    local VARGS=(
+      --zksync
+      --chain "$FORGE_CHAIN"
+      --verifier zksync
+      --verifier-url "$VERIFIER_URL"
+      "$address"
+      "$source"
+    )
+    if [ -n "$args" ]; then
+      VARGS+=(--constructor-args "$args")
+    fi
+
+    log_info "Verifying $label at $address..."
+    if forge verify-contract "${VARGS[@]}" 2>&1; then
+      log_success "$label verified"
+    else
+      log_error "$label verification failed (can retry manually)"
+      VERIFY_FAILED=$((VERIFY_FAILED + 1))
+    fi
+  }
+
+  # Verify all 7 contracts
+  verify_one "$SERVICE_PROVIDER_IMPL" "src/FlatSP.sol:ServiceProviderUpgradeable" "ServiceProvider Implementation"
+  verify_one "$SERVICE_PROVIDER_PROXY" "src/FlatProxy.sol:ERC1967Proxy" "ServiceProvider Proxy"
+  verify_one "$FLEET_IDENTITY_IMPL" "src/FlatFI.sol:FleetIdentityUpgradeable" "FleetIdentity Implementation"
+  verify_one "$FLEET_IDENTITY_PROXY" "src/FlatProxy.sol:ERC1967Proxy" "FleetIdentity Proxy"
+  verify_one "$SWARM_REGISTRY_IMPL" "src/FlatSR.sol:SwarmRegistryUniversalUpgradeable" "SwarmRegistry Implementation"
+  verify_one "$SWARM_REGISTRY_PROXY" "src/FlatProxy.sol:ERC1967Proxy" "SwarmRegistry Proxy"
+  verify_one "$BOND_TREASURY_PAYMASTER" "src/FlatBTP.sol:BondTreasuryPaymaster" "BondTreasuryPaymaster"
+
+  # Clean up flat files from src/
+  rm -f src/FlatSP.sol src/FlatFI.sol src/FlatSR.sol src/FlatProxy.sol src/FlatBTP.sol
+  rm -rf "$FLAT_DIR"
+
+  if [ "$VERIFY_FAILED" -gt 0 ]; then
+    log_warning "$VERIFY_FAILED contract(s) failed source verification (deployment itself succeeded)"
+  else
+    log_success "All 7 contracts source-code verified on block explorer!"
+  fi
 }
 
 # =============================================================================
@@ -568,6 +706,7 @@ main() {
   compile_contracts
   deploy_contracts
   verify_deployment
+  verify_source_code
   update_env_file
   print_summary
   
