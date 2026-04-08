@@ -23,6 +23,7 @@ contract BondTreasuryPaymaster is WhitelistPaymaster, QuotaControl {
 
     constructor(
         address admin,
+        address whitelistAdmin,
         address withdrawer,
         address[] memory initialWhitelistedContracts,
         address[] memory initialWhitelistedUsers,
@@ -30,7 +31,11 @@ contract BondTreasuryPaymaster is WhitelistPaymaster, QuotaControl {
         uint256 initialQuota,
         uint256 initialPeriod
     ) WhitelistPaymaster(admin, withdrawer) QuotaControl(initialQuota, initialPeriod, admin) {
+        if (whitelistAdmin != admin) {
+            _grantRole(WHITELIST_ADMIN_ROLE, whitelistAdmin);
+        }
         bondToken = IERC20(bondToken_);
+
         uint256 n = initialWhitelistedContracts.length;
         for (uint256 i = 0; i < n; ++i) {
             isWhitelistedContract[initialWhitelistedContracts[i]] = true;
@@ -38,19 +43,20 @@ contract BondTreasuryPaymaster is WhitelistPaymaster, QuotaControl {
         if (n > 0) {
             emit WhitelistedContractsAdded(initialWhitelistedContracts);
         }
-        uint256 m = initialWhitelistedUsers.length;
-        for (uint256 j = 0; j < m; ++j) {
-            isWhitelistedUser[initialWhitelistedUsers[j]] = true;
-        }
-        if (m > 0) {
-            emit WhitelistedUsersAdded(initialWhitelistedUsers);
-        }
 
         if (!isWhitelistedContract[address(this)]) {
             isWhitelistedContract[address(this)] = true;
             address[] memory selfDest = new address[](1);
             selfDest[0] = address(this);
             emit WhitelistedContractsAdded(selfDest);
+        }
+
+        uint256 m = initialWhitelistedUsers.length;
+        for (uint256 j = 0; j < m; ++j) {
+            isWhitelistedUser[initialWhitelistedUsers[j]] = true;
+        }
+        if (m > 0) {
+            emit WhitelistedUsersAdded(initialWhitelistedUsers);
         }
     }
 

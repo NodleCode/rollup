@@ -42,6 +42,7 @@ contract SponsoredBondPuller {
 contract MockBondTreasuryPaymaster is BondTreasuryPaymaster {
     constructor(
         address admin,
+        address whitelistAdmin,
         address withdrawer,
         address[] memory initialWhitelistedContracts,
         address[] memory initialWhitelistedUsers,
@@ -51,6 +52,7 @@ contract MockBondTreasuryPaymaster is BondTreasuryPaymaster {
     )
         BondTreasuryPaymaster(
             admin,
+            whitelistAdmin,
             withdrawer,
             initialWhitelistedContracts,
             initialWhitelistedUsers,
@@ -131,6 +133,7 @@ contract BondTreasuryPaymasterTest is Test {
 
         paymaster = new MockBondTreasuryPaymaster(
             admin,
+            admin,
             withdrawer,
             _initialContractWhitelist(address(fleet)),
             initialUsers,
@@ -154,6 +157,25 @@ contract BondTreasuryPaymasterTest is Test {
         assertTrue(paymaster.hasRole(paymaster.WITHDRAWER_ROLE(), withdrawer));
     }
 
+    function test_separateWhitelistAdmin() public {
+        address whitelistAdmin = address(0x3333);
+        MockBondTreasuryPaymaster pm = new MockBondTreasuryPaymaster(
+            admin,
+            whitelistAdmin,
+            withdrawer,
+            _initialContractWhitelist(address(fleet)),
+            _emptyAddresses(),
+            address(bondToken),
+            QUOTA,
+            PERIOD
+        );
+        assertTrue(pm.hasRole(pm.DEFAULT_ADMIN_ROLE(), admin));
+        assertTrue(pm.hasRole(pm.WHITELIST_ADMIN_ROLE(), admin));
+        assertTrue(pm.hasRole(pm.WHITELIST_ADMIN_ROLE(), whitelistAdmin));
+        assertTrue(pm.hasRole(pm.WITHDRAWER_ROLE(), withdrawer));
+        assertFalse(pm.hasRole(pm.DEFAULT_ADMIN_ROLE(), whitelistAdmin));
+    }
+
     function test_immutables() public view {
         assertEq(address(paymaster.bondToken()), address(bondToken));
     }
@@ -174,6 +196,7 @@ contract BondTreasuryPaymasterTest is Test {
     function test_constructorWithEmptyWhitelistedUsers() public {
         MockBondTreasuryPaymaster pm = new MockBondTreasuryPaymaster(
             admin,
+            admin,
             withdrawer,
             _initialContractWhitelist(address(fleet)),
             _emptyAddresses(),
@@ -193,7 +216,7 @@ contract BondTreasuryPaymasterTest is Test {
         users[2] = charlie;
 
         MockBondTreasuryPaymaster pm = new MockBondTreasuryPaymaster(
-            admin, withdrawer, _initialContractWhitelist(address(fleet)), users, address(bondToken), QUOTA, PERIOD
+            admin, admin, withdrawer, _initialContractWhitelist(address(fleet)), users, address(bondToken), QUOTA, PERIOD
         );
         assertTrue(pm.isWhitelistedUser(alice));
         assertTrue(pm.isWhitelistedUser(bob));
@@ -208,13 +231,14 @@ contract BondTreasuryPaymasterTest is Test {
         vm.expectEmit();
         emit WhitelistPaymaster.WhitelistedUsersAdded(users);
         new MockBondTreasuryPaymaster(
-            admin, withdrawer, _initialContractWhitelist(address(fleet)), users, address(bondToken), QUOTA, PERIOD
+            admin, admin, withdrawer, _initialContractWhitelist(address(fleet)), users, address(bondToken), QUOTA, PERIOD
         );
     }
 
     function test_constructorEmptyUsersDoesNotEmitEvent() public {
         vm.recordLogs();
         new MockBondTreasuryPaymaster(
+            admin,
             admin,
             withdrawer,
             _initialContractWhitelist(address(fleet)),
@@ -502,6 +526,7 @@ contract BondTreasuryPaymasterTest is Test {
     function test_quotaTracksBaseBondNotClaimCount() public {
         MockBondTreasuryPaymaster tightPaymaster = new MockBondTreasuryPaymaster(
             admin,
+            admin,
             withdrawer,
             _initialContractWhitelist(address(fleet)),
             _singleAddress(alice),
@@ -582,6 +607,7 @@ contract BondTreasuryPaymasterTest is Test {
         vm.expectRevert(QuotaControl.ZeroPeriod.selector);
         new MockBondTreasuryPaymaster(
             admin,
+            admin,
             withdrawer,
             _initialContractWhitelist(address(fleet)),
             _emptyAddresses(),
@@ -594,6 +620,7 @@ contract BondTreasuryPaymasterTest is Test {
     function test_RevertIf_constructorTooLongPeriod() public {
         vm.expectRevert(QuotaControl.TooLongPeriod.selector);
         new MockBondTreasuryPaymaster(
+            admin,
             admin,
             withdrawer,
             _initialContractWhitelist(address(fleet)),
