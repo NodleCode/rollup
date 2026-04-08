@@ -107,7 +107,7 @@ contract DeploySwarmUpgradeableZkSync is Script {
         whitelistedUsers[0] = fleetOperator;
         bondTreasuryPaymaster = address(
             new BondTreasuryPaymaster(
-                owner, withdrawer, whitelistedContracts, whitelistedUsers, bondToken, bondQuota, bondPeriod
+                owner, fleetOperator, withdrawer, whitelistedContracts, whitelistedUsers, bondToken, bondQuota, bondPeriod
             )
         );
         console.log("   Address:", bondTreasuryPaymaster);

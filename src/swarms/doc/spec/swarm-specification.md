@@ -660,6 +660,7 @@ address[] memory initialUsers = new address[](1);
 initialUsers[0] = nodleSwarmOperator;
 new BondTreasuryPaymaster(
     admin,
+    whitelistAdmin,
     withdrawer,
     initialContracts,
     initialUsers,
