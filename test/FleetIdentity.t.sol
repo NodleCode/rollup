@@ -97,10 +97,7 @@ contract FleetIdentityTest is Test {
         address operator
     );
     event OperatorSet(
-        bytes16 indexed uuid,
-        address indexed oldOperator,
-        address indexed newOperator,
-        uint256 tierExcessTransferred
+        bytes16 indexed uuid, address indexed oldOperator, address indexed newOperator, uint256 tierExcessTransferred
     );
     event FleetPromoted(
         uint256 indexed tokenId, uint256 indexed fromTier, uint256 indexed toTier, uint256 additionalBond
@@ -406,7 +403,7 @@ contract FleetIdentityTest is Test {
         // No fleets anywhere — localInclusionHint returns tier 0.
         (uint256 inclusionTier,) = fleet.localInclusionHint(US, ADMIN_CA);
         assertEq(inclusionTier, 0);
-        
+
         // Register at tier 0 (inclusionTier is 0, so no promotion needed)
         vm.prank(alice);
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
@@ -421,7 +418,7 @@ contract FleetIdentityTest is Test {
         // localInclusionHint should return tier 1 (cheapest tier with capacity).
         (uint256 inclusionTier,) = fleet.localInclusionHint(US, ADMIN_CA);
         assertEq(inclusionTier, 1);
-        
+
         // Register directly at inclusionTier as tier 0 is full
         vm.prank(bob);
         uint256 tokenId = fleet.registerFleetLocal(_uuid(100), US, ADMIN_CA, inclusionTier);
@@ -628,7 +625,7 @@ contract FleetIdentityTest is Test {
         assertEq(bondToken.balanceOf(alice), balBefore + fleet.tierBond(0, false));
         assertEq(bondToken.balanceOf(address(fleet)), BASE_BOND); // owned-only token holds BASE_BOND
         assertEq(fleet.bonds(tokenId), 0);
-        
+
         // Verify owned-only token was minted
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         assertEq(fleet.ownerOf(ownedTokenId), alice);
@@ -657,7 +654,7 @@ contract FleetIdentityTest is Test {
         vm.prank(alice);
         fleet.burn(tokenId);
         assertEq(fleet.regionTierCount(_regionUS()), 0);
-        
+
         // Verify transitioned to owned-only
         assertTrue(fleet.isOwnedOnly(UUID_1));
     }
@@ -668,7 +665,7 @@ contract FleetIdentityTest is Test {
 
         vm.prank(alice);
         fleet.burn(tokenId);
-        
+
         // Now in owned-only state - burn that too to fully release
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         vm.prank(alice);
@@ -971,13 +968,19 @@ contract FleetIdentityTest is Test {
         fleet.burn(c2);
         uint256 ownedTokenBob = uint256(uint128(UUID_2));
         // After burning c2, remaining: c1 + l1 + owned-only token for UUID_2
-        assertEq(bondToken.balanceOf(address(fleet)), (BASE_BOND + fleet.tierBond(0, true)) + (BASE_BOND + fleet.tierBond(0, false)) + BASE_BOND);
+        assertEq(
+            bondToken.balanceOf(address(fleet)),
+            (BASE_BOND + fleet.tierBond(0, true)) + (BASE_BOND + fleet.tierBond(0, false)) + BASE_BOND
+        );
 
         // Burn the owned-only token for UUID_2
         vm.prank(bob);
         fleet.burn(ownedTokenBob);
         // Now: c1 + l1
-        assertEq(bondToken.balanceOf(address(fleet)), (BASE_BOND + fleet.tierBond(0, true)) + (BASE_BOND + fleet.tierBond(0, false)));
+        assertEq(
+            bondToken.balanceOf(address(fleet)),
+            (BASE_BOND + fleet.tierBond(0, true)) + (BASE_BOND + fleet.tierBond(0, false))
+        );
 
         // Burn remaining tokens (and their resulting owned-only tokens)
         vm.prank(alice);
@@ -1010,13 +1013,12 @@ contract FleetIdentityTest is Test {
 
     function test_RevertIf_bondToken_transferFromReturnsFalse() public {
         BadERC20 badToken = new BadERC20();
-        
+
         // Deploy implementation
         FleetIdentityUpgradeable impl = new FleetIdentityUpgradeable();
         // Deploy proxy with initialize call
         ERC1967Proxy proxy = new ERC1967Proxy(
-            address(impl),
-            abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(badToken), BASE_BOND, 0))
+            address(impl), abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(badToken), BASE_BOND, 0))
         );
         FleetIdentityUpgradeable f = FleetIdentityUpgradeable(address(proxy));
 
@@ -1087,8 +1089,7 @@ contract FleetIdentityTest is Test {
         FleetIdentityUpgradeable impl = new FleetIdentityUpgradeable();
         // Deploy proxy with zero base bond - should use DEFAULT_BASE_BOND
         ERC1967Proxy proxy = new ERC1967Proxy(
-            address(impl),
-            abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(bondToken), 0, 0))
+            address(impl), abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(bondToken), 0, 0))
         );
         FleetIdentityUpgradeable f = FleetIdentityUpgradeable(address(proxy));
         assertEq(f.BASE_BOND(), f.DEFAULT_BASE_BOND());
@@ -1112,8 +1113,7 @@ contract FleetIdentityTest is Test {
         // Attempt to deploy proxy with zero bond token - should revert
         vm.expectRevert(FleetIdentityUpgradeable.InvalidBondToken.selector);
         new ERC1967Proxy(
-            address(impl),
-            abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(0), BASE_BOND, 0))
+            address(impl), abi.encodeCall(FleetIdentityUpgradeable.initialize, (owner, address(0), BASE_BOND, 0))
         );
     }
 
@@ -1247,11 +1247,11 @@ contract FleetIdentityTest is Test {
         // Burn the registered token -> transitions to owned-only
         vm.prank(alice);
         fleet.burn(tokenId);
-        
+
         // UUID owner should NOT be cleared yet (now in owned-only state)
         assertEq(fleet.uuidOwner(UUID_1), alice, "UUID owner preserved in owned-only state");
         assertTrue(fleet.isOwnedOnly(UUID_1));
-        
+
         // Burn the owned-only token to fully clear ownership
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         vm.prank(alice);
@@ -1283,7 +1283,7 @@ contract FleetIdentityTest is Test {
         // Burn second token -> transitions to owned-only
         vm.prank(alice);
         fleet.burn(id2);
-        
+
         // Still owned (in owned-only state)
         assertEq(fleet.uuidOwner(UUID_1), alice, "UUID owner preserved in owned-only state");
         assertTrue(fleet.isOwnedOnly(UUID_1));
@@ -1292,7 +1292,7 @@ contract FleetIdentityTest is Test {
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         vm.prank(alice);
         fleet.burn(ownedTokenId);
-        
+
         // Now UUID owner should be cleared
         assertEq(fleet.uuidOwner(UUID_1), address(0), "UUID owner cleared after owned-only burned");
         assertEq(fleet.uuidTokenCount(UUID_1), 0);
@@ -1317,7 +1317,7 @@ contract FleetIdentityTest is Test {
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
         vm.prank(alice);
         fleet.burn(tokenId);
-        
+
         // Now in owned-only state, burn that too
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         vm.prank(alice);
@@ -1493,7 +1493,7 @@ contract FleetIdentityTest is Test {
         fleet.burn(tokenId);
 
         assertEq(uint8(fleet.uuidLevel(UUID_1)), 1, "Level is Owned after burning last registered token");
-        
+
         // Burn owned-only token to fully clear
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         vm.prank(alice);
@@ -1539,24 +1539,24 @@ contract FleetIdentityTest is Test {
 
     function test_claimUuid_basic() public {
         uint256 aliceBalanceBefore = bondToken.balanceOf(alice);
-        
+
         vm.prank(alice);
         uint256 tokenId = fleet.claimUuid(UUID_1, address(0));
-        
+
         // Token minted
         assertEq(fleet.ownerOf(tokenId), alice);
         assertEq(fleet.tokenUuid(tokenId), UUID_1);
         assertEq(fleet.tokenRegion(tokenId), 0); // OWNED_REGION_KEY
-        
+
         // UUID ownership set
         assertEq(fleet.uuidOwner(UUID_1), alice);
         assertEq(fleet.uuidTokenCount(UUID_1), 1);
         assertTrue(fleet.isOwnedOnly(UUID_1));
         assertEq(uint8(fleet.uuidLevel(UUID_1)), 1); // Owned
-        
+
         // Bond pulled
         assertEq(aliceBalanceBefore - bondToken.balanceOf(alice), BASE_BOND);
-        
+
         // bonds() returns BASE_BOND for owned-only
         assertEq(fleet.bonds(tokenId), BASE_BOND);
     }
@@ -1564,7 +1564,7 @@ contract FleetIdentityTest is Test {
     function test_RevertIf_claimUuid_alreadyOwned() public {
         vm.prank(alice);
         fleet.claimUuid(UUID_1, address(0));
-        
+
         vm.prank(bob);
         vm.expectRevert(FleetIdentityUpgradeable.UuidAlreadyOwned.selector);
         fleet.claimUuid(UUID_1, address(0));
@@ -1573,7 +1573,7 @@ contract FleetIdentityTest is Test {
     function test_RevertIf_claimUuid_alreadyRegistered() public {
         vm.prank(alice);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
-        
+
         vm.prank(bob);
         vm.expectRevert(FleetIdentityUpgradeable.UuidAlreadyOwned.selector);
         fleet.claimUuid(UUID_1, address(0));
@@ -1589,28 +1589,28 @@ contract FleetIdentityTest is Test {
         // First claim
         vm.prank(alice);
         uint256 ownedTokenId = fleet.claimUuid(UUID_1, address(0));
-        
+
         uint256 aliceBalanceBefore = bondToken.balanceOf(alice);
-        
+
         // Register from owned state - operator (alice) pays tierBond
         vm.prank(alice);
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
-        
+
         // Old owned token burned
         vm.expectRevert();
         fleet.ownerOf(ownedTokenId);
-        
+
         // New token exists
         assertEq(fleet.ownerOf(tokenId), alice);
         assertEq(fleet.tokenRegion(tokenId), _regionUSCA());
         assertEq(fleet.fleetTier(tokenId), 0);
-        
+
         // UUID state updated
         assertEq(fleet.uuidOwner(UUID_1), alice);
         assertEq(fleet.uuidTokenCount(UUID_1), 1); // still 1
         assertFalse(fleet.isOwnedOnly(UUID_1));
         assertEq(uint8(fleet.uuidLevel(UUID_1)), 2); // Local
-        
+
         // Operator pays tierBond (owner already paid BASE_BOND via claim)
         assertEq(aliceBalanceBefore - bondToken.balanceOf(alice), fleet.tierBond(0, false));
     }
@@ -1618,16 +1618,16 @@ contract FleetIdentityTest is Test {
     function test_registerFromOwned_country() public {
         vm.prank(alice);
         fleet.claimUuid(UUID_1, address(0));
-        
+
         uint256 aliceBalanceBefore = bondToken.balanceOf(alice);
-        
+
         vm.prank(alice);
         uint256 tokenId = fleet.registerFleetCountry(UUID_1, US, 0);
-        
+
         assertEq(fleet.ownerOf(tokenId), alice);
         assertEq(fleet.tokenRegion(tokenId), uint32(US));
         assertEq(uint8(fleet.uuidLevel(UUID_1)), 3); // Country
-        
+
         // Operator pays tierBond for country tier 0 = 16*BASE_BOND
         assertEq(aliceBalanceBefore - bondToken.balanceOf(alice), fleet.tierBond(0, true));
     }
@@ -1635,14 +1635,14 @@ contract FleetIdentityTest is Test {
     function test_registerFromOwned_higherTier() public {
         vm.prank(alice);
         fleet.claimUuid(UUID_1, address(0));
-        
+
         uint256 aliceBalanceBefore = bondToken.balanceOf(alice);
-        
+
         // Register at tier 0 local - operator pays tierBond(0, false) = BASE_BOND
         vm.prank(alice);
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
         assertEq(aliceBalanceBefore - bondToken.balanceOf(alice), fleet.tierBond(0, false));
-        
+
         // Promote to tier 2: additional bond = tierBond(2) - tierBond(0) = 4*BASE_BOND - BASE_BOND = 3*BASE_BOND
         uint256 balBeforePromote = bondToken.balanceOf(alice);
         vm.prank(alice);
@@ -1653,25 +1653,25 @@ contract FleetIdentityTest is Test {
     function test_burn_lastRegisteredToken_transitionsToOwned() public {
         vm.prank(alice);
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
-        
+
         uint256 aliceBalanceBefore = bondToken.balanceOf(alice);
-        
+
         vm.prank(alice);
         fleet.burn(tokenId);
-        
+
         // Old token burned
         vm.expectRevert();
         fleet.ownerOf(tokenId);
-        
+
         // New owned-only token exists
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         assertEq(fleet.ownerOf(ownedTokenId), alice);
         assertEq(fleet.tokenRegion(ownedTokenId), 0);
-        
+
         // UUID state updated to Owned
         assertTrue(fleet.isOwnedOnly(UUID_1));
         assertEq(uint8(fleet.uuidLevel(UUID_1)), 1); // Owned
-        
+
         // Operator (alice) gets tierBond refunded
         assertEq(bondToken.balanceOf(alice) - aliceBalanceBefore, fleet.tierBond(0, false));
     }
@@ -1682,15 +1682,15 @@ contract FleetIdentityTest is Test {
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
         vm.prank(alice);
         fleet.reassignTier(tokenId, 2);
-        
+
         uint256 aliceBalanceBefore = bondToken.balanceOf(alice);
-        
+
         vm.prank(alice);
         fleet.burn(tokenId);
-        
+
         // Operator (alice) gets full tierBond(2, false) refunded
         assertEq(bondToken.balanceOf(alice) - aliceBalanceBefore, fleet.tierBond(2, false));
-        
+
         // Transitioned to owned-only
         assertTrue(fleet.isOwnedOnly(UUID_1));
     }
@@ -1699,15 +1699,15 @@ contract FleetIdentityTest is Test {
         // Register country tier 0
         vm.prank(alice);
         uint256 tokenId = fleet.registerFleetCountry(UUID_1, US, 0);
-        
+
         uint256 aliceBalanceBefore = bondToken.balanceOf(alice);
-        
+
         vm.prank(alice);
         fleet.burn(tokenId);
-        
+
         // Operator (alice) gets full tierBond(0, true) refunded
         assertEq(bondToken.balanceOf(alice) - aliceBalanceBefore, fleet.tierBond(0, true));
-        
+
         // Level changed to Owned
         assertEq(uint8(fleet.uuidLevel(UUID_1)), 1);
         assertTrue(fleet.isOwnedOnly(UUID_1));
@@ -1719,22 +1719,22 @@ contract FleetIdentityTest is Test {
         uint256 id1 = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
         vm.prank(alice);
         uint256 id2 = fleet.registerFleetLocal(UUID_1, DE, ADMIN_CA, 0);
-        
+
         // Burn first token - should NOT transition to owned
         vm.prank(alice);
         fleet.burn(id1);
-        
+
         // Still registered level, not owned
         assertFalse(fleet.isOwnedOnly(UUID_1));
         assertEq(fleet.uuidTokenCount(UUID_1), 1);
-        
+
         // Second token still exists
         assertEq(fleet.ownerOf(id2), alice);
-        
+
         // Burn second token - NOW should transition to owned
         vm.prank(alice);
         fleet.burn(id2);
-        
+
         assertTrue(fleet.isOwnedOnly(UUID_1));
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         assertEq(fleet.ownerOf(ownedTokenId), alice);
@@ -1743,21 +1743,21 @@ contract FleetIdentityTest is Test {
     function test_burn_ownedOnly_clearsUuid() public {
         vm.prank(alice);
         uint256 tokenId = fleet.claimUuid(UUID_1, address(0));
-        
+
         uint256 aliceBalanceBefore = bondToken.balanceOf(alice);
-        
+
         vm.prank(alice);
         fleet.burn(tokenId);
-        
+
         // Token burned
         vm.expectRevert();
         fleet.ownerOf(tokenId);
-        
+
         // UUID cleared
         assertEq(fleet.uuidOwner(UUID_1), address(0));
         assertEq(fleet.uuidTokenCount(UUID_1), 0);
         assertEq(uint8(fleet.uuidLevel(UUID_1)), 0); // None
-        
+
         // Refund received
         assertEq(bondToken.balanceOf(alice) - aliceBalanceBefore, BASE_BOND);
     }
@@ -1765,19 +1765,19 @@ contract FleetIdentityTest is Test {
     function test_burn_ownedOnly_afterTransfer() public {
         vm.prank(alice);
         uint256 tokenId = fleet.claimUuid(UUID_1, address(0));
-        
+
         // Transfer to bob
         vm.prank(alice);
         fleet.transferFrom(alice, bob, tokenId);
-        
+
         // uuidOwner should have updated
         assertEq(fleet.uuidOwner(UUID_1), bob);
-        
+
         // Alice cannot burn (not token owner)
         vm.prank(alice);
         vm.expectRevert(FleetIdentityUpgradeable.NotTokenOwner.selector);
         fleet.burn(tokenId);
-        
+
         // Bob can burn
         uint256 bobBalanceBefore = bondToken.balanceOf(bob);
         vm.prank(bob);
@@ -1788,7 +1788,7 @@ contract FleetIdentityTest is Test {
     function test_RevertIf_burn_ownedOnly_notOwner() public {
         vm.prank(alice);
         uint256 tokenId = fleet.claimUuid(UUID_1, address(0));
-        
+
         // Bob cannot burn owned-only token (not owner)
         vm.prank(bob);
         vm.expectRevert(FleetIdentityUpgradeable.NotTokenOwner.selector);
@@ -1798,12 +1798,12 @@ contract FleetIdentityTest is Test {
     function test_ownedOnly_transfer_updatesUuidOwner() public {
         vm.prank(alice);
         uint256 tokenId = fleet.claimUuid(UUID_1, address(0));
-        
+
         assertEq(fleet.uuidOwner(UUID_1), alice);
-        
+
         vm.prank(alice);
         fleet.transferFrom(alice, bob, tokenId);
-        
+
         // uuidOwner updated on transfer for owned-only tokens
         assertEq(fleet.uuidOwner(UUID_1), bob);
         assertEq(fleet.ownerOf(tokenId), bob);
@@ -1815,15 +1815,15 @@ contract FleetIdentityTest is Test {
         fleet.claimUuid(UUID_1, address(0));
         vm.prank(alice);
         fleet.claimUuid(UUID_2, address(0));
-        
+
         // Bundle should be empty
         (bytes16[] memory uuids, uint256 count) = fleet.buildHighestBondedUuidBundle(US, ADMIN_CA);
         assertEq(count, 0);
-        
+
         // Now register one
         vm.prank(alice);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
-        
+
         // Bundle should contain only the registered one
         (uuids, count) = fleet.buildHighestBondedUuidBundle(US, ADMIN_CA);
         assertEq(count, 1);
@@ -1833,19 +1833,19 @@ contract FleetIdentityTest is Test {
     function test_burn_ownedOnly() public {
         vm.prank(alice);
         uint256 tokenId = fleet.claimUuid(UUID_1, address(0));
-        
+
         uint256 aliceBalanceBefore = bondToken.balanceOf(alice);
-        
+
         vm.prank(alice);
         fleet.burn(tokenId);
-        
+
         // Token burned
         vm.expectRevert();
         fleet.ownerOf(tokenId);
-        
+
         // UUID cleared
         assertEq(fleet.uuidOwner(UUID_1), address(0));
-        
+
         // Refund received
         assertEq(bondToken.balanceOf(alice) - aliceBalanceBefore, BASE_BOND);
     }
@@ -1853,40 +1853,40 @@ contract FleetIdentityTest is Test {
     function test_ownedOnly_canReRegisterAfterBurn() public {
         vm.prank(alice);
         uint256 tokenId = fleet.claimUuid(UUID_1, address(0));
-        
+
         vm.prank(alice);
         fleet.burn(tokenId);
-        
+
         // Bob can now claim or register
         vm.prank(bob);
         uint256 newTokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
-        
+
         assertEq(fleet.ownerOf(newTokenId), bob);
         assertEq(fleet.uuidOwner(UUID_1), bob);
     }
 
     function test_migration_viaBurnAndReregister() public {
         // This test shows the migration pattern using burn
-        
+
         // Register local in US
         vm.prank(alice);
         uint256 oldTokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
-        
+
         uint256 aliceBalanceAfterRegister = bondToken.balanceOf(alice);
-        
+
         // Burn registered token -> transitions to owned-only, refunds tierBond(0, false)
         vm.prank(alice);
         fleet.burn(oldTokenId);
-        
+
         // Now in owned-only state, re-register in DE as country
         // Pays tierBond(0, true) = 16*BASE_BOND for country registration
         vm.prank(alice);
         uint256 newTokenId = fleet.registerFleetCountry(UUID_1, DE, 0);
-        
+
         assertEq(fleet.ownerOf(newTokenId), alice);
         assertEq(fleet.tokenRegion(newTokenId), uint32(DE));
         assertEq(uint8(fleet.uuidLevel(UUID_1)), 3); // Country
-        
+
         // Net bond change: tierBond(0, true) - tierBond(0, false) = 16*BASE_BOND - BASE_BOND = 15*BASE_BOND
         assertEq(aliceBalanceAfterRegister - bondToken.balanceOf(alice), 15 * BASE_BOND);
     }
@@ -1988,7 +1988,7 @@ contract FleetIdentityTest is Test {
 
         // Now have 3 owned-only tokens, each with BASE_BOND
         assertEq(bondToken.balanceOf(address(fleet)), 3 * BASE_BOND);
-        
+
         // Burn all owned-only tokens
         vm.prank(alice);
         fleet.burn(uint256(uint128(UUID_1)));
@@ -2298,7 +2298,8 @@ contract FleetIdentityTest is Test {
         // Tier 1: local=cap. Tier 0: local=cap + country=cap.
         // Total = 3*cap, capped at MAX_BONDED_UUID_BUNDLE_SIZE.
         uint256 total = 3 * cap;
-        uint256 expectedCount = total > fleet.MAX_BONDED_UUID_BUNDLE_SIZE() ? fleet.MAX_BONDED_UUID_BUNDLE_SIZE() : total;
+        uint256 expectedCount =
+            total > fleet.MAX_BONDED_UUID_BUNDLE_SIZE() ? fleet.MAX_BONDED_UUID_BUNDLE_SIZE() : total;
         assertEq(count, expectedCount);
 
         // Verify country UUIDs ARE in the result (if bundle has room)
@@ -2311,8 +2312,8 @@ contract FleetIdentityTest is Test {
         // With cap=10, bundle=20: tier 1 local (10) + tier 0 local (10) = 20, no room for country
         // With cap=4, bundle=20: tier 1 local (4) + tier 0 local (4) + country (4) = 12
         uint256 localSlots = 2 * cap; // tier 0 and tier 1 locals
-        uint256 remainingRoom = fleet.MAX_BONDED_UUID_BUNDLE_SIZE() > localSlots ? 
-            fleet.MAX_BONDED_UUID_BUNDLE_SIZE() - localSlots : 0;
+        uint256 remainingRoom =
+            fleet.MAX_BONDED_UUID_BUNDLE_SIZE() > localSlots ? fleet.MAX_BONDED_UUID_BUNDLE_SIZE() - localSlots : 0;
         uint256 expectedCountry = remainingRoom > cap ? cap : remainingRoom;
         assertEq(countryCount, expectedCountry, "country members included based on remaining room");
     }
@@ -3594,7 +3595,7 @@ contract FleetIdentityTest is Test {
 
         // Bob (operator) gets full tierBond. Alice gets owned-only token minted.
         assertEq(bondToken.balanceOf(bob), bobBefore + fleet.tierBond(2, false));
-        
+
         // Verify owned-only token was minted to owner
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         assertEq(fleet.ownerOf(ownedTokenId), alice);
@@ -3643,7 +3644,7 @@ contract FleetIdentityTest is Test {
         uint256 registeredToken = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
 
         assertEq(fleet.operatorOf(UUID_1), alice);
-        
+
         // Now alice can set an operator
         vm.prank(alice);
         fleet.setOperator(UUID_1, bob);
@@ -3653,16 +3654,14 @@ contract FleetIdentityTest is Test {
     function testFuzz_setOperator_tierExcessCalculation(uint8 tier1, uint8 tier2) public {
         tier1 = uint8(bound(tier1, 0, 7));
         tier2 = uint8(bound(tier2, 0, 7));
-        
+
         // Register in two local regions
         vm.prank(alice);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, tier1);
         vm.prank(alice);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_NY, tier2);
 
-        uint256 expectedTierBonds = 
-            fleet.tierBond(tier1, false) + 
-            fleet.tierBond(tier2, false);
+        uint256 expectedTierBonds = fleet.tierBond(tier1, false) + fleet.tierBond(tier2, false);
 
         uint256 aliceBefore = bondToken.balanceOf(alice);
         uint256 bobBefore = bondToken.balanceOf(bob);
@@ -3682,7 +3681,7 @@ contract FleetIdentityTest is Test {
         // Alice claims UUID with bob as operator
         vm.prank(alice);
         uint256 tokenId = fleet.claimUuid(UUID_1, bob);
-        
+
         assertEq(fleet.operatorOf(UUID_1), bob);
         assertEq(fleet.uuidOwner(UUID_1), alice);
         assertEq(fleet.ownerOf(tokenId), alice);
@@ -3692,15 +3691,15 @@ contract FleetIdentityTest is Test {
         // Alice claims UUID with bob as operator
         vm.prank(alice);
         fleet.claimUuid(UUID_1, bob);
-        
+
         assertEq(fleet.operatorOf(UUID_1), bob);
-        
+
         // When registering, OPERATOR (bob) must call and pays tier bond
         uint256 bobBefore = bondToken.balanceOf(bob);
-        
+
         vm.prank(bob);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 2);
-        
+
         uint256 tierBond = fleet.tierBond(2, false);
         assertEq(bondToken.balanceOf(bob), bobBefore - tierBond);
         assertEq(fleet.operatorOf(UUID_1), bob);
@@ -3709,7 +3708,7 @@ contract FleetIdentityTest is Test {
     function test_claimUuid_emitsEventWithOperator() public {
         vm.expectEmit(true, true, false, true);
         emit FleetIdentityUpgradeable.UuidClaimed(alice, UUID_1, bob);
-        
+
         vm.prank(alice);
         fleet.claimUuid(UUID_1, bob);
     }
@@ -3718,7 +3717,7 @@ contract FleetIdentityTest is Test {
         // Using msg.sender should normalize to address(0) internally
         vm.prank(alice);
         fleet.claimUuid(UUID_1, alice);
-        
+
         // operatorOf should return owner when stored operator is address(0)
         assertEq(fleet.operatorOf(UUID_1), alice);
         assertEq(fleet.uuidOperator(UUID_1), address(0)); // stored as 0
@@ -3728,17 +3727,17 @@ contract FleetIdentityTest is Test {
         // Claim UUID in owned-only mode
         vm.prank(alice);
         fleet.claimUuid(UUID_1, address(0));
-        
+
         // Set operator while owned-only
         vm.prank(alice);
         fleet.setOperator(UUID_1, bob);
-        
+
         uint256 bobBefore = bondToken.balanceOf(bob);
-        
+
         // Register - OPERATOR (bob) must call and pays tier bond
         vm.prank(bob);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 2);
-        
+
         assertEq(fleet.operatorOf(UUID_1), bob);
         uint256 tierBond = fleet.tierBond(2, false);
         assertEq(bondToken.balanceOf(bob), bobBefore - tierBond);
@@ -3750,11 +3749,11 @@ contract FleetIdentityTest is Test {
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 2);
         vm.prank(alice);
         fleet.setOperator(UUID_1, bob);
-        
+
         // Operator burns the last registered token -> transitions to owned-only
         vm.prank(bob);
         fleet.burn(tokenId);
-        
+
         // Operator should still be bob
         assertEq(fleet.operatorOf(UUID_1), bob);
         assertTrue(fleet.isOwnedOnly(UUID_1));
@@ -3766,15 +3765,15 @@ contract FleetIdentityTest is Test {
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
         vm.prank(alice);
         fleet.setOperator(UUID_1, bob);
-        
+
         uint256 bobBefore = bondToken.balanceOf(bob);
-        
+
         // Register second region - OPERATOR (bob) must call and pays tier bond
         vm.prank(bob);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_NY, 2);
-        
+
         assertEq(fleet.operatorOf(UUID_1), bob);
-        
+
         // Bob pays full tier bond for new region
         uint256 tierBond = fleet.tierBond(2, false);
         assertEq(bondToken.balanceOf(bob), bobBefore - tierBond);
@@ -3783,14 +3782,14 @@ contract FleetIdentityTest is Test {
     function test_freshRegistration_ownerIsOperator() public {
         // Fresh registration without claim - owner pays BASE_BOND + tierBond
         uint256 aliceBefore = bondToken.balanceOf(alice);
-        
+
         vm.prank(alice);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 2);
-        
+
         // Owner is operator when fresh registration
         assertEq(fleet.operatorOf(UUID_1), alice);
         assertEq(fleet.uuidOperator(UUID_1), address(0)); // stored as 0
-        
+
         // Owner paid BASE_BOND + tierBond
         uint256 fullBond = BASE_BOND + fleet.tierBond(2, false);
         assertEq(bondToken.balanceOf(alice), aliceBefore - fullBond);
@@ -3807,31 +3806,31 @@ contract FleetIdentityTest is Test {
         // Alice claims with bob as operator
         vm.prank(alice);
         fleet.claimUuid(UUID_1, bob);
-        
+
         uint256 ownedTokenId = uint256(uint128(UUID_1));
-        
+
         // Alice transfers owned token to carol
         vm.prank(alice);
         fleet.transferFrom(alice, carol, ownedTokenId);
-        
+
         // Carol is now owner (uuidOwner transferred with token)
         assertEq(fleet.uuidOwner(UUID_1), carol);
-        
+
         // Bob (operator) registers - only operator can register owned UUID
         uint256 bobBefore = bondToken.balanceOf(bob);
         vm.prank(bob);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 1);
-        
+
         // Bob paid full tier bond (owner already paid BASE_BOND via claim)
         uint256 tierBond = fleet.tierBond(1, false);
         assertEq(bondToken.balanceOf(bob), bobBefore - tierBond);
-        
+
         // Bob can promote as operator
         uint256 tokenId = fleet.computeTokenId(UUID_1, fleet.makeAdminRegion(US, ADMIN_CA));
-        
+
         vm.prank(bob);
         fleet.promote(tokenId);
-        
+
         assertEq(fleet.fleetTier(tokenId), 2);
     }
 
@@ -3839,19 +3838,19 @@ contract FleetIdentityTest is Test {
         // Fresh registration at tier 2
         vm.prank(alice);
         uint256 tokenId = fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 2);
-        
+
         // Set operator
         vm.prank(alice);
         fleet.setOperator(UUID_1, bob);
-        
+
         uint256 bobBefore = bondToken.balanceOf(bob);
-        
+
         // OPERATOR burns -> transitions to owned-only, bob gets tier bond refund
         vm.prank(bob);
         fleet.burn(tokenId);
-        
+
         assertEq(bondToken.balanceOf(bob), bobBefore + fleet.tierBond(2, false));
-        
+
         // Owned-only token minted to owner
         uint256 ownedTokenId = uint256(uint128(UUID_1));
         assertEq(fleet.ownerOf(ownedTokenId), alice);
@@ -4065,7 +4064,7 @@ contract FleetIdentityTest is Test {
         fleet.setCountryBondMultiplier(32);
 
         uint256 balanceBefore = bondToken.balanceOf(alice);
-        
+
         vm.prank(alice);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
 
@@ -4080,17 +4079,17 @@ contract FleetIdentityTest is Test {
     function test_getCountryAdminAreas_returnsRegisteredAreas() public {
         vm.prank(alice);
         fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
-        
+
         vm.prank(alice);
         fleet.registerFleetLocal(UUID_2, US, ADMIN_NY, 0);
-        
+
         uint32[] memory areas = fleet.getCountryAdminAreas(US);
         assertEq(areas.length, 2);
-        
+
         // Areas should contain both admin area region keys
         uint32 caRegion = fleet.makeAdminRegion(US, ADMIN_CA);
         uint32 nyRegion = fleet.makeAdminRegion(US, ADMIN_NY);
-        
+
         bool foundCA = false;
         bool foundNY = false;
         for (uint256 i = 0; i < areas.length; i++) {

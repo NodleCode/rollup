@@ -2,8 +2,9 @@
 
 pragma solidity ^0.8.24;
 
-import {ERC721EnumerableUpgradeable} from
-    "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
+import {
+    ERC721EnumerableUpgradeable
+} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -676,11 +677,7 @@ contract FleetIdentityUpgradeable is
     }
 
     /// @notice Builds a bundle containing ONLY country-level fleets.
-    function buildCountryOnlyBundle(uint16 countryCode)
-        external
-        view
-        returns (bytes16[] memory uuids, uint256 count)
-    {
+    function buildCountryOnlyBundle(uint16 countryCode) external view returns (bytes16[] memory uuids, uint256 count) {
         if (countryCode == 0 || countryCode > MAX_COUNTRY_CODE) revert InvalidCountryCode();
 
         uint32 countryKey = uint32(countryCode);
@@ -993,8 +990,7 @@ contract FleetIdentityUpgradeable is
         uint32 adminKey = makeAdminRegion(countryCode, adminCode);
         uint32 candidateRegion = isCountry ? countryKey : adminKey;
 
-        (, uint256 count, uint256 highestTier, uint256 lowestTier) =
-            _buildHighestBondedUuidBundle(countryKey, adminKey);
+        (, uint256 count, uint256 highestTier, uint256 lowestTier) = _buildHighestBondedUuidBundle(countryKey, adminKey);
 
         for (uint256 tier = lowestTier; tier <= highestTier; ++tier) {
             bool tierHasCapacity = _regionTierMembers[candidateRegion][tier].length < TIER_CAPACITY;
