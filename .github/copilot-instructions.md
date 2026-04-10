@@ -11,7 +11,7 @@
 
 - **Safety First**:
   - **Checks-Effects-Interactions (CEI)** pattern must be strictly followed.
-  - Use `Ownable2Step` over `Ownable` for privileged access.
+  - When a contract requires an owner (e.g., admin-configurable parameters), prefer `Ownable2Step` over `Ownable`. Do **not** add ownership to contracts that don't need it — many contracts are fully permissionless by design.
   - Prefer `ReentrancyGuard` for external calls where appropriate.
 - **Gas & Efficiency**:
   - Use **Custom Errors** (`error MyError();`) instead of `require` strings.
@@ -62,6 +62,7 @@ forge test --match-path test/SwarmRegistryL1.t.sol
 ### The Solution
 
 Use `ops/verify_zksync_contracts.py` which:
+
 1. Generates standard JSON via `forge verify-contract --show-standard-json-input`
 2. Rewrites all `../` relative imports in OpenZeppelin source content to resolved project-absolute paths (e.g., `../../utils/Foo.sol` → `lib/openzeppelin-contracts/contracts/utils/Foo.sol`)
 3. Submits directly to the ZkSync verification API via HTTP
