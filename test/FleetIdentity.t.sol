@@ -4216,21 +4216,143 @@ contract FleetIdentityTest is Test {
         assertEq(fleet.uuidOwnershipBondPaid(UUID_1), BASE_BOND);
     }
 
-    function test_claimUuidSponsored_burnRefundsToSender() public {
+    function test_claimUuidSponsored_burnRefundsToTreasury() public {
         MockBondTreasury treasury = _deployTreasury();
         treasury.setWhitelisted(alice, true);
 
         vm.prank(alice);
         uint256 tokenId = fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
 
+        uint256 treasuryBefore = bondToken.balanceOf(address(treasury));
         uint256 aliceBefore = bondToken.balanceOf(alice);
 
         // Alice (token holder and uuid owner) burns the owned-only token
         vm.prank(alice);
         fleet.burn(tokenId);
 
-        // Refund goes to alice (uuidOwner = msg.sender always)
+        // Refund goes to treasury (bond payer), NOT alice
+        assertEq(bondToken.balanceOf(address(treasury)), treasuryBefore + BASE_BOND);
+        assertEq(bondToken.balanceOf(alice), aliceBefore); // alice untouched
+    }
+
+    function test_claimUuidSponsored_bondPayerRecorded() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        vm.prank(alice);
+        fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
+
+        assertEq(fleet.uuidOwnershipBondPayer(UUID_1), address(treasury));
+    }
+
+    function test_claimUuid_bondPayerRecordedAsSender() public {
+        vm.prank(alice);
+        fleet.claimUuid(UUID_1, address(0));
+
+        assertEq(fleet.uuidOwnershipBondPayer(UUID_1), alice);
+    }
+
+    function test_claimUuid_burnRefundsToSender() public {
+        vm.prank(alice);
+        uint256 tokenId = fleet.claimUuid(UUID_1, address(0));
+
+        uint256 aliceBefore = bondToken.balanceOf(alice);
+
+        vm.prank(alice);
+        fleet.burn(tokenId);
+
+        // Self-funded: refund goes to alice
         assertEq(bondToken.balanceOf(alice), aliceBefore + BASE_BOND);
+    }
+
+    function test_claimUuidSponsored_burnClearsPayerMapping() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        vm.prank(alice);
+        uint256 tokenId = fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
+
+        vm.prank(alice);
+        fleet.burn(tokenId);
+
+        // All UUID data cleared including bond payer
+        assertEq(fleet.uuidOwnershipBondPayer(UUID_1), address(0));
+        assertEq(fleet.uuidOwner(UUID_1), address(0));
+    }
+
+    function test_claimUuidSponsored_claimBurnCycleDoesNotExtractFunds() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        uint256 treasuryStart = bondToken.balanceOf(address(treasury));
+        uint256 aliceStart = bondToken.balanceOf(alice);
+
+        // Simulate 5 claim+burn cycles with different UUIDs
+        bytes16[5] memory uuids;
+        for (uint256 i = 0; i < 5; i++) {
+            uuids[i] = bytes16(keccak256(abi.encodePacked("exploit-uuid", i)));
+
+            vm.prank(alice);
+            uint256 tokenId = fleet.claimUuidSponsored(uuids[i], address(0), address(treasury));
+
+            vm.prank(alice);
+            fleet.burn(tokenId);
+        }
+
+        // Alice gained nothing, treasury lost nothing
+        assertEq(bondToken.balanceOf(alice), aliceStart);
+        assertEq(bondToken.balanceOf(address(treasury)), treasuryStart);
+    }
+
+    function test_registerFleetDirectly_bondPayerRecordedAsSender() public {
+        vm.prank(alice);
+        fleet.registerFleetLocal(UUID_1, US, ADMIN_CA, 0);
+
+        assertEq(fleet.uuidOwnershipBondPayer(UUID_1), alice);
+    }
+
+    function test_claimUuidSponsored_transferDoesNotMoveBondPayer() public {
+        MockBondTreasury treasury = _deployTreasury();
+        treasury.setWhitelisted(alice, true);
+
+        vm.prank(alice);
+        uint256 tokenId = fleet.claimUuidSponsored(UUID_1, address(0), address(treasury));
+
+        // Transfer token to bob
+        vm.prank(alice);
+        fleet.transferFrom(alice, bob, tokenId);
+
+        // Bond payer stays as treasury (not updated to bob)
+        assertEq(fleet.uuidOwnershipBondPayer(UUID_1), address(treasury));
+
+        // Bob burns — refund goes to treasury, not bob
+        uint256 treasuryBefore = bondToken.balanceOf(address(treasury));
+        uint256 bobBefore = bondToken.balanceOf(bob);
+        vm.prank(bob);
+        fleet.burn(tokenId);
+        assertEq(bondToken.balanceOf(address(treasury)), treasuryBefore + BASE_BOND);
+        assertEq(bondToken.balanceOf(bob), bobBefore); // bob gets nothing
+    }
+
+    function test_claimUuid_transferMovesBondPayerToNewOwner() public {
+        vm.prank(alice);
+        uint256 tokenId = fleet.claimUuid(UUID_1, address(0));
+
+        // Self-funded: bond payer is alice
+        assertEq(fleet.uuidOwnershipBondPayer(UUID_1), alice);
+
+        // Transfer to bob
+        vm.prank(alice);
+        fleet.transferFrom(alice, bob, tokenId);
+
+        // Bond payer updated to bob (self-funded follows token)
+        assertEq(fleet.uuidOwnershipBondPayer(UUID_1), bob);
+
+        // Bob burns — refund goes to bob
+        uint256 bobBefore = bondToken.balanceOf(bob);
+        vm.prank(bob);
+        fleet.burn(tokenId);
+        assertEq(bondToken.balanceOf(bob), bobBefore + BASE_BOND);
     }
 
     function test_claimUuidSponsored_thenRegisterWorksForOperator() public {

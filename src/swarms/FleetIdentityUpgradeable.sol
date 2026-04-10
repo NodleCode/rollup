@@ -199,13 +199,23 @@ contract FleetIdentityUpgradeable is
     mapping(uint32 => uint256) internal _countryAdminAreaIndex;
 
     // ──────────────────────────────────────────────
+    // V2 Storage: Bond payer tracking
+    // ──────────────────────────────────────────────
+
+    /// @notice UUID -> address that paid the ownership bond.
+    /// @dev For self-funded claims this is msg.sender; for sponsored claims
+    ///      this is the treasury. On burn the bond refunds to this address.
+    ///      Zero (pre-upgrade tokens) falls back to uuidOwner.
+    mapping(bytes16 => address) public uuidOwnershipBondPayer;
+
+    // ──────────────────────────────────────────────
     // Storage Gap (for future upgrades)
     // ──────────────────────────────────────────────
 
     /// @dev Reserved storage slots for future upgrades.
     ///      When adding new storage in V2+, reduce this gap accordingly.
     // solhint-disable-next-line var-name-mixedcase
-    uint256[50] private __gap;
+    uint256[49] private __gap;
 
     // ──────────────────────────────────────────────
     // Events
@@ -433,10 +443,14 @@ contract FleetIdentityUpgradeable is
 
             // Use snapshot for accurate refund
             uint256 ownershipBond = uuidOwnershipBondPaid[uuid];
+            // Refund to whoever paid the bond (treasury for sponsored, owner for self-funded).
+            // Zero (pre-upgrade tokens) falls back to the UUID owner.
+            address bondPayer = uuidOwnershipBondPayer[uuid];
+            if (bondPayer == address(0)) bondPayer = owner;
 
             _burn(tokenId);
             _clearUuidOwnership(uuid);
-            _refundBond(owner, ownershipBond);
+            _refundBond(bondPayer, ownershipBond);
 
             emit FleetBurned(tokenHolder, tokenId, region, 0, ownershipBond);
         } else {
@@ -486,6 +500,7 @@ contract FleetIdentityUpgradeable is
         _mint(msg.sender, tokenId);
 
         uuidOwnershipBondPaid[uuid] = _baseBond;
+        uuidOwnershipBondPayer[uuid] = msg.sender;
         _pullBond(msg.sender, _baseBond);
 
         emit UuidClaimed(msg.sender, uuid, operatorOf(uuid));
@@ -525,6 +540,7 @@ contract FleetIdentityUpgradeable is
 
         tokenId = uint256(uint128(uuid));
         uuidOwnershipBondPaid[uuid] = _baseBond;
+        uuidOwnershipBondPayer[uuid] = treasury;
         _mint(msg.sender, tokenId);
 
         // Bond transfer uses the trusted _bondToken — cannot be faked by the treasury.
@@ -761,6 +777,7 @@ contract FleetIdentityUpgradeable is
         delete uuidOperator[uuid];
         delete uuidTotalTierBonds[uuid];
         delete uuidOwnershipBondPaid[uuid];
+        delete uuidOwnershipBondPayer[uuid];
     }
 
     function _decrementUuidCount(bytes16 uuid) internal returns (uint256 newCount) {
@@ -832,6 +849,7 @@ contract FleetIdentityUpgradeable is
             tokenId = _mintFleetToken(uuid, region, targetTier);
             tokenTier0Bond[tokenId] = tier0Bond;
             uuidOwnershipBondPaid[uuid] = _baseBond;
+            uuidOwnershipBondPayer[uuid] = msg.sender;
 
             _pullBond(msg.sender, _baseBond + targetTierBond);
 
@@ -1114,7 +1132,13 @@ contract FleetIdentityUpgradeable is
 
         uint32 region = tokenRegion(tokenId);
         if (region == OWNED_REGION_KEY && from != address(0) && to != address(0)) {
-            uuidOwner[tokenUuid(tokenId)] = to;
+            bytes16 uuid = tokenUuid(tokenId);
+            uuidOwner[uuid] = to;
+            // Transfer bond-refund right only if it was the previous owner (self-funded).
+            // Sponsored bonds (treasury != from) stay with the original payer.
+            if (uuidOwnershipBondPayer[uuid] == from) {
+                uuidOwnershipBondPayer[uuid] = to;
+            }
         }
 
         return from;
