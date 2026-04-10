@@ -30,7 +30,9 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
 
   const owner = process.env.L2_ADMIN;
   if (!owner) {
-    throw new Error("L2_ADMIN environment variable is required (ZkSync Safe multisig)");
+    throw new Error(
+      "L2_ADMIN environment variable is required (ZkSync Safe multisig)",
+    );
   }
 
   console.log("=== Deploying Upgradeable Swarm Contracts on ZkSync ===");

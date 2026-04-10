@@ -131,8 +131,7 @@ contract UpgradeableContractsTest is Test {
         serviceProviderImpl = new ServiceProviderUpgradeable();
         serviceProviderProxy = address(
             new ERC1967Proxy(
-                address(serviceProviderImpl),
-                abi.encodeCall(ServiceProviderUpgradeable.initialize, (owner))
+                address(serviceProviderImpl), abi.encodeCall(ServiceProviderUpgradeable.initialize, (owner))
             )
         );
         serviceProvider = ServiceProviderUpgradeable(serviceProviderProxy);
@@ -153,8 +152,7 @@ contract UpgradeableContractsTest is Test {
             new ERC1967Proxy(
                 address(swarmRegistryImpl),
                 abi.encodeCall(
-                    SwarmRegistryUniversalUpgradeable.initialize,
-                    (fleetIdentityProxy, serviceProviderProxy, owner)
+                    SwarmRegistryUniversalUpgradeable.initialize, (fleetIdentityProxy, serviceProviderProxy, owner)
                 )
             )
         );
@@ -390,7 +388,7 @@ contract UpgradeableContractsTest is Test {
         bytes memory filterData = hex"0102030405";
         FingerprintSize fpSize = FingerprintSize.BITS_16;
         TagType tagType = TagType.IBEACON_PAYLOAD_ONLY;
-        
+
         vm.prank(alice);
         uint256 swarmId = swarmRegistry.registerSwarm(uuid, providerId, filterData, fpSize, tagType);
 
