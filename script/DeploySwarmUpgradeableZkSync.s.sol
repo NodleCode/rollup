@@ -28,6 +28,7 @@ import {BondTreasuryPaymaster} from "../src/paymasters/BondTreasuryPaymaster.sol
  *   - BOND_QUOTA: (optional) Max bond amount sponsorable per period in wei (defaults to 100k NODL)
  *   - BOND_PERIOD: (optional) Quota renewal period in seconds (defaults to 1 day)
  *   - FLEET_OPERATOR: Address of the Nodle swarm operator (initial whitelisted user)
+ *   - FLEET_OPERATOR_BOND_ALLOWANCE: (optional) Initial bond allowance for fleet operator in wei (defaults to BOND_QUOTA)
  */
 contract DeploySwarmUpgradeableZkSync is Script {
     // Deployment artifacts
@@ -50,6 +51,7 @@ contract DeploySwarmUpgradeableZkSync is Script {
         uint256 bondQuota = vm.envOr("BOND_QUOTA", uint256(100_000 ether)); // 100k NODL default
         uint256 bondPeriod = vm.envOr("BOND_PERIOD", uint256(1 days));
         address fleetOperator = vm.envAddress("FLEET_OPERATOR");
+        uint256 fleetOperatorBondAllowance = vm.envOr("FLEET_OPERATOR_BOND_ALLOWANCE", bondQuota);
 
         console.log("=== Deploying Upgradeable Swarm Contracts on ZkSync ===");
         console.log("Bond Token:", bondToken);
@@ -59,6 +61,7 @@ contract DeploySwarmUpgradeableZkSync is Script {
         console.log("Bond Quota:", bondQuota);
         console.log("Bond Period:", bondPeriod);
         console.log("Fleet Operator:", fleetOperator);
+        console.log("Fleet Operator Bond Allowance:", fleetOperatorBondAllowance);
         console.log("");
 
         vm.startBroadcast(deployerPrivateKey);
@@ -105,6 +108,8 @@ contract DeploySwarmUpgradeableZkSync is Script {
         whitelistedContracts[2] = swarmRegistryProxy;
         address[] memory whitelistedUsers = new address[](1);
         whitelistedUsers[0] = fleetOperator;
+        uint256[] memory initialBondAllowances = new uint256[](1);
+        initialBondAllowances[0] = fleetOperatorBondAllowance;
         bondTreasuryPaymaster = address(
             new BondTreasuryPaymaster(
                 owner,
@@ -112,6 +117,7 @@ contract DeploySwarmUpgradeableZkSync is Script {
                 withdrawer,
                 whitelistedContracts,
                 whitelistedUsers,
+                initialBondAllowances,
                 bondToken,
                 bondQuota,
                 bondPeriod

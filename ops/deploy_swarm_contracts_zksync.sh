@@ -54,6 +54,7 @@
 #   - COUNTRY_MULTIPLIER: (optional) Country multiplier for bond calculation (0 = use default)
 #   - BOND_QUOTA: (optional) Max bond amount sponsorable per period in wei
 #   - BOND_PERIOD: (optional) Quota renewal period in seconds
+#   - FLEET_OPERATOR_BOND_ALLOWANCE: (optional) Initial bond allowance for fleet operator in wei (defaults to BOND_QUOTA)
 #
 # =============================================================================
 
@@ -190,6 +191,7 @@ preflight_checks() {
   export PAYMASTER_WITHDRAWER="${PAYMASTER_WITHDRAWER:-$L2_ADMIN}"
   export BOND_QUOTA="${BOND_QUOTA:-100000000000000000000000}"  # 100000 NODL default
   export BOND_PERIOD="${BOND_PERIOD:-86400}"  # 1 day default
+  export FLEET_OPERATOR_BOND_ALLOWANCE="${FLEET_OPERATOR_BOND_ALLOWANCE:-$BOND_QUOTA}"
 
   log_success "Pre-flight checks passed"
 }
@@ -347,6 +349,7 @@ deploy_contracts() {
     log_info "  FLEET_OPERATOR: $FLEET_OPERATOR"
     log_info "  BOND_QUOTA: $BOND_QUOTA"
     log_info "  BOND_PERIOD: $BOND_PERIOD"
+    log_info "  FLEET_OPERATOR_BOND_ALLOWANCE: $FLEET_OPERATOR_BOND_ALLOWANCE"
     log_info "  RPC: $RPC_URL"
     return 0
   fi
@@ -616,6 +619,7 @@ print_summary() {
   echo "  Base Bond:            $BASE_BOND wei"
   echo "  Bond Quota:           $BOND_QUOTA wei"
   echo "  Bond Period:          $BOND_PERIOD seconds"
+  echo "  Operator Allowance:   $FLEET_OPERATOR_BOND_ALLOWANCE wei"
   echo ""
   echo "=============================================="
 }

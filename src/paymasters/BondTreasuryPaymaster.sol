@@ -27,6 +27,7 @@ contract BondTreasuryPaymaster is WhitelistPaymaster, QuotaControl {
     error CallerNotWhitelistedContract();
     error InsufficientBondBalance();
     error UserBondAllowanceExceeded();
+    error ArrayLengthMismatch();
 
     constructor(
         address admin,
@@ -34,10 +35,12 @@ contract BondTreasuryPaymaster is WhitelistPaymaster, QuotaControl {
         address withdrawer,
         address[] memory initialWhitelistedContracts,
         address[] memory initialWhitelistedUsers,
+        uint256[] memory initialBondAllowances,
         address bondToken_,
         uint256 initialQuota,
         uint256 initialPeriod
     ) WhitelistPaymaster(admin, withdrawer) QuotaControl(initialQuota, initialPeriod, admin) {
+        if (initialWhitelistedUsers.length != initialBondAllowances.length) revert ArrayLengthMismatch();
         if (whitelistAdmin != admin) {
             _grantRole(WHITELIST_ADMIN_ROLE, whitelistAdmin);
         }
@@ -61,6 +64,7 @@ contract BondTreasuryPaymaster is WhitelistPaymaster, QuotaControl {
         uint256 m = initialWhitelistedUsers.length;
         for (uint256 j = 0; j < m; ++j) {
             isWhitelistedUser[initialWhitelistedUsers[j]] = true;
+            userBondAllowance[initialWhitelistedUsers[j]] = initialBondAllowances[j];
         }
         if (m > 0) {
             emit WhitelistedUsersAdded(initialWhitelistedUsers);
