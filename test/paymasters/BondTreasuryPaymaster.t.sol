@@ -145,6 +145,10 @@ contract BondTreasuryPaymasterTest is Test {
         bondToken.mint(address(paymaster), 10_000 ether);
         whitelistTargets = new address[](1);
         whitelistTargets[0] = alice;
+
+        // Give alice a generous bond allowance for existing tests
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(alice, 10_000 ether);
     }
 
     // ══════════════════════════════════════════════
@@ -216,7 +220,14 @@ contract BondTreasuryPaymasterTest is Test {
         users[2] = charlie;
 
         MockBondTreasuryPaymaster pm = new MockBondTreasuryPaymaster(
-            admin, admin, withdrawer, _initialContractWhitelist(address(fleet)), users, address(bondToken), QUOTA, PERIOD
+            admin,
+            admin,
+            withdrawer,
+            _initialContractWhitelist(address(fleet)),
+            users,
+            address(bondToken),
+            QUOTA,
+            PERIOD
         );
         assertTrue(pm.isWhitelistedUser(alice));
         assertTrue(pm.isWhitelistedUser(bob));
@@ -231,7 +242,14 @@ contract BondTreasuryPaymasterTest is Test {
         vm.expectEmit();
         emit WhitelistPaymaster.WhitelistedUsersAdded(users);
         new MockBondTreasuryPaymaster(
-            admin, admin, withdrawer, _initialContractWhitelist(address(fleet)), users, address(bondToken), QUOTA, PERIOD
+            admin,
+            admin,
+            withdrawer,
+            _initialContractWhitelist(address(fleet)),
+            users,
+            address(bondToken),
+            QUOTA,
+            PERIOD
         );
     }
 
@@ -464,8 +482,10 @@ contract BondTreasuryPaymasterTest is Test {
     function test_sponsoredClaim_multipleClaims() public {
         address[] memory bobList = new address[](1);
         bobList[0] = bob;
-        vm.prank(admin);
+        vm.startPrank(admin);
         paymaster.addWhitelistedUsers(bobList);
+        paymaster.setUserBondAllowance(bob, 10_000 ether);
+        vm.stopPrank();
 
         vm.prank(alice);
         uint256 tokenId1 = fleet.claimUuidSponsored(UUID_1, address(0), address(paymaster));
@@ -488,16 +508,19 @@ contract BondTreasuryPaymasterTest is Test {
         fleet.claimUuidSponsored(UUID_1, address(0), address(paymaster));
     }
 
-    function test_burnAfterSponsoredClaim_refundsToOwner() public {
+    function test_burnAfterSponsoredClaim_refundsToTreasury() public {
         vm.prank(alice);
         uint256 tokenId = fleet.claimUuidSponsored(UUID_1, address(0), address(paymaster));
 
+        uint256 paymasterBefore = bondToken.balanceOf(address(paymaster));
         uint256 aliceBefore = bondToken.balanceOf(alice);
 
         vm.prank(alice);
         fleet.burn(tokenId);
 
-        assertEq(bondToken.balanceOf(alice), aliceBefore + BASE_BOND);
+        // Refund goes to paymaster (the bond payer), not alice
+        assertEq(bondToken.balanceOf(address(paymaster)), paymasterBefore + BASE_BOND);
+        assertEq(bondToken.balanceOf(alice), aliceBefore); // alice untouched
     }
 
     // ══════════════════════════════════════════════
@@ -536,6 +559,8 @@ contract BondTreasuryPaymasterTest is Test {
         );
 
         bondToken.mint(address(tightPaymaster), 10_000 ether);
+        vm.prank(admin);
+        tightPaymaster.setUserBondAllowance(alice, 10_000 ether);
 
         vm.prank(alice);
         vm.expectRevert(QuotaControl.QuotaExceeded.selector);
@@ -571,8 +596,10 @@ contract BondTreasuryPaymasterTest is Test {
 
         address[] memory bobList = new address[](1);
         bobList[0] = bob;
-        vm.prank(admin);
+        vm.startPrank(admin);
         paymaster.addWhitelistedUsers(bobList);
+        paymaster.setUserBondAllowance(bob, 10_000 ether);
+        vm.stopPrank();
 
         vm.prank(bob);
         fleet.claimUuidSponsored(UUID_2, address(0), address(paymaster));
@@ -720,5 +747,229 @@ contract BondTreasuryPaymasterTest is Test {
         vm.expectRevert_AccessControlUnauthorizedAccount(address(puller), paymaster.WHITELIST_ADMIN_ROLE());
         vm.prank(address(puller));
         paymaster.addWhitelistedUsers(whitelistTargets);
+    }
+
+    // ══════════════════════════════════════════════
+    // Per-user bond allowance
+    // ══════════════════════════════════════════════
+
+    function test_setUserBondAllowance_basic() public {
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(bob, 500 ether);
+        assertEq(paymaster.userBondAllowance(bob), 500 ether);
+    }
+
+    function test_setUserBondAllowance_emitsEvent() public {
+        vm.expectEmit(true, true, true, true);
+        emit BondTreasuryPaymaster.UserBondAllowanceSet(bob, 500 ether);
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(bob, 500 ether);
+    }
+
+    function test_setUserBondAllowance_overwritesPrevious() public {
+        vm.startPrank(admin);
+        paymaster.setUserBondAllowance(bob, 500 ether);
+        paymaster.setUserBondAllowance(bob, 200 ether);
+        vm.stopPrank();
+        assertEq(paymaster.userBondAllowance(bob), 200 ether);
+    }
+
+    function test_setUserBondAllowance_canSetToZero() public {
+        vm.startPrank(admin);
+        paymaster.setUserBondAllowance(bob, 500 ether);
+        paymaster.setUserBondAllowance(bob, 0);
+        vm.stopPrank();
+        assertEq(paymaster.userBondAllowance(bob), 0);
+    }
+
+    function test_RevertIf_setUserBondAllowance_notWhitelistAdmin() public {
+        vm.expectRevert_AccessControlUnauthorizedAccount(alice, paymaster.WHITELIST_ADMIN_ROLE());
+        vm.prank(alice);
+        paymaster.setUserBondAllowance(bob, 500 ether);
+    }
+
+    function test_RevertIf_setUserBondAllowance_notWithdrawer() public {
+        vm.expectRevert_AccessControlUnauthorizedAccount(withdrawer, paymaster.WHITELIST_ADMIN_ROLE());
+        vm.prank(withdrawer);
+        paymaster.setUserBondAllowance(bob, 500 ether);
+    }
+
+    function test_increaseUserBondAllowance_basic() public {
+        vm.startPrank(admin);
+        paymaster.setUserBondAllowance(bob, 500 ether);
+        paymaster.increaseUserBondAllowance(bob, 200 ether);
+        vm.stopPrank();
+        assertEq(paymaster.userBondAllowance(bob), 700 ether);
+    }
+
+    function test_increaseUserBondAllowance_fromZero() public {
+        assertEq(paymaster.userBondAllowance(bob), 0);
+        vm.prank(admin);
+        paymaster.increaseUserBondAllowance(bob, 300 ether);
+        assertEq(paymaster.userBondAllowance(bob), 300 ether);
+    }
+
+    function test_increaseUserBondAllowance_emitsEvent() public {
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(bob, 100 ether);
+
+        vm.expectEmit(true, true, true, true);
+        emit BondTreasuryPaymaster.UserBondAllowanceIncreased(bob, 200 ether, 300 ether);
+        vm.prank(admin);
+        paymaster.increaseUserBondAllowance(bob, 200 ether);
+    }
+
+    function test_RevertIf_increaseUserBondAllowance_notWhitelistAdmin() public {
+        vm.expectRevert_AccessControlUnauthorizedAccount(alice, paymaster.WHITELIST_ADMIN_ROLE());
+        vm.prank(alice);
+        paymaster.increaseUserBondAllowance(bob, 100 ether);
+    }
+
+    function test_userBondAllowance_defaultIsZero() public view {
+        assertEq(paymaster.userBondAllowance(bob), 0);
+    }
+
+    function test_consumeSponsoredBond_decrementsAllowance() public {
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(alice, 300 ether);
+
+        vm.prank(address(fleet));
+        paymaster.consumeSponsoredBond(alice, BASE_BOND);
+
+        assertEq(paymaster.userBondAllowance(alice), 300 ether - BASE_BOND);
+    }
+
+    function test_RevertIf_consumeSponsoredBond_allowanceExceeded() public {
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(alice, BASE_BOND - 1);
+
+        vm.prank(address(fleet));
+        vm.expectRevert(BondTreasuryPaymaster.UserBondAllowanceExceeded.selector);
+        paymaster.consumeSponsoredBond(alice, BASE_BOND);
+    }
+
+    function test_RevertIf_consumeSponsoredBond_zeroAllowance() public {
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(alice, 0);
+
+        vm.prank(address(fleet));
+        vm.expectRevert(BondTreasuryPaymaster.UserBondAllowanceExceeded.selector);
+        paymaster.consumeSponsoredBond(alice, BASE_BOND);
+    }
+
+    function test_userAllowance_consumedExactly() public {
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(alice, BASE_BOND);
+
+        // First call succeeds
+        vm.prank(address(fleet));
+        paymaster.consumeSponsoredBond(alice, BASE_BOND);
+        assertEq(paymaster.userBondAllowance(alice), 0);
+
+        // Second call fails
+        vm.prank(address(fleet));
+        vm.expectRevert(BondTreasuryPaymaster.UserBondAllowanceExceeded.selector);
+        paymaster.consumeSponsoredBond(alice, BASE_BOND);
+    }
+
+    function test_userAllowance_multipleConsumptions() public {
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(alice, 3 * BASE_BOND);
+
+        for (uint256 i = 0; i < 3; i++) {
+            vm.prank(address(fleet));
+            paymaster.consumeSponsoredBond(alice, BASE_BOND);
+        }
+        assertEq(paymaster.userBondAllowance(alice), 0);
+
+        vm.prank(address(fleet));
+        vm.expectRevert(BondTreasuryPaymaster.UserBondAllowanceExceeded.selector);
+        paymaster.consumeSponsoredBond(alice, BASE_BOND);
+    }
+
+    function test_userAllowance_topUpAfterPartialUse() public {
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(alice, 2 * BASE_BOND);
+
+        vm.prank(address(fleet));
+        paymaster.consumeSponsoredBond(alice, BASE_BOND);
+        assertEq(paymaster.userBondAllowance(alice), BASE_BOND);
+
+        // Admin tops up
+        vm.prank(admin);
+        paymaster.increaseUserBondAllowance(alice, 3 * BASE_BOND);
+        assertEq(paymaster.userBondAllowance(alice), 4 * BASE_BOND);
+    }
+
+    function test_userAllowance_independentPerUser() public {
+        vm.startPrank(admin);
+        paymaster.setUserBondAllowance(alice, 500 ether);
+        paymaster.addWhitelistedUsers(_singleAddress(bob));
+        paymaster.setUserBondAllowance(bob, 200 ether);
+        vm.stopPrank();
+
+        // Alice consumes
+        vm.prank(address(fleet));
+        paymaster.consumeSponsoredBond(alice, BASE_BOND);
+        assertEq(paymaster.userBondAllowance(alice), 400 ether);
+        assertEq(paymaster.userBondAllowance(bob), 200 ether); // unchanged
+    }
+
+    function test_userAllowance_e2e_claimBlockedByAllowance() public {
+        // Alice has enough global quota but zero user allowance
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(alice, 0);
+
+        vm.prank(alice);
+        vm.expectRevert(BondTreasuryPaymaster.UserBondAllowanceExceeded.selector);
+        fleet.claimUuidSponsored(UUID_1, address(0), address(paymaster));
+    }
+
+    function test_userAllowance_e2e_claimSucceedsWithAllowance() public {
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(alice, BASE_BOND);
+
+        vm.prank(alice);
+        fleet.claimUuidSponsored(UUID_1, address(0), address(paymaster));
+
+        assertEq(fleet.uuidOwner(UUID_1), alice);
+        assertEq(paymaster.userBondAllowance(alice), 0);
+    }
+
+    function test_userAllowance_e2e_exploitBlockedByAllowance() public {
+        // Give alice exactly 2 claims worth
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(alice, 2 * BASE_BOND);
+
+        bondToken.mint(address(paymaster), 100_000 ether);
+
+        // First two claims succeed
+        for (uint256 i = 0; i < 2; i++) {
+            bytes16 uuid = bytes16(keccak256(abi.encodePacked("uuid-cap-", i)));
+            vm.prank(alice);
+            uint256 tokenId = fleet.claimUuidSponsored(uuid, address(0), address(paymaster));
+            vm.prank(alice);
+            fleet.burn(tokenId); // refund goes to paymaster, not alice
+        }
+
+        // Third claim blocked by user allowance (even though quota may have reset)
+        bytes16 uuid3 = bytes16(keccak256("uuid-cap-blocked"));
+        vm.prank(alice);
+        vm.expectRevert(BondTreasuryPaymaster.UserBondAllowanceExceeded.selector);
+        fleet.claimUuidSponsored(uuid3, address(0), address(paymaster));
+    }
+
+    function testFuzz_setUserBondAllowance(address user, uint256 amount) public {
+        vm.prank(admin);
+        paymaster.setUserBondAllowance(user, amount);
+        assertEq(paymaster.userBondAllowance(user), amount);
+    }
+
+    function testFuzz_increaseUserBondAllowance(uint128 initial, uint128 added) public {
+        vm.startPrank(admin);
+        paymaster.setUserBondAllowance(bob, initial);
+        paymaster.increaseUserBondAllowance(bob, added);
+        vm.stopPrank();
+        assertEq(paymaster.userBondAllowance(bob), uint256(initial) + uint256(added));
     }
 }
