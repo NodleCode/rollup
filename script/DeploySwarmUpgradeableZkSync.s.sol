@@ -23,8 +23,8 @@ import {BondTreasuryPaymaster} from "../src/paymasters/BondTreasuryPaymaster.sol
  *   - BOND_TOKEN: Address of the ERC20 bond token
  *   - BASE_BOND: Base bond amount in wei
  *   - COUNTRY_MULTIPLIER: (optional) Country multiplier for bond calculation (0 = use default)
- *   - NODL_ADMIN: (optional) Owner address for all deployed contracts (defaults to deployer)
- *   - PAYMASTER_WITHDRAWER: (optional) Address allowed to withdraw tokens from paymaster (defaults to NODL_ADMIN)
+ *   - L2_ADMIN: Owner address for all deployed L2 contracts (ZkSync Safe multisig)
+ *   - PAYMASTER_WITHDRAWER: (optional) Address allowed to withdraw tokens from paymaster (defaults to L2_ADMIN)
  *   - BOND_QUOTA: (optional) Max bond amount sponsorable per period in wei (defaults to 100k NODL)
  *   - BOND_PERIOD: (optional) Quota renewal period in seconds (defaults to 1 day)
  *   - FLEET_OPERATOR: Address of the Nodle swarm operator (initial whitelisted user)
@@ -45,7 +45,7 @@ contract DeploySwarmUpgradeableZkSync is Script {
         address bondToken = vm.envAddress("BOND_TOKEN");
         uint256 baseBond = vm.envUint("BASE_BOND");
         uint256 countryMultiplier = vm.envOr("COUNTRY_MULTIPLIER", uint256(0)); // 0 means use the default
-        address owner = vm.envOr("NODL_ADMIN", vm.addr(deployerPrivateKey));
+        address owner = vm.envAddress("L2_ADMIN");
         address withdrawer = vm.envOr("PAYMASTER_WITHDRAWER", owner);
         uint256 bondQuota = vm.envOr("BOND_QUOTA", uint256(100_000 ether)); // 100k NODL default
         uint256 bondPeriod = vm.envOr("BOND_PERIOD", uint256(1 days));

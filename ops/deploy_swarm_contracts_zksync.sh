@@ -49,8 +49,8 @@
 #   - NODL: Address of the NODL token (used as bond token)
 #   - FLEET_OPERATOR: Address of the backend swarm operator (whitelisted user)
 #   - BASE_BOND: Bond amount in wei (e.g., 100000000000000000000 for 100 NODL)
-#   - NODL_ADMIN: (optional) Owner address for all deployed contracts, defaults to deployer
-#   - PAYMASTER_WITHDRAWER: (optional) Address allowed to withdraw tokens from paymaster, defaults to NODL_ADMIN
+#   - L2_ADMIN: Owner address for all deployed L2 contracts (ZkSync Safe multisig)
+#   - PAYMASTER_WITHDRAWER: (optional) Address allowed to withdraw tokens from paymaster, defaults to L2_ADMIN
 #   - COUNTRY_MULTIPLIER: (optional) Country multiplier for bond calculation (0 = use default)
 #   - BOND_QUOTA: (optional) Max bond amount sponsorable per period in wei
 #   - BOND_PERIOD: (optional) Quota renewal period in seconds
@@ -183,8 +183,11 @@ preflight_checks() {
   # Set defaults
   export BOND_TOKEN="${BOND_TOKEN:-$NODL}"
   export BASE_BOND="${BASE_BOND:-1000000000000000000000}"  # 1000 NODL default
-  export NODL_ADMIN="${NODL_ADMIN:-$DEPLOYER_ADDRESS}"
-  export PAYMASTER_WITHDRAWER="${PAYMASTER_WITHDRAWER:-$NODL_ADMIN}"
+  if [ -z "$L2_ADMIN" ]; then
+    log_error "L2_ADMIN not set in $ENV_FILE (must be the ZkSync Safe multisig)"
+    exit 1
+  fi
+  export PAYMASTER_WITHDRAWER="${PAYMASTER_WITHDRAWER:-$L2_ADMIN}"
   export BOND_QUOTA="${BOND_QUOTA:-100000000000000000000000}"  # 100000 NODL default
   export BOND_PERIOD="${BOND_PERIOD:-86400}"  # 1 day default
 
@@ -339,7 +342,7 @@ deploy_contracts() {
     log_info "Would deploy with:"
     log_info "  BOND_TOKEN: $BOND_TOKEN"
     log_info "  BASE_BOND: $BASE_BOND"
-    log_info "  NODL_ADMIN: ${NODL_ADMIN:-deployer}"
+    log_info "  L2_ADMIN: $L2_ADMIN"
     log_info "  PAYMASTER_WITHDRAWER: ${PAYMASTER_WITHDRAWER:-deployer}"
     log_info "  FLEET_OPERATOR: $FLEET_OPERATOR"
     log_info "  BOND_QUOTA: $BOND_QUOTA"
@@ -677,7 +680,7 @@ print_summary() {
   echo "  Explorer:       $EXPLORER_URL/address/$BOND_TREASURY_PAYMASTER"
   echo ""
   echo "Configuration:"
-  echo "  Owner:                ${NODL_ADMIN:-deployer}"
+  echo "  Owner:                $L2_ADMIN"
   echo "  Withdrawer:           ${PAYMASTER_WITHDRAWER:-deployer}"
   echo "  Fleet Operator:       $FLEET_OPERATOR"
   echo "  Bond Token:           $BOND_TOKEN"
