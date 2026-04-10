@@ -16,7 +16,7 @@ dotenv.config({ path: ".env-test" });
  * - DEPLOYER_PRIVATE_KEY: Private key for deployment
  * - BOND_TOKEN: Address of the ERC20 bond token
  * - BASE_BOND: Base bond amount in wei
- * - OWNER: (optional) Owner address, defaults to deployer
+ * - L2_ADMIN: Owner address for all deployed L2 contracts (ZkSync Safe multisig)
  */
 module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const bondToken = process.env.BOND_TOKEN!;
@@ -28,7 +28,12 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const wallet = new Wallet(process.env.DEPLOYER_PRIVATE_KEY!, provider);
   const deployer = new Deployer(hre, wallet);
 
-  const owner = process.env.OWNER || wallet.address;
+  const owner = process.env.L2_ADMIN;
+  if (!owner) {
+    throw new Error(
+      "L2_ADMIN environment variable is required (ZkSync Safe multisig)",
+    );
+  }
 
   console.log("=== Deploying Upgradeable Swarm Contracts on ZkSync ===");
   console.log("Bond Token:", bondToken);
