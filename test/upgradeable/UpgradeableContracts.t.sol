@@ -61,8 +61,8 @@ contract FleetIdentityUpgradeableV2Mock is FleetIdentityUpgradeable {
         fleetMetadata[tokenId] = metadata;
     }
 
-    function version() external pure returns (string memory) {
-        return "V2";
+    function version() external pure override returns (string memory) {
+        return "2.0.0";
     }
 }
 
@@ -259,6 +259,10 @@ contract UpgradeableContractsTest is Test {
         assertEq(fleetIdentity.symbol(), "SFID");
     }
 
+    function test_FleetIdentity_Version() public view {
+        assertEq(fleetIdentity.version(), "1.0.0");
+    }
+
     function test_FleetIdentity_CannotReinitialize() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
         fleetIdentity.initialize(attacker, address(bondToken), BASE_BOND, 0);
@@ -289,7 +293,7 @@ contract UpgradeableContractsTest is Test {
 
         // Verify upgrade
         FleetIdentityUpgradeableV2Mock v2 = FleetIdentityUpgradeableV2Mock(fleetIdentityProxy);
-        assertEq(v2.version(), "V2");
+        assertEq(v2.version(), "2.0.0");
         assertGt(v2.v2InitializedAt(), 0);
 
         // Verify old state preserved
@@ -299,6 +303,16 @@ contract UpgradeableContractsTest is Test {
         vm.prank(alice);
         v2.setFleetMetadata(tokenId, "metadata://test");
         assertEq(v2.fleetMetadata(tokenId), "metadata://test");
+    }
+
+    function test_FleetIdentity_VersionChangesAfterUpgrade() public {
+        assertEq(fleetIdentity.version(), "1.0.0");
+
+        FleetIdentityUpgradeableV2Mock v2Impl = new FleetIdentityUpgradeableV2Mock();
+        vm.prank(owner);
+        fleetIdentity.upgradeToAndCall(address(v2Impl), "");
+
+        assertEq(FleetIdentityUpgradeableV2Mock(fleetIdentityProxy).version(), "2.0.0");
     }
 
     function test_FleetIdentity_NonOwnerCannotUpgrade() public {

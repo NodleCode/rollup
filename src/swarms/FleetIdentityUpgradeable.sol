@@ -733,6 +733,15 @@ contract FleetIdentityUpgradeable is
     }
 
     // ══════════════════════════════════════════════
+    // Version
+    // ══════════════════════════════════════════════
+
+    /// @notice Returns the contract version for upgrade verification.
+    function version() external pure virtual returns (string memory) {
+        return "1.0.0";
+    }
+
+    // ══════════════════════════════════════════════
     // UUPS Authorization
     // ══════════════════════════════════════════════
 
