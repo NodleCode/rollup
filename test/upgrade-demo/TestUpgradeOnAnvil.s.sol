@@ -17,7 +17,7 @@ import {SwarmRegistryL1Upgradeable} from "../../src/swarms/SwarmRegistryL1Upgrad
 
 /// @dev Mock V2 that adds version() - inherits from V1 to preserve storage layout
 contract FleetIdentityUpgradeableV2 is FleetIdentityUpgradeable {
-    function version() external pure returns (string memory) {
+    function version() external pure override returns (string memory) {
         return "2.0.0";
     }
 }
