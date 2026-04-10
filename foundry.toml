@@ -11,6 +11,12 @@ via_ir = true
 optimizer = true
 optimizer_runs = 200
 
+# Omit CBOR metadata hash from bytecode. Required for full (not partial) source
+# verification on ZkSync explorer. Without this, the metadata hash includes source
+# file paths, and the ZkSync verifier rejects OpenZeppelin's "../" relative imports,
+# forcing flattened/rewritten sources that produce a different metadata hash.
+bytecode_hash = "none"
+
 [lint]
 # Exclude ERC20 transfer warning - false positive for ERC721.transferFrom in tests
 exclude_lints = ["erc20-unchecked-transfer"]
@@ -23,6 +29,7 @@ solc = "0.8.26"
 via_ir = true
 optimizer = true
 optimizer_runs = 200
+bytecode_hash = "none"
 # Exclude L1-only contracts that use SSTORE2/EXTCODECOPY
 ignored_error_codes = []
 ignored_warnings_from = []

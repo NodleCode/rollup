@@ -444,16 +444,18 @@ verify_deployment() {
 # =============================================================================
 #
 # Why a separate step:
-#   forge script --verify sends absolute file paths (e.g. /Users/me/project/src/...)
-#   which the ZkSync verifier rejects: "import with absolute or traversal path".
+#   forge script --verify sends absolute file paths that ZkSync verifier rejects.
+#   forge verify-contract sends standard JSON with "../" relative imports in
+#   OpenZeppelin sources, which the verifier also rejects.
 #
-# Workaround:
-#   1. Flatten each contract into a single .sol file (no imports)
-#   2. Use forge verify-contract with the flattened file
-#   3. Clean up temporary flat files
+# Solution:
+#   ops/verify_zksync_contracts.py generates standard JSON via forge, rewrites
+#   all "../" relative imports to resolved absolute-within-project paths, then
+#   submits directly to the ZkSync verification API.
 #
-# Constructor args are extracted from the broadcast JSON using the ZkSync
-# ContractDeployer ABI: create(bytes32 salt, bytes32 bytecodeHash, bytes ctorInput)
+#   For contracts compiled with bytecode_hash = "none" (foundry.toml, added
+#   2026-04-10), this achieves FULL verification. For older contracts, it
+#   achieves "partial" (metadata mismatch — cosmetic only, source is correct).
 #
 # =============================================================================
 
@@ -464,12 +466,10 @@ verify_source_code() {
 
   log_info "Verifying source code on block explorer..."
 
-  # Get RPC URL for chain detection
+  # Determine chain ID for broadcast path
   if [ "$NETWORK" = "mainnet" ]; then
-    RPC_URL="${L2_RPC:-https://mainnet.era.zksync.io}"
     CHAIN_ID="324"
   else
-    RPC_URL="${L2_RPC:-https://rpc.ankr.com/zksync_era_sepolia}"
     CHAIN_ID="300"
   fi
 
@@ -480,97 +480,26 @@ verify_source_code() {
     return 1
   fi
 
-  # Extract constructor args from broadcast JSON
-  # ZkSync ContractDeployer.create(): 0x9c4d535b + salt(32) + hash(32) + offset_to_ctor(32) + len(32) + ctor_data
-  log_info "Extracting constructor args from broadcast..."
-  CTOR_ARGS=$(python3 -c "
-import json, sys
-with open('$BROADCAST_JSON') as f:
-    data = json.load(f)
-for tx in data['transactions']:
-    addr = (tx.get('additionalContracts') or [{}])[0].get('address', '')
-    inp = tx['transaction'].get('input', '')
-    payload = inp[10:]  # skip 0x + 9c4d535b
-    offset = int(payload[128:192], 16)
-    ctor_start = offset * 2
-    ctor_len = int(payload[ctor_start:ctor_start+64], 16)
-    ctor_args = payload[ctor_start+64:ctor_start+64+ctor_len*2]
-    print(f'{addr}:{ctor_args}')
-")
+  # Check python3 is available
+  if ! command -v python3 &> /dev/null; then
+    log_error "python3 not found. Install Python 3.8+ for source code verification."
+    log_warning "Skipping source code verification"
+    return 1
+  fi
 
-  # Build lookup of address -> constructor args
-  declare -A CTOR_MAP
-  while IFS=: read -r addr args; do
-    CTOR_MAP["$addr"]="$args"
-  done <<< "$CTOR_ARGS"
-
-  # Create temporary directory for flattened sources
-  FLAT_DIR=$(mktemp -d)
-
-  # Flatten all unique contract sources
-  log_info "Flattening contract sources..."
-  forge flatten src/swarms/ServiceProviderUpgradeable.sol > "$FLAT_DIR/FlatSP.sol"
-  forge flatten src/swarms/FleetIdentityUpgradeable.sol > "$FLAT_DIR/FlatFI.sol"
-  forge flatten src/swarms/SwarmRegistryUniversalUpgradeable.sol > "$FLAT_DIR/FlatSR.sol"
-  forge flatten lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol > "$FLAT_DIR/FlatProxy.sol"
-  forge flatten src/paymasters/BondTreasuryPaymaster.sol > "$FLAT_DIR/FlatBTP.sol"
-
-  # Copy flat files into src/ so forge can find them
-  cp "$FLAT_DIR/FlatSP.sol" src/FlatSP.sol
-  cp "$FLAT_DIR/FlatFI.sol" src/FlatFI.sol
-  cp "$FLAT_DIR/FlatSR.sol" src/FlatSR.sol
-  cp "$FLAT_DIR/FlatProxy.sol" src/FlatProxy.sol
-  cp "$FLAT_DIR/FlatBTP.sol" src/FlatBTP.sol
-
-  VERIFY_FAILED=0
-
-  # Helper to verify a single contract
-  verify_one() {
-    local address="$1"
-    local source="$2"
-    local label="$3"
-    local ctor_key
-    ctor_key=$(echo "$address" | tr '[:upper:]' '[:lower:]')
-    local args="${CTOR_MAP[$ctor_key]}"
-
-    local VARGS=(
-      --zksync
-      --chain "$FORGE_CHAIN"
-      --verifier zksync
-      --verifier-url "$VERIFIER_URL"
-      "$address"
-      "$source"
-    )
-    if [ -n "$args" ]; then
-      VARGS+=(--constructor-args "$args")
-    fi
-
-    log_info "Verifying $label at $address..."
-    if forge verify-contract "${VARGS[@]}" 2>&1; then
-      log_success "$label verified"
-    else
-      log_error "$label verification failed (can retry manually)"
-      VERIFY_FAILED=$((VERIFY_FAILED + 1))
-    fi
-  }
-
-  # Verify all 7 contracts
-  verify_one "$SERVICE_PROVIDER_IMPL" "src/FlatSP.sol:ServiceProviderUpgradeable" "ServiceProvider Implementation"
-  verify_one "$SERVICE_PROVIDER_PROXY" "src/FlatProxy.sol:ERC1967Proxy" "ServiceProvider Proxy"
-  verify_one "$FLEET_IDENTITY_IMPL" "src/FlatFI.sol:FleetIdentityUpgradeable" "FleetIdentity Implementation"
-  verify_one "$FLEET_IDENTITY_PROXY" "src/FlatProxy.sol:ERC1967Proxy" "FleetIdentity Proxy"
-  verify_one "$SWARM_REGISTRY_IMPL" "src/FlatSR.sol:SwarmRegistryUniversalUpgradeable" "SwarmRegistry Implementation"
-  verify_one "$SWARM_REGISTRY_PROXY" "src/FlatProxy.sol:ERC1967Proxy" "SwarmRegistry Proxy"
-  verify_one "$BOND_TREASURY_PAYMASTER" "src/FlatBTP.sol:BondTreasuryPaymaster" "BondTreasuryPaymaster"
-
-  # Clean up flat files from src/
-  rm -f src/FlatSP.sol src/FlatFI.sol src/FlatSR.sol src/FlatProxy.sol src/FlatBTP.sol
-  rm -rf "$FLAT_DIR"
-
-  if [ "$VERIFY_FAILED" -gt 0 ]; then
-    log_warning "$VERIFY_FAILED contract(s) failed source verification (deployment itself succeeded)"
+  python3 "$SCRIPT_DIR/verify_zksync_contracts.py" \
+    --broadcast "$BROADCAST_JSON" \
+    --verifier-url "$VERIFIER_URL" \
+    --compiler-version "0.8.26" \
+    --zksolc-version "v1.5.15" \
+    --project-root "$PROJECT_ROOT"
+  
+  local exit_code=$?
+  if [ "$exit_code" -eq 0 ]; then
+    log_success "All contracts source-code verified on block explorer!"
   else
-    log_success "All 7 contracts source-code verified on block explorer!"
+    log_warning "Some contracts failed source verification (deployment itself succeeded)"
+    log_info "Retry manually: python3 ops/verify_zksync_contracts.py --broadcast $BROADCAST_JSON --verifier-url $VERIFIER_URL"
   fi
 }
 

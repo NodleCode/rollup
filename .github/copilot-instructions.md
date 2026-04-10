@@ -48,3 +48,54 @@ For these contracts, use:
 forge build --match-path src/swarms/SwarmRegistryL1.sol
 forge test --match-path test/SwarmRegistryL1.t.sol
 ```
+
+## ZkSync Source Code Verification
+
+**IMPORTANT**: Do NOT use `forge script --verify` or `forge verify-contract` directly for ZkSync contracts. Both fail to achieve full verification due to path handling issues with the ZkSync block explorer verifier.
+
+### The Problem (three broken paths)
+
+1. `forge script --verify` sends **absolute file paths** (`/Users/me/project/src/...`) → verifier rejects.
+2. `forge verify-contract` (standard JSON) sends OpenZeppelin sources containing `../` relative imports → verifier rejects "import with absolute or traversal path".
+3. `forge verify-contract --flatten` or manual flattening eliminates imports but changes the source file path in the metadata hash → **"partially verified"** (metadata mismatch).
+
+### The Solution
+
+Use `ops/verify_zksync_contracts.py` which:
+1. Generates standard JSON via `forge verify-contract --show-standard-json-input`
+2. Rewrites all `../` relative imports in OpenZeppelin source content to resolved project-absolute paths (e.g., `../../utils/Foo.sol` → `lib/openzeppelin-contracts/contracts/utils/Foo.sol`)
+3. Submits directly to the ZkSync verification API via HTTP
+
+### Full vs Partial Verification
+
+- **`bytecode_hash = "none"`** is set in `foundry.toml` (both `[profile.default]` and `[profile.zksync]`). This omits the CBOR metadata hash from bytecode. Contracts deployed with this setting achieve **full verification**.
+- Contracts deployed **before** this setting was added (pre 2026-04-10) will always show "partially verified" — this is cosmetic only. The source code is correct and auditable.
+
+### Usage
+
+```bash
+# After deployment — verify all contracts from broadcast:
+python3 ops/verify_zksync_contracts.py \
+  --broadcast broadcast/DeploySwarmUpgradeableZkSync.s.sol/324/run-latest.json \
+  --verifier-url https://zksync2-mainnet-explorer.zksync.io/contract_verification
+
+# Verify a single contract:
+python3 ops/verify_zksync_contracts.py \
+  --address 0x1234... \
+  --contract src/swarms/FleetIdentityUpgradeable.sol:FleetIdentityUpgradeable \
+  --verifier-url https://zksync2-mainnet-explorer.zksync.io/contract_verification
+
+# With constructor args:
+python3 ops/verify_zksync_contracts.py \
+  --address 0x1234... \
+  --contract lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy \
+  --constructor-args 0xabcdef...
+```
+
+### Adding New Contract Types
+
+When deploying a new contract type, add its mapping to `CONTRACT_SOURCE_MAP` in `ops/verify_zksync_contracts.py` so `--broadcast` mode can auto-detect it.
+
+### Automated (via deploy script)
+
+`ops/deploy_swarm_contracts_zksync.sh` calls `verify_zksync_contracts.py` automatically after deployment. No manual steps needed for the standard swarm contracts.
