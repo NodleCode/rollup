@@ -1,4 +1,4 @@
-import { AbiCoder, dataSlice, hexlify, isHexString } from "ethers"
+import { AbiCoder, dataSlice, getAddress, hexlify, isAddress, isHexString } from "ethers"
 import { Router } from "express"
 import { body, matchedData, validationResult } from "express-validator"
 import {
@@ -38,7 +38,9 @@ router.post(
     body("sender")
       .optional()
       .isString()
-      .withMessage("sender must be a string"),
+      .withMessage("sender must be a string")
+      .custom((value: string) => isAddress(value))
+      .withMessage("sender must be a valid address"),
     body("data")
       .isString()
       .custom((value: string) => isHexString(value))
@@ -69,7 +71,21 @@ router.post(
       )
     }
 
-    const { data: ccipCallData } = matchedData(req)
+    const { data: ccipCallData, sender } = matchedData(req)
+
+    // If the client provided a `sender`, ERC-3668 says it's the address of the
+    // resolver that emitted OffchainLookup. Reject mismatches to cut down on
+    // abuse surface — we only sign responses destined for our known L1 resolver.
+    if (sender) {
+      const normalizedSender = getAddress(sender as string)
+      const expected = getAddress(l1ResolverAddress)
+      if (normalizedSender !== expected) {
+        throw new HttpError(
+          `sender ${normalizedSender} does not match configured L1 resolver ${expected}`,
+          400,
+        )
+      }
+    }
 
     // callData from the OffchainLookup revert is abi.encode(bytes name, bytes data).
     // The ERC-3668 spec permits the client to prepend the resolver selector.
