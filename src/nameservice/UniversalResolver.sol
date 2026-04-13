@@ -48,6 +48,7 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
     error UnsupportedCoinType(uint256 coinType);
     error UnsupportedSelector(bytes4 selector);
     error CallDataTooShort(uint256 length);
+    error OwnershipCannotBeRenounced();
     error SignatureExpired(uint64 expiresAt);
     error SignatureTtlTooLong(uint64 expiresAt);
     error InvalidSigner(address recovered);
@@ -95,7 +96,7 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
     ///         setTrustedSigner, which would permanently break gateway rotation and
     ///         signer revocation. Transfer to a new owner instead.
     function renounceOwnership() public pure override {
-        revert("ownership cannot be renounced");
+        revert OwnershipCannotBeRenounced();
     }
 
     /// @notice Parses DNS encoded domain name

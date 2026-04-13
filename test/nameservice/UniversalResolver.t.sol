@@ -273,6 +273,12 @@ contract UniversalResolverTest is Test {
         resolver.setTrustedSigner(backupSigner, true);
     }
 
+    function test_RenounceOwnership_Reverts() public {
+        vm.prank(owner);
+        vm.expectRevert(UniversalResolver.OwnershipCannotBeRenounced.selector);
+        resolver.renounceOwnership();
+    }
+
     // --- url setter ---
 
     function test_SetUrl_OnlyOwner() public {
