@@ -165,6 +165,22 @@ contract UniversalResolverTest is Test {
         assertEq(decoded.length, 20);
     }
 
+    function test_ResolveWithSig_AddrMultichain_EmptyRecord_HappyPath() public {
+        // "No record" for addr(bytes32,uint256) is empty bytes per ENSIP-11.
+        bytes memory expectedAddr = bytes("");
+        bytes memory data = _addrMultichainCallData("example.clave.eth", ZKSYNC_MAINNET_COIN_TYPE);
+        bytes memory result = abi.encode(expectedAddr);
+        uint64 expiresAt = uint64(block.timestamp + 60);
+
+        bytes memory sig = _signResolution(signerPk, DNS_FULL, data, result, expiresAt);
+        bytes memory response = abi.encode(result, expiresAt, sig);
+        bytes memory extraData = abi.encode(DNS_FULL, data);
+
+        bytes memory out = resolver.resolveWithSig(response, extraData);
+        bytes memory decoded = abi.decode(out, (bytes));
+        assertEq(decoded.length, 0);
+    }
+
     function test_ResolveWithSig_Text_HappyPath() public {
         string memory textValue = "@nodle_network";
         bytes memory data = _textCallData("example.clave.eth", "com.twitter");
