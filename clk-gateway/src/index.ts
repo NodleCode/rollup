@@ -46,7 +46,9 @@ import reservedHashes from "./reservedHashes";
 import namesRouter from "./routes/names";
 
 const app = express();
-app.use(express.json());
+// CCIP-Read clients (and the ENS app) often POST with Content-Type: text/plain
+// to avoid triggering a CORS preflight. Parse JSON regardless of content type.
+app.use(express.json({ type: ["application/json", "text/plain"] }));
 
 const corsOptions = {
   origin: "*",
