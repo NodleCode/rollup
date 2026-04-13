@@ -96,6 +96,8 @@
     "reconstructable",
     "Württemberg",
     "delegatecall",
-    "sponsorable"
+    "sponsorable",
+    "typehash",
+    "hexlify"
   ]
 }
