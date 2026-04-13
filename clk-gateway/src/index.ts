@@ -44,6 +44,7 @@ import {
 import { getBatchInfo, fetchZyfiSponsored } from "./helpers";
 import reservedHashes from "./reservedHashes";
 import namesRouter from "./routes/names";
+import resolveRouter from "./routes/resolve";
 
 const app = express();
 // CCIP-Read clients (and the ENS app) often POST with Content-Type: text/plain
@@ -514,6 +515,7 @@ app.post(
 );
 
 app.use('/name', namesRouter);
+app.use('/resolve', resolveRouter);
 
 app.use((err: Error, req: Request, res: Response, next: NextFunction): void => {
   if (err instanceof HttpError) {
