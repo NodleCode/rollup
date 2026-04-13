@@ -273,6 +273,53 @@ contract UniversalResolverTest is Test {
         resolver.setTrustedSigner(backupSigner, true);
     }
 
+    function test_Constructor_RevertsOnZeroSigner() public {
+        vm.expectRevert(UniversalResolver.ZeroSignerAddress.selector);
+        new UniversalResolver(GATEWAY_URL, owner, registry, address(0));
+    }
+
+    function test_Constructor_RevertsOnEmptyUrl() public {
+        vm.expectRevert(UniversalResolver.EmptyUrl.selector);
+        new UniversalResolver("", owner, registry, signer);
+    }
+
+    function test_SetTrustedSigner_RevertsOnZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(UniversalResolver.ZeroSignerAddress.selector);
+        resolver.setTrustedSigner(address(0), true);
+    }
+
+    function test_SetTrustedSigner_CannotDisableLastSigner() public {
+        vm.prank(owner);
+        vm.expectRevert(UniversalResolver.CannotDisableLastTrustedSigner.selector);
+        resolver.setTrustedSigner(signer, false);
+    }
+
+    function test_SetTrustedSigner_IsIdempotent() public {
+        assertEq(resolver.trustedSignerCount(), 1);
+        // Re-enabling an already-trusted signer is a no-op (no count change, no emit).
+        vm.prank(owner);
+        resolver.setTrustedSigner(signer, true);
+        assertEq(resolver.trustedSignerCount(), 1);
+
+        // Disabling an already-untrusted signer is also a no-op.
+        vm.prank(owner);
+        resolver.setTrustedSigner(backupSigner, false);
+        assertEq(resolver.trustedSignerCount(), 1);
+    }
+
+    function test_TrustedSignerCount_TracksChanges() public {
+        assertEq(resolver.trustedSignerCount(), 1);
+
+        vm.prank(owner);
+        resolver.setTrustedSigner(backupSigner, true);
+        assertEq(resolver.trustedSignerCount(), 2);
+
+        vm.prank(owner);
+        resolver.setTrustedSigner(signer, false);
+        assertEq(resolver.trustedSignerCount(), 1);
+    }
+
     function test_RenounceOwnership_Reverts() public {
         vm.prank(owner);
         vm.expectRevert(UniversalResolver.OwnershipCannotBeRenounced.selector);

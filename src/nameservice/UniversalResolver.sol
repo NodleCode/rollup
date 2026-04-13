@@ -49,6 +49,9 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
     error UnsupportedSelector(bytes4 selector);
     error CallDataTooShort(uint256 length);
     error OwnershipCannotBeRenounced();
+    error ZeroSignerAddress();
+    error EmptyUrl();
+    error CannotDisableLastTrustedSigner();
     error SignatureExpired(uint64 expiresAt);
     error SignatureTtlTooLong(uint64 expiresAt);
     error InvalidSigner(address recovered);
@@ -65,6 +68,12 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
     ///         Mapping (rather than a single address) to allow zero-downtime key rotation.
     mapping(address => bool) public isTrustedSigner;
 
+    /// @notice Number of addresses currently marked as trusted signers.
+    /// @dev Kept in sync with `isTrustedSigner` and used to prevent dropping to zero.
+    ///      If this ever hits zero, all resolution breaks and can only be restored
+    ///      by the owner. The contract enforces a floor of 1 in `setTrustedSigner`.
+    uint256 public trustedSignerCount;
+
     event UrlUpdated(string oldUrl, string newUrl);
     event TrustedSignerUpdated(address indexed signer, bool trusted);
 
@@ -72,10 +81,14 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
         Ownable(_owner)
         EIP712("NodleUniversalResolver", "1")
     {
+        if (_initialSigner == address(0)) revert ZeroSignerAddress();
+        if (bytes(_url).length == 0) revert EmptyUrl();
+
         url = _url;
         registry = _registry;
 
         isTrustedSigner[_initialSigner] = true;
+        trustedSignerCount = 1;
         emit TrustedSignerUpdated(_initialSigner, true);
     }
 
@@ -86,9 +99,26 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
     }
 
     /// @notice Enable or disable a trusted gateway signer.
-    /// @dev Keep at least one trusted signer enabled at all times or resolution will break.
+    /// @dev Keeps `trustedSignerCount` in sync and enforces a floor of 1 so the
+    ///      owner cannot brick resolution by disabling the last signer.
     function setTrustedSigner(address signer, bool trusted) external onlyOwner {
-        isTrustedSigner[signer] = trusted;
+        if (signer == address(0)) revert ZeroSignerAddress();
+
+        bool current = isTrustedSigner[signer];
+        if (current == trusted) {
+            // Idempotent: nothing to do, no event, no count change.
+            return;
+        }
+
+        if (trusted) {
+            isTrustedSigner[signer] = true;
+            trustedSignerCount++;
+        } else {
+            if (trustedSignerCount == 1) revert CannotDisableLastTrustedSigner();
+            isTrustedSigner[signer] = false;
+            trustedSignerCount--;
+        }
+
         emit TrustedSignerUpdated(signer, trusted);
     }
 
