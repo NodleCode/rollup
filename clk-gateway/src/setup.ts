@@ -1,63 +1,114 @@
-import { Contract, JsonRpcProvider as L1Provider } from "ethers"
-import admin from "firebase-admin"
-import { initializeApp } from "firebase-admin/app"
-import { Provider as L2Provider, Wallet } from "zksync-ethers"
+import {
+  Contract,
+  JsonRpcProvider as L1Provider,
+  Wallet as EthersWallet,
+} from "ethers";
+import admin from "firebase-admin";
+import { initializeApp } from "firebase-admin/app";
+import { Provider as L2Provider, Wallet } from "zksync-ethers";
 import {
   CLICK_RESOLVER_INTERFACE,
   NAME_SERVICE_INTERFACE,
   ZKSYNC_DIAMOND_INTERFACE,
-} from "./interfaces"
-import { ZyfiSponsoredRequest } from "./types"
+} from "./interfaces";
+import { ZyfiSponsoredRequest } from "./types";
 
-import dotenv from "dotenv"
+import dotenv from "dotenv";
 
-dotenv.config()
+dotenv.config();
 
-const port = process.env.PORT || 8080
-const privateKey = process.env.REGISTRAR_PRIVATE_KEY!
-const l2Provider = new L2Provider(process.env.L2_RPC_URL!)
-const l2Wallet = new Wallet(privateKey, l2Provider)
-const l1Provider = new L1Provider(process.env.L1_RPC_URL!)
-const diamondAddress = process.env.DIAMOND_PROXY_ADDR!
-const indexerUrl = process.env.INDEXER_URL || "https://indexer.nodleprotocol.io"
+const port = process.env.PORT || 8080;
+const privateKey = process.env.REGISTRAR_PRIVATE_KEY!;
+const l2Provider = new L2Provider(process.env.L2_RPC_URL!);
+const l2Wallet = new Wallet(privateKey, l2Provider);
+const l1Provider = new L1Provider(process.env.L1_RPC_URL!);
+const diamondAddress = process.env.DIAMOND_PROXY_ADDR!;
+const indexerUrl =
+  process.env.INDEXER_URL || "https://indexer.nodleprotocol.io";
 
-const serviceAccountKey = process.env.SERVICE_ACCOUNT_KEY!
-const serviceAccount = JSON.parse(serviceAccountKey)
+const serviceAccountKey = process.env.SERVICE_ACCOUNT_KEY!;
+const serviceAccount = JSON.parse(serviceAccountKey);
+
 initializeApp({
   credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-})
+});
 
 const diamondContract = new Contract(
   diamondAddress,
   ZKSYNC_DIAMOND_INTERFACE,
-  l1Provider
-)
-const clickResolverAddress = process.env.RESOLVER_ADDR!
+  l1Provider,
+);
+const clickResolverAddress = process.env.RESOLVER_ADDR!;
 const resolverContract = new Contract(
   clickResolverAddress,
   CLICK_RESOLVER_INTERFACE,
-  l1Provider
-)
-const clickNameServiceAddress = process.env.CLICK_NS_ADDR!
+  l1Provider,
+);
+const clickNameServiceAddress = process.env.CLICK_NS_ADDR!;
 const clickNameServiceContract = new Contract(
   clickNameServiceAddress,
   NAME_SERVICE_INTERFACE,
-  l2Wallet
-)
-const nodleNameServiceAddress = process.env.NODLE_NS_ADDR!
+  l2Wallet,
+);
+const nodleNameServiceAddress = process.env.NODLE_NS_ADDR!;
 const nodleNameServiceContract = new Contract(
   nodleNameServiceAddress,
   NAME_SERVICE_INTERFACE,
-  l2Wallet
-)
-const batchQueryOffset = Number(process.env.SAFE_BATCH_QUERY_OFFSET!)
+  l2Wallet,
+);
+const batchQueryOffset = Number(process.env.SAFE_BATCH_QUERY_OFFSET!);
 
-const clickNSDomain = process.env.CLICK_NS_DOMAIN!
-const nodleNSDomain = process.env.NODLE_NS_DOMAIN!
-const parentTLD = process.env.PARENT_TLD!
+const clickNSDomain = process.env.CLICK_NS_DOMAIN!;
+const nodleNSDomain = process.env.NODLE_NS_DOMAIN!;
+const parentTLD = process.env.PARENT_TLD!;
 const zyfiSponsoredUrl = process.env.ZYFI_BASE_URL
   ? new URL(process.env.ZYFI_SPONSORED!, process.env.ZYFI_BASE_URL)
-  : null
+  : null;
+
+// --- Signed-gateway UniversalResolver config ---
+// The gateway signs EIP-712 Resolution payloads with this key. The address of
+// this key must be registered in the L1 UniversalResolver's `isTrustedSigner`
+// mapping. Rotation: set a new signer as trusted on-chain, switch env, then
+// disable the old one.
+const resolverSignerPrivateKey = process.env.RESOLVER_SIGNER_PRIVATE_KEY;
+const l1ResolverAddress = process.env.L1_RESOLVER_ADDR;
+const l1ChainId = process.env.L1_CHAIN_ID ? Number(process.env.L1_CHAIN_ID) : 1;
+
+// Must match the L1 UniversalResolver's _MAX_SIGNATURE_TTL. Signatures with
+// expiresAt > now + MAX_RESOLUTION_SIGNATURE_TTL_SECONDS are rejected on-chain,
+// so we fail fast at startup instead of emitting signatures that are guaranteed
+// to revert.
+const MAX_RESOLUTION_SIGNATURE_TTL_SECONDS = 300;
+
+function parseResolutionSignatureTtl(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return 60;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    throw new Error(
+      `Invalid RESOLUTION_SIGNATURE_TTL_SECONDS: "${raw}" is not a finite integer`,
+    );
+  }
+  if (parsed <= 0) {
+    throw new Error(
+      `Invalid RESOLUTION_SIGNATURE_TTL_SECONDS: must be > 0, got ${parsed}`,
+    );
+  }
+  if (parsed > MAX_RESOLUTION_SIGNATURE_TTL_SECONDS) {
+    throw new Error(
+      `Invalid RESOLUTION_SIGNATURE_TTL_SECONDS: must be <= ${MAX_RESOLUTION_SIGNATURE_TTL_SECONDS} ` +
+        `(L1 resolver _MAX_SIGNATURE_TTL), got ${parsed}`,
+    );
+  }
+  return parsed;
+}
+
+const resolutionSignatureTtlSeconds = parseResolutionSignatureTtl(
+  process.env.RESOLUTION_SIGNATURE_TTL_SECONDS,
+);
+
+const resolverSigner = resolverSignerPrivateKey
+  ? new EthersWallet(resolverSignerPrivateKey)
+  : null;
 
 const zyfiRequestTemplate: ZyfiSponsoredRequest = {
   chainId: Number(process.env.L2_CHAIN_ID!),
@@ -73,27 +124,27 @@ const zyfiRequestTemplate: ZyfiSponsoredRequest = {
   },
   sponsorshipRatio: 100,
   replayLimit: 5,
-}
+};
 
 const nameServiceAddresses = {
   [clickNSDomain]: clickNameServiceAddress,
   [nodleNSDomain]: nodleNameServiceAddress,
-}
+};
 
 const nameServiceContracts = {
   [clickNSDomain]: clickNameServiceContract,
   [nodleNSDomain]: nodleNameServiceContract,
-}
+};
 
 const buildZyfiRegisterRequest = (
   owner: string,
   name: string,
-  subdomain: keyof typeof nameServiceAddresses
+  subdomain: keyof typeof nameServiceAddresses,
 ) => {
   const encodedRegister = NAME_SERVICE_INTERFACE.encodeFunctionData(
     "register",
-    [owner, name]
-  )
+    [owner, name],
+  );
 
   const zyfiRequest: ZyfiSponsoredRequest = {
     ...zyfiRequestTemplate,
@@ -102,21 +153,21 @@ const buildZyfiRegisterRequest = (
       data: encodedRegister,
       to: nameServiceAddresses[subdomain],
     },
-  }
+  };
 
-  return zyfiRequest
-}
+  return zyfiRequest;
+};
 
 const buildZyfiSetTextRecordRequest = (
   name: string,
   subdomain: keyof typeof nameServiceAddresses,
   key: string,
-  value: string
+  value: string,
 ) => {
   const encodedSetTextRecord = NAME_SERVICE_INTERFACE.encodeFunctionData(
     "setTextRecord",
-    [name, key, value]
-  )
+    [name, key, value],
+  );
 
   const zyfiRequest: ZyfiSponsoredRequest = {
     ...zyfiRequestTemplate,
@@ -125,20 +176,36 @@ const buildZyfiSetTextRecordRequest = (
       data: encodedSetTextRecord,
       to: nameServiceAddresses[subdomain],
     },
-  }
+  };
 
-  return zyfiRequest
-}
+  return zyfiRequest;
+};
 
 export {
-  batchQueryOffset, buildZyfiRegisterRequest,
-  buildZyfiSetTextRecordRequest, clickNameServiceAddress,
-  clickNameServiceContract, clickNSDomain, diamondAddress,
-  diamondContract, indexerUrl, l1Provider,
+  batchQueryOffset,
+  buildZyfiRegisterRequest,
+  buildZyfiSetTextRecordRequest,
+  clickNameServiceAddress,
+  clickNameServiceContract,
+  clickNSDomain,
+  diamondAddress,
+  diamondContract,
+  indexerUrl,
+  l1Provider,
+  l1ChainId,
+  l1ResolverAddress,
   l2Provider,
-  l2Wallet, nameServiceAddresses,
-  nameServiceContracts, nodleNameServiceAddress,
-  nodleNameServiceContract, nodleNSDomain,
-  parentTLD, port, resolverContract, zyfiRequestTemplate, zyfiSponsoredUrl
-}
-
+  l2Wallet,
+  nameServiceAddresses,
+  nameServiceContracts,
+  nodleNameServiceAddress,
+  nodleNameServiceContract,
+  nodleNSDomain,
+  parentTLD,
+  port,
+  resolutionSignatureTtlSeconds,
+  resolverContract,
+  resolverSigner,
+  zyfiRequestTemplate,
+  zyfiSponsoredUrl,
+};
