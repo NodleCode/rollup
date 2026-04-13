@@ -73,10 +73,38 @@ const zyfiSponsoredUrl = process.env.ZYFI_BASE_URL
 const resolverSignerPrivateKey = process.env.RESOLVER_SIGNER_PRIVATE_KEY;
 const l1ResolverAddress = process.env.L1_RESOLVER_ADDR;
 const l1ChainId = process.env.L1_CHAIN_ID ? Number(process.env.L1_CHAIN_ID) : 1;
-const resolutionSignatureTtlSeconds = process.env
-  .RESOLUTION_SIGNATURE_TTL_SECONDS
-  ? Number(process.env.RESOLUTION_SIGNATURE_TTL_SECONDS)
-  : 60;
+
+// Must match the L1 UniversalResolver's _MAX_SIGNATURE_TTL. Signatures with
+// expiresAt > now + MAX_RESOLUTION_SIGNATURE_TTL_SECONDS are rejected on-chain,
+// so we fail fast at startup instead of emitting signatures that are guaranteed
+// to revert.
+const MAX_RESOLUTION_SIGNATURE_TTL_SECONDS = 300;
+
+function parseResolutionSignatureTtl(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return 60;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    throw new Error(
+      `Invalid RESOLUTION_SIGNATURE_TTL_SECONDS: "${raw}" is not a finite integer`,
+    );
+  }
+  if (parsed <= 0) {
+    throw new Error(
+      `Invalid RESOLUTION_SIGNATURE_TTL_SECONDS: must be > 0, got ${parsed}`,
+    );
+  }
+  if (parsed > MAX_RESOLUTION_SIGNATURE_TTL_SECONDS) {
+    throw new Error(
+      `Invalid RESOLUTION_SIGNATURE_TTL_SECONDS: must be <= ${MAX_RESOLUTION_SIGNATURE_TTL_SECONDS} ` +
+        `(L1 resolver _MAX_SIGNATURE_TTL), got ${parsed}`,
+    );
+  }
+  return parsed;
+}
+
+const resolutionSignatureTtlSeconds = parseResolutionSignatureTtl(
+  process.env.RESOLUTION_SIGNATURE_TTL_SECONDS,
+);
 
 const resolverSigner = resolverSignerPrivateKey
   ? new EthersWallet(resolverSignerPrivateKey)
