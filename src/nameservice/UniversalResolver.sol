@@ -83,6 +83,13 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
         emit TrustedSignerUpdated(signer, trusted);
     }
 
+    /// @notice Ownership cannot be renounced: losing the owner bricks setUrl and
+    ///         setTrustedSigner, which would permanently break gateway rotation and
+    ///         signer revocation. Transfer to a new owner instead.
+    function renounceOwnership() public pure override {
+        revert("ownership cannot be renounced");
+    }
+
     /// @notice Parses DNS encoded domain name
     /// @param name DNS encoded domain name
     /// @return _sub Subdomain
