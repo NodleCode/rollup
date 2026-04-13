@@ -38,10 +38,17 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
     bytes32 private constant _RESOLUTION_TYPEHASH =
         keccak256("Resolution(bytes name,bytes data,bytes result,uint64 expiresAt)");
 
+    /// @notice Hard cap on how far into the future a gateway signature may claim to be valid.
+    /// @dev Bounds the replay window if a signer key is compromised: even a maliciously
+    ///      long `expiresAt` is clamped to this value on-chain. 5 minutes is comfortably
+    ///      above L1 clock skew while keeping blast radius small.
+    uint64 private constant _MAX_SIGNATURE_TTL = 5 minutes;
+
     error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData);
     error UnsupportedCoinType(uint256 coinType);
     error UnsupportedSelector(bytes4 selector);
     error SignatureExpired(uint64 expiresAt);
+    error SignatureTtlTooLong(uint64 expiresAt);
     error InvalidSigner(address recovered);
 
     /// @notice URL of the CCIP-Read gateway.
@@ -188,6 +195,9 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
 
         if (block.timestamp > expiresAt) {
             revert SignatureExpired(expiresAt);
+        }
+        if (expiresAt > block.timestamp + _MAX_SIGNATURE_TTL) {
+            revert SignatureTtlTooLong(expiresAt);
         }
 
         bytes32 structHash = keccak256(

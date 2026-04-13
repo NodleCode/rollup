@@ -170,6 +170,20 @@ contract UniversalResolverTest is Test {
         resolver.resolveWithSig(response, extraData);
     }
 
+    function test_ResolveWithSig_TtlTooLong_Reverts() public {
+        bytes memory data = _addrCallData("example.clave.eth");
+        bytes memory result = abi.encode(makeAddr("owner"));
+        // 10 minutes > 5 minute max cap
+        uint64 expiresAt = uint64(block.timestamp + 10 minutes);
+
+        bytes memory sig = _signResolution(signerPk, DNS_FULL, data, result, expiresAt);
+        bytes memory response = abi.encode(result, expiresAt, sig);
+        bytes memory extraData = abi.encode(DNS_FULL, data);
+
+        vm.expectRevert(abi.encodeWithSelector(UniversalResolver.SignatureTtlTooLong.selector, expiresAt));
+        resolver.resolveWithSig(response, extraData);
+    }
+
     function test_ResolveWithSig_UntrustedSigner_Reverts() public {
         bytes memory data = _addrCallData("example.clave.eth");
         bytes memory result = abi.encode(makeAddr("owner"));
