@@ -98,6 +98,9 @@
     "delegatecall",
     "sponsorable",
     "typehash",
-    "hexlify"
+    "hexlify",
+    "repoint",
+    "repointed",
+    "cutover"
   ]
 }
