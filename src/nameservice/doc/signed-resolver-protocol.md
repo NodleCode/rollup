@@ -92,8 +92,11 @@ Any other selector reverts with `UnsupportedSelector(bytes4)`. Any other coin ty
 
 Queries for the parent domain itself (no subdomain, e.g. `nodl.eth`) are **not** forwarded to the gateway. They return the ENS "no record" convention on L1:
 
-- `addr` / `addr-multichain` → `abi.encode(address(0))` (32-byte padded, so ENS clients can decode it)
-- `text` → `abi.encode("")`
+- `addr(bytes32)` → `abi.encode(address(0))` (32-byte padded `address`, per ENS `addr` return type)
+- `addr(bytes32,uint256)` (multichain) → `abi.encode(bytes(""))` (empty `bytes`, per ENSIP-11 return type)
+- `text(bytes32,string)` → `abi.encode("")`
+
+Encoding the multichain branch as `address` would cause ENS clients to decode the wrong type and break multichain resolution, so the contract and gateway must agree to encode it as `bytes`.
 
 Rationale: this resolver holds no state about the parent name — it exists only to answer subdomain lookups. If a specific address must be bound to the bare domain, set a different resolver at the ENS registry level for that node.
 

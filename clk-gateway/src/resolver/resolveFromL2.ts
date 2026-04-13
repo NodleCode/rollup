@@ -1,4 +1,9 @@
 import { AbiCoder, Contract, dataSlice, ZeroAddress } from "ethers"
+
+// ENSIP-11: addr(bytes32,uint256) returns `bytes`. For an EVM chain the value is
+// the raw 20-byte address; "no record" is empty bytes. We never encode this
+// branch as `address` — doing so would cause ENS clients to decode the wrong
+// type and break multichain resolution.
 import { NAME_SERVICE_INTERFACE } from "../interfaces"
 
 // ENS resolver selectors
@@ -58,7 +63,8 @@ export async function resolveFromL2({
   const abi = AbiCoder.defaultAbiCoder()
 
   if (selector === ADDR_SELECTOR || selector === ADDR_MULTICHAIN_SELECTOR) {
-    if (selector === ADDR_MULTICHAIN_SELECTOR) {
+    const isMultichain = selector === ADDR_MULTICHAIN_SELECTOR
+    if (isMultichain) {
       const [, coinType] = abi.decode(["bytes32", "uint256"], dataSlice(data, 4))
       if (BigInt(coinType) !== ZKSYNC_MAINNET_COIN_TYPE) {
         throw new Error(`Unsupported coinType: ${coinType}`)
@@ -67,9 +73,16 @@ export async function resolveFromL2({
 
     try {
       const owner: string = await nameServiceContract.resolve(subdomain)
+      if (isMultichain) {
+        // ENSIP-11: return raw 20-byte address as `bytes`.
+        return abi.encode(["bytes"], [owner])
+      }
       return abi.encode(["address"], [owner])
     } catch (_e: unknown) {
-      // Expired or non-existent → return zero address (ENS "no record" convention)
+      // Expired or non-existent → ENS "no record" convention.
+      if (isMultichain) {
+        return abi.encode(["bytes"], ["0x"])
+      }
       return abi.encode(["address"], [ZeroAddress])
     }
   }

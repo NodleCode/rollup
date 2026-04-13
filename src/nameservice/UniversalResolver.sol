@@ -166,6 +166,11 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
             if (functionSelector == _TEXT_SELECTOR) {
                 return abi.encode("");
             }
+            if (functionSelector == _ADDR_MULTICHAIN_SELECTOR) {
+                // ENSIP-11: addr(bytes32,uint256) returns `bytes`. "No record"
+                // is an empty bytes value, not a zero address.
+                return abi.encode(bytes(""));
+            }
             return abi.encode(address(0));
         }
 

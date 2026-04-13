@@ -94,9 +94,11 @@ contract UniversalResolverTest is Test {
         assertEq(abi.decode(out, (string)), "");
     }
 
-    function test_Resolve_BareDomain_AddrMultichain_ReturnsZeroAddress() public view {
+    function test_Resolve_BareDomain_AddrMultichain_ReturnsEmptyBytes() public view {
+        // ENSIP-11: addr(bytes32,uint256) returns `bytes`. "No record" is empty bytes.
         bytes memory out = resolver.resolve(DNS_BARE, _addrMultichainCallData("clave.eth", ZKSYNC_MAINNET_COIN_TYPE));
-        assertEq(abi.decode(out, (address)), address(0));
+        bytes memory decoded = abi.decode(out, (bytes));
+        assertEq(decoded.length, 0);
     }
 
     function test_Resolve_RevertsOffchainLookup_Addr() public {
@@ -138,6 +140,23 @@ contract UniversalResolverTest is Test {
         bytes memory out = resolver.resolveWithSig(response, extraData);
         assertEq(keccak256(out), keccak256(result));
         assertEq(abi.decode(out, (address)), expectedOwner);
+    }
+
+    function test_ResolveWithSig_AddrMultichain_HappyPath() public {
+        // ENSIP-11 return type is `bytes`: raw 20-byte address for EVM chains.
+        bytes memory expectedAddr = abi.encodePacked(makeAddr("owner"));
+        bytes memory data = _addrMultichainCallData("example.clave.eth", ZKSYNC_MAINNET_COIN_TYPE);
+        bytes memory result = abi.encode(expectedAddr);
+        uint64 expiresAt = uint64(block.timestamp + 60);
+
+        bytes memory sig = _signResolution(signerPk, DNS_FULL, data, result, expiresAt);
+        bytes memory response = abi.encode(result, expiresAt, sig);
+        bytes memory extraData = abi.encode(DNS_FULL, data);
+
+        bytes memory out = resolver.resolveWithSig(response, extraData);
+        bytes memory decoded = abi.decode(out, (bytes));
+        assertEq(keccak256(decoded), keccak256(expectedAddr));
+        assertEq(decoded.length, 20);
     }
 
     function test_ResolveWithSig_Text_HappyPath() public {
