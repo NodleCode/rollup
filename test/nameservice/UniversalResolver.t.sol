@@ -107,6 +107,12 @@ contract UniversalResolverTest is Test {
         resolver.resolve(DNS_FULL, data);
     }
 
+    function test_Resolve_ShortCallData_Reverts() public {
+        bytes memory shortData = hex"deadbe"; // only 3 bytes
+        vm.expectRevert(abi.encodeWithSelector(UniversalResolver.CallDataTooShort.selector, uint256(3)));
+        resolver.resolve(DNS_FULL, shortData);
+    }
+
     function test_Resolve_UnsupportedSelector_Reverts() public {
         bytes memory bogus = abi.encodeWithSelector(bytes4(0xdeadbeef), bytes32(0));
         vm.expectRevert(abi.encodeWithSelector(UniversalResolver.UnsupportedSelector.selector, bytes4(0xdeadbeef)));

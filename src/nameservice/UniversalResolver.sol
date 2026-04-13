@@ -47,6 +47,7 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
     error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData);
     error UnsupportedCoinType(uint256 coinType);
     error UnsupportedSelector(bytes4 selector);
+    error CallDataTooShort(uint256 length);
     error SignatureExpired(uint64 expiresAt);
     error SignatureTtlTooLong(uint64 expiresAt);
     error InvalidSigner(address recovered);
@@ -140,6 +141,12 @@ contract UniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
     /// @param _data ABI-encoded ENS resolution call (addr / addr-multichain / text)
     function resolve(bytes calldata _name, bytes calldata _data) external view returns (bytes memory) {
         (string memory sub,,) = _parseDnsDomain(_name);
+
+        // Explicit length check so short calldata reverts with a controlled error
+        // instead of a panic on the slice below.
+        if (_data.length < 4) {
+            revert CallDataTooShort(_data.length);
+        }
 
         // Dispatch only on supported selectors so the gateway is never asked for nonsense.
         bytes4 functionSelector = bytes4(_data[:4]);
