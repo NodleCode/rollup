@@ -98,7 +98,7 @@ mkdir -p "$IMG_DIR"
 "$MMDC" \
   -i "$INPUT" \
   -o "$RENDERED" \
-  -e png \
+  -e svg \
   -b white \
   -c "$MERMAID_CFG" \
   -a "$IMG_DIR" \

@@ -176,7 +176,7 @@ pre code {
   font-size: inherit;
 }
 
-/* ---------- Images (Mermaid diagrams) ---------- */
+/* ---------- Images & SVG Diagrams (Mermaid) ---------- */
 
 img {
   max-width: 100%;
@@ -184,6 +184,13 @@ img {
   display: block;
   margin: 16pt auto;
   page-break-inside: avoid;
+}
+
+/* Scale SVG diagrams to use full page width for readability */
+img[src$=".svg"] {
+  width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
 }
 
 /* Center mermaid diagrams */
