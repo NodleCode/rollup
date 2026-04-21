@@ -36,13 +36,19 @@ contract SignedUniversalResolverTest is Test {
 
     string public constant INITIAL_DOMAIN = "clave";
 
+    function _initialDomains() internal pure returns (string[] memory) {
+        string[] memory domains = new string[](1);
+        domains[0] = INITIAL_DOMAIN;
+        return domains;
+    }
+
     function setUp() public {
         owner = makeAddr("owner");
         registry = makeAddr("registry");
         (signer, signerPk) = makeAddrAndKey("signer");
         (backupSigner, backupSignerPk) = makeAddrAndKey("backup");
 
-        resolver = new SignedUniversalResolver(GATEWAY_URL, owner, registry, signer, INITIAL_DOMAIN);
+        resolver = new SignedUniversalResolver(GATEWAY_URL, owner, registry, signer, _initialDomains());
     }
 
     // --- helpers ---
@@ -301,21 +307,40 @@ contract SignedUniversalResolverTest is Test {
 
     function test_Constructor_RevertsOnZeroSigner() public {
         vm.expectRevert(SignedUniversalResolver.ZeroSignerAddress.selector);
-        new SignedUniversalResolver(GATEWAY_URL, owner, registry, address(0), INITIAL_DOMAIN);
+        new SignedUniversalResolver(GATEWAY_URL, owner, registry, address(0), _initialDomains());
     }
 
     function test_Constructor_RevertsOnEmptyUrl() public {
         vm.expectRevert(SignedUniversalResolver.EmptyUrl.selector);
-        new SignedUniversalResolver("", owner, registry, signer, INITIAL_DOMAIN);
+        new SignedUniversalResolver("", owner, registry, signer, _initialDomains());
     }
 
-    function test_Constructor_RevertsOnEmptyDomain() public {
+    function test_Constructor_RevertsOnNoInitialDomains() public {
+        string[] memory empty = new string[](0);
+        vm.expectRevert(SignedUniversalResolver.NoInitialDomains.selector);
+        new SignedUniversalResolver(GATEWAY_URL, owner, registry, signer, empty);
+    }
+
+    function test_Constructor_RevertsOnEmptyDomainInArray() public {
+        string[] memory domains = new string[](2);
+        domains[0] = "nodl";
+        domains[1] = "";
         vm.expectRevert(SignedUniversalResolver.EmptyDomain.selector);
-        new SignedUniversalResolver(GATEWAY_URL, owner, registry, signer, "");
+        new SignedUniversalResolver(GATEWAY_URL, owner, registry, signer, domains);
     }
 
     function test_Constructor_SetsInitialDomain() public view {
         assertTrue(resolver.isAllowedDomain(keccak256(bytes(INITIAL_DOMAIN))));
+    }
+
+    function test_Constructor_SetsMultipleInitialDomains() public {
+        string[] memory domains = new string[](2);
+        domains[0] = "nodl";
+        domains[1] = "clk";
+        SignedUniversalResolver multi = new SignedUniversalResolver(GATEWAY_URL, owner, registry, signer, domains);
+        assertTrue(multi.isAllowedDomain(keccak256(bytes("nodl"))));
+        assertTrue(multi.isAllowedDomain(keccak256(bytes("clk"))));
+        assertFalse(multi.isAllowedDomain(keccak256(bytes("other"))));
     }
 
     function test_TrustSigner_RevertsOnZeroAddress() public {

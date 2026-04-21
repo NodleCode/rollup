@@ -18,12 +18,21 @@ contract DeployL1Ens is Script {
 
         if (resolverAddress == address(0)) {
             console.log("Deploying SignedUniversalResolver (signed-gateway model)...");
+
+            // NS_DOMAINS is a comma-separated list of domains to allowlist, e.g. "nodl,clk".
+            string[] memory domains = vm.envOr("NS_DOMAINS", ",", new string[](0));
+            if (domains.length == 0) {
+                // Fallback: single domain from NS_DOMAIN for backward compat.
+                domains = new string[](1);
+                domains[0] = vm.envString("NS_DOMAIN");
+            }
+
             SignedUniversalResolver l1Resolver = new SignedUniversalResolver(
                 vm.envString("NS_OFFCHAIN_RESOLVER_URL"),
                 vm.envAddress("NS_OWNER_ADDR"),
                 vm.envAddress("NS_ADDR"),
                 vm.envAddress("NS_TRUSTED_SIGNER_ADDR"),
-                vm.envString("NS_DOMAIN")
+                domains
             );
             resolverAddress = address(l1Resolver);
             console.log("Deployed SignedUniversalResolver at", resolverAddress);

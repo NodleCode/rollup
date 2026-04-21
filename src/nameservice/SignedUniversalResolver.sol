@@ -53,6 +53,7 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
     error ZeroSignerAddress();
     error EmptyUrl();
     error EmptyDomain();
+    error NoInitialDomains();
     error UnknownDomain(string domain);
     error CannotDisableLastTrustedSigner();
     error SignatureExpired(uint64 expiresAt);
@@ -93,11 +94,11 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
         address _owner,
         address _registry,
         address _initialSigner,
-        string memory _initialDomain
+        string[] memory _initialDomains
     ) Ownable(_owner) EIP712("NodleUniversalResolver", "1") {
         if (_initialSigner == address(0)) revert ZeroSignerAddress();
         if (bytes(_url).length == 0) revert EmptyUrl();
-        if (bytes(_initialDomain).length == 0) revert EmptyDomain();
+        if (_initialDomains.length == 0) revert NoInitialDomains();
 
         url = _url;
         registry = _registry;
@@ -106,8 +107,14 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
         trustedSignerCount = 1;
         emit SignerTrusted(_initialSigner);
 
-        isAllowedDomain[keccak256(bytes(_initialDomain))] = true;
-        emit DomainAdded(_initialDomain);
+        for (uint256 i = 0; i < _initialDomains.length; i++) {
+            if (bytes(_initialDomains[i]).length == 0) revert EmptyDomain();
+            bytes32 key = keccak256(bytes(_initialDomains[i]));
+            if (!isAllowedDomain[key]) {
+                isAllowedDomain[key] = true;
+                emit DomainAdded(_initialDomains[i]);
+            }
+        }
     }
 
     /// @notice Update the CCIP-Read gateway URL.
