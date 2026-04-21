@@ -31,7 +31,8 @@ contract SignedUniversalResolverTest is Test {
     // b"\x05clave\x03eth\x00" bare domain
     bytes private constant DNS_BARE = hex"05636c6176650365746800";
 
-    event TrustedSignerUpdated(address indexed signer, bool trusted);
+    event SignerTrusted(address indexed signer);
+    event SignerRevoked(address indexed signer);
 
     function setUp() public {
         owner = makeAddr("owner");
@@ -261,8 +262,8 @@ contract SignedUniversalResolverTest is Test {
         // Enable backup signer
         vm.prank(owner);
         vm.expectEmit(true, false, false, true, address(resolver));
-        emit TrustedSignerUpdated(backupSigner, true);
-        resolver.setTrustedSigner(backupSigner, true);
+        emit SignerTrusted(backupSigner);
+        resolver.trustSigner(backupSigner);
 
         // Backup signature now works
         bytes memory data = _addrCallData("example.clave.eth");
@@ -275,7 +276,9 @@ contract SignedUniversalResolverTest is Test {
 
         // Revoke original signer
         vm.prank(owner);
-        resolver.setTrustedSigner(signer, false);
+        vm.expectEmit(true, false, false, true, address(resolver));
+        emit SignerRevoked(signer);
+        resolver.revokeSigner(signer);
 
         // Original signer's signatures are now rejected
         bytes memory oldSig = _signResolution(signerPk, DNS_FULL, data, result, expiresAt);
@@ -284,9 +287,14 @@ contract SignedUniversalResolverTest is Test {
         resolver.resolveWithSig(oldResponse, extraData);
     }
 
-    function test_SetTrustedSigner_OnlyOwner() public {
+    function test_TrustSigner_OnlyOwner() public {
         vm.expectRevert();
-        resolver.setTrustedSigner(backupSigner, true);
+        resolver.trustSigner(backupSigner);
+    }
+
+    function test_RevokeSigner_OnlyOwner() public {
+        vm.expectRevert();
+        resolver.revokeSigner(signer);
     }
 
     function test_Constructor_RevertsOnZeroSigner() public {
@@ -299,28 +307,36 @@ contract SignedUniversalResolverTest is Test {
         new SignedUniversalResolver("", owner, registry, signer);
     }
 
-    function test_SetTrustedSigner_RevertsOnZeroAddress() public {
+    function test_TrustSigner_RevertsOnZeroAddress() public {
         vm.prank(owner);
         vm.expectRevert(SignedUniversalResolver.ZeroSignerAddress.selector);
-        resolver.setTrustedSigner(address(0), true);
+        resolver.trustSigner(address(0));
     }
 
-    function test_SetTrustedSigner_CannotDisableLastSigner() public {
+    function test_RevokeSigner_RevertsOnZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(SignedUniversalResolver.ZeroSignerAddress.selector);
+        resolver.revokeSigner(address(0));
+    }
+
+    function test_RevokeSigner_CannotDisableLastSigner() public {
         vm.prank(owner);
         vm.expectRevert(SignedUniversalResolver.CannotDisableLastTrustedSigner.selector);
-        resolver.setTrustedSigner(signer, false);
+        resolver.revokeSigner(signer);
     }
 
-    function test_SetTrustedSigner_IsIdempotent() public {
+    function test_TrustSigner_IsIdempotent() public {
         assertEq(resolver.trustedSignerCount(), 1);
-        // Re-enabling an already-trusted signer is a no-op (no count change, no emit).
+        // Re-trusting an already-trusted signer is a no-op.
         vm.prank(owner);
-        resolver.setTrustedSigner(signer, true);
+        resolver.trustSigner(signer);
         assertEq(resolver.trustedSignerCount(), 1);
+    }
 
-        // Disabling an already-untrusted signer is also a no-op.
+    function test_RevokeSigner_IsIdempotent() public {
+        // Revoking an already-untrusted signer is a no-op.
         vm.prank(owner);
-        resolver.setTrustedSigner(backupSigner, false);
+        resolver.revokeSigner(backupSigner);
         assertEq(resolver.trustedSignerCount(), 1);
     }
 
@@ -328,11 +344,11 @@ contract SignedUniversalResolverTest is Test {
         assertEq(resolver.trustedSignerCount(), 1);
 
         vm.prank(owner);
-        resolver.setTrustedSigner(backupSigner, true);
+        resolver.trustSigner(backupSigner);
         assertEq(resolver.trustedSignerCount(), 2);
 
         vm.prank(owner);
-        resolver.setTrustedSigner(signer, false);
+        resolver.revokeSigner(signer);
         assertEq(resolver.trustedSignerCount(), 1);
     }
 

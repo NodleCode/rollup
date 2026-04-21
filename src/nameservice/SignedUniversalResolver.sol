@@ -76,7 +76,8 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
     uint256 public trustedSignerCount;
 
     event UrlUpdated(string oldUrl, string newUrl);
-    event TrustedSignerUpdated(address indexed signer, bool trusted);
+    event SignerTrusted(address indexed signer);
+    event SignerRevoked(address indexed signer);
 
     constructor(string memory _url, address _owner, address _registry, address _initialSigner)
         Ownable(_owner)
@@ -90,7 +91,7 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
 
         isTrustedSigner[_initialSigner] = true;
         trustedSignerCount = 1;
-        emit TrustedSignerUpdated(_initialSigner, true);
+        emit SignerTrusted(_initialSigner);
     }
 
     /// @notice Update the CCIP-Read gateway URL.
@@ -101,33 +102,33 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
         emit UrlUpdated(oldUrl, _url);
     }
 
-    /// @notice Enable or disable a trusted gateway signer.
-    /// @dev Keeps `trustedSignerCount` in sync and enforces a floor of 1 so the
-    ///      owner cannot brick resolution by disabling the last signer.
-    function setTrustedSigner(address signer, bool trusted) external onlyOwner {
+    /// @notice Register a new trusted gateway signer.
+    /// @dev Idempotent: re-trusting an already-trusted signer is a no-op.
+    function trustSigner(address signer) external onlyOwner {
         if (signer == address(0)) revert ZeroSignerAddress();
+        if (isTrustedSigner[signer]) return;
 
-        bool current = isTrustedSigner[signer];
-        if (current == trusted) {
-            // Idempotent: nothing to do, no event, no count change.
-            return;
-        }
-
-        if (trusted) {
-            isTrustedSigner[signer] = true;
-            trustedSignerCount++;
-        } else {
-            if (trustedSignerCount == 1) revert CannotDisableLastTrustedSigner();
-            isTrustedSigner[signer] = false;
-            trustedSignerCount--;
-        }
-
-        emit TrustedSignerUpdated(signer, trusted);
+        isTrustedSigner[signer] = true;
+        trustedSignerCount++;
+        emit SignerTrusted(signer);
     }
 
-    /// @notice Ownership cannot be renounced: losing the owner bricks setUrl and
-    ///         setTrustedSigner, which would permanently break gateway rotation and
-    ///         signer revocation. Transfer to a new owner instead.
+    /// @notice Revoke trust from a gateway signer.
+    /// @dev Enforces a floor of 1 so the owner cannot brick resolution.
+    ///      Idempotent: revoking an already-untrusted signer is a no-op.
+    function revokeSigner(address signer) external onlyOwner {
+        if (signer == address(0)) revert ZeroSignerAddress();
+        if (!isTrustedSigner[signer]) return;
+        if (trustedSignerCount == 1) revert CannotDisableLastTrustedSigner();
+
+        isTrustedSigner[signer] = false;
+        trustedSignerCount--;
+        emit SignerRevoked(signer);
+    }
+
+    /// @notice Ownership cannot be renounced: losing the owner bricks trustSigner,
+    ///         revokeSigner and setUrl, which would permanently break gateway rotation
+    ///         and signer revocation. Transfer to a new owner instead.
     function renounceOwnership() public pure override {
         revert OwnershipCannotBeRenounced();
     }
