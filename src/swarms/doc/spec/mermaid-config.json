@@ -7,14 +7,17 @@
     "lineColor": "#666",
     "secondaryColor": "#f0f4f8",
     "tertiaryColor": "#e8f4e8",
-    "fontSize": "14px"
+    "fontSize": "16px"
   },
   "flowchart": {
     "curve": "basis",
-    "useMaxWidth": true
+    "useMaxWidth": false,
+    "htmlLabels": true
   },
   "sequence": {
-    "useMaxWidth": true,
-    "wrap": true
+    "useMaxWidth": false,
+    "wrap": true,
+    "width": 200,
+    "noteMargin": 15
   }
 }
