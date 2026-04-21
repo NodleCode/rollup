@@ -1,4 +1,4 @@
-import { AbiCoder, dataSlice, getAddress, hexlify, isAddress, isHexString } from "ethers"
+import { AbiCoder, dataSlice, getAddress, isAddress, isHexString } from "ethers"
 import { Router } from "express"
 import { body, matchedData, validationResult } from "express-validator"
 import {
