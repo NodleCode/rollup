@@ -80,31 +80,24 @@ const l1ChainId = process.env.L1_CHAIN_ID ? Number(process.env.L1_CHAIN_ID) : 1;
 // to revert.
 const MAX_RESOLUTION_SIGNATURE_TTL_SECONDS = 300;
 
-function parseResolutionSignatureTtl(raw: string | undefined): number {
+const resolutionSignatureTtlSeconds = (() => {
+  const raw = process.env.RESOLUTION_SIGNATURE_TTL_SECONDS;
   if (raw === undefined || raw === "") return 60;
   const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed))
     throw new Error(
       `Invalid RESOLUTION_SIGNATURE_TTL_SECONDS: "${raw}" is not a finite integer`,
     );
-  }
-  if (parsed <= 0) {
+  if (parsed <= 0)
     throw new Error(
-      `Invalid RESOLUTION_SIGNATURE_TTL_SECONDS: must be > 0, got ${parsed}`,
+      `RESOLUTION_SIGNATURE_TTL_SECONDS must be > 0, got ${parsed}`,
     );
-  }
-  if (parsed > MAX_RESOLUTION_SIGNATURE_TTL_SECONDS) {
+  if (parsed > MAX_RESOLUTION_SIGNATURE_TTL_SECONDS)
     throw new Error(
-      `Invalid RESOLUTION_SIGNATURE_TTL_SECONDS: must be <= ${MAX_RESOLUTION_SIGNATURE_TTL_SECONDS} ` +
-        `(L1 resolver _MAX_SIGNATURE_TTL), got ${parsed}`,
+      `RESOLUTION_SIGNATURE_TTL_SECONDS must be <= ${MAX_RESOLUTION_SIGNATURE_TTL_SECONDS}, got ${parsed}`,
     );
-  }
   return parsed;
-}
-
-const resolutionSignatureTtlSeconds = parseResolutionSignatureTtl(
-  process.env.RESOLUTION_SIGNATURE_TTL_SECONDS,
-);
+})();
 
 const resolverSigner = resolverSignerPrivateKey
   ? new EthersWallet(resolverSignerPrivateKey)
