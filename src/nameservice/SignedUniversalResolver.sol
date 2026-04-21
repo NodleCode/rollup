@@ -95,8 +95,10 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
 
     /// @notice Update the CCIP-Read gateway URL.
     function setUrl(string memory _url) external onlyOwner {
-        emit UrlUpdated(url, _url);
+        if (bytes(_url).length == 0) revert EmptyUrl();
+        string memory oldUrl = url;
         url = _url;
+        emit UrlUpdated(oldUrl, _url);
     }
 
     /// @notice Enable or disable a trusted gateway signer.

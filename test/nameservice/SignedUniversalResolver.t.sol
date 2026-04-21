@@ -353,6 +353,12 @@ contract SignedUniversalResolverTest is Test {
         assertEq(resolver.url(), "https://new.example");
     }
 
+    function test_SetUrl_RevertsOnEmptyUrl() public {
+        vm.prank(owner);
+        vm.expectRevert(SignedUniversalResolver.EmptyUrl.selector);
+        resolver.setUrl("");
+    }
+
     // --- EIP-712 domain binding ---
 
     function test_DomainSeparator_IsNonZero() public view {
