@@ -16,6 +16,7 @@ pragma solidity ^0.8.26;
 
 import {IERC165} from "lib/forge-std/src/interfaces/IERC165.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
@@ -25,7 +26,7 @@ interface IExtendedResolver {
     function resolve(bytes calldata name, bytes calldata data) external view returns (bytes memory);
 }
 
-contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable, EIP712 {
+contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EIP712 {
     bytes4 private constant _EXTENDED_INTERFACE_ID = 0x9061b923; // ENSIP-10
 
     bytes4 private constant _ADDR_SELECTOR = 0x3b3b57de; // addr(bytes32)
