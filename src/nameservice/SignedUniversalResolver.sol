@@ -66,6 +66,7 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
     /// @notice Address of the L2 NameService contract. Read by the off-chain gateway
     ///         to choose which L2 contract to query. Not consulted on-chain — the trust
     ///         anchor for resolution is the EIP-712 signer, not this field.
+    // solhint-disable-next-line immutable-vars-naming
     address public immutable registry;
 
     /// @notice Trusted signers whose EIP-712 signatures this resolver will accept.
@@ -107,7 +108,7 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
         trustedSignerCount = 1;
         emit SignerTrusted(_initialSigner);
 
-        for (uint256 i = 0; i < _initialDomains.length; i++) {
+        for (uint256 i = 0; i < _initialDomains.length; ++i) {
             if (bytes(_initialDomains[i]).length == 0) revert EmptyDomain();
             bytes32 key = keccak256(bytes(_initialDomains[i]));
             if (!isAllowedDomain[key]) {
@@ -118,7 +119,7 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
     }
 
     /// @notice Update the CCIP-Read gateway URL.
-    function setUrl(string memory _url) external onlyOwner {
+    function setUrl(string calldata _url) external onlyOwner {
         if (bytes(_url).length == 0) revert EmptyUrl();
         string memory oldUrl = url;
         url = _url;
@@ -132,7 +133,7 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
         if (isTrustedSigner[signer]) return;
 
         isTrustedSigner[signer] = true;
-        trustedSignerCount++;
+        ++trustedSignerCount;
         emit SignerTrusted(signer);
     }
 
@@ -145,13 +146,13 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
         if (trustedSignerCount == 1) revert CannotDisableLastTrustedSigner();
 
         isTrustedSigner[signer] = false;
-        trustedSignerCount--;
+        --trustedSignerCount;
         emit SignerRevoked(signer);
     }
 
     /// @notice Allow a new domain to be resolved through this contract.
     /// @dev Idempotent: re-adding an already-allowed domain is a no-op.
-    function addDomain(string memory domain) external onlyOwner {
+    function addDomain(string calldata domain) external onlyOwner {
         if (bytes(domain).length == 0) revert EmptyDomain();
         bytes32 key = keccak256(bytes(domain));
         if (isAllowedDomain[key]) return;
@@ -162,7 +163,7 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
 
     /// @notice Remove a domain from the allowlist.
     /// @dev Idempotent: removing an already-disallowed domain is a no-op.
-    function removeDomain(string memory domain) external onlyOwner {
+    function removeDomain(string calldata domain) external onlyOwner {
         if (bytes(domain).length == 0) revert EmptyDomain();
         bytes32 key = keccak256(bytes(domain));
         if (!isAllowedDomain[key]) return;
@@ -216,26 +217,34 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
         return (first, second, third);
     }
 
+    /// @notice Returns the ENS "no record" encoding for a bare-domain query.
+    /// @param functionSelector The 4-byte ENS selector from the original call.
+    function _bareDomainResponse(bytes4 functionSelector) internal pure returns (bytes memory) {
+        if (functionSelector == _TEXT_SELECTOR) {
+            return abi.encode("");
+        }
+        if (functionSelector == _ADDR_MULTICHAIN_SELECTOR) {
+            // ENSIP-11: addr(bytes32,uint256) returns `bytes`. "No record"
+            // is an empty bytes value, not a zero address.
+            return abi.encode(bytes(""));
+        }
+        return abi.encode(address(0));
+    }
+
     /// @notice ENSIP-10 entry point. Triggers CCIP-Read lookup via OffchainLookup revert.
     /// @param _name DNS-encoded name (e.g. b"\x07example\x05clave\x03eth")
     /// @param _data ABI-encoded ENS resolution call (addr / addr-multichain / text)
     function resolve(bytes calldata _name, bytes calldata _data) external view returns (bytes memory) {
         (string memory sub, string memory dom,) = _parseDnsDomain(_name);
 
-        // Reject domains this resolver was never configured to serve. This prevents
-        // the resolver from blindly triggering OffchainLookup if the ENS registry
-        // mistakenly points an unrelated domain at this contract.
         if (bytes(dom).length > 0 && !isAllowedDomain[keccak256(bytes(dom))]) {
             revert UnknownDomain(dom);
         }
 
-        // Explicit length check so short calldata reverts with a controlled error
-        // instead of a panic on the slice below.
         if (_data.length < 4) {
             revert CallDataTooShort(_data.length);
         }
 
-        // Dispatch only on supported selectors so the gateway is never asked for nonsense.
         bytes4 functionSelector = bytes4(_data[:4]);
         if (
             functionSelector != _TEXT_SELECTOR && functionSelector != _ADDR_SELECTOR
@@ -250,32 +259,15 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
             }
         }
 
-        // Bare-domain queries (nodl.eth itself, no subdomain) are answered on L1
-        // with the ENS "no record" convention: zero address for addr(bytes32),
-        // empty bytes for addr(bytes32,uint256) per ENSIP-11, empty string for
-        // text(bytes32,string). The resolver only exists to answer subdomain
-        // lookups — it holds no state about the parent name.
         if (bytes(sub).length == 0) {
-            if (functionSelector == _TEXT_SELECTOR) {
-                return abi.encode("");
-            }
-            if (functionSelector == _ADDR_MULTICHAIN_SELECTOR) {
-                // ENSIP-11: addr(bytes32,uint256) returns `bytes`. "No record"
-                // is an empty bytes value, not a zero address.
-                return abi.encode(bytes(""));
-            }
-            return abi.encode(address(0));
+            return _bareDomainResponse(functionSelector);
         }
 
-        // Pass the raw (name, data) to the gateway. It will query the L2 NameService,
-        // build the ABI-encoded result, and return it along with an EIP-712 signature.
         bytes memory callData = abi.encode(_name, _data);
-        bytes memory extraData = abi.encode(_name, _data);
-
         string[] memory urls = new string[](1);
         urls[0] = url;
 
-        revert OffchainLookup(address(this), urls, callData, SignedUniversalResolver.resolveWithSig.selector, extraData);
+        revert OffchainLookup(address(this), urls, callData, SignedUniversalResolver.resolveWithSig.selector, callData);
     }
 
     /// @notice CCIP-Read callback. Verifies the gateway's EIP-712 signature and returns the result.
