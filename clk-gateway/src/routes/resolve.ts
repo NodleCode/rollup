@@ -9,6 +9,7 @@ import {
   nameServiceContracts,
   nodleNameServiceContract,
   nodleNSDomain,
+  parentTLD,
   resolutionSignatureTtlSeconds,
   resolverSigner,
 } from "../setup"
@@ -109,6 +110,13 @@ router.post(
     }
 
     const parsed = parseDnsDomain(Buffer.from(decodedName.slice(2), "hex"))
+
+    if (parsed.tld && parsed.tld !== parentTLD) {
+      throw new HttpError(
+        `Unexpected TLD: "${parsed.tld}" (expected "${parentTLD}")`,
+        400,
+      )
+    }
 
     // Route to the correct L2 NameService based on the parent domain.
     let nameServiceContract
