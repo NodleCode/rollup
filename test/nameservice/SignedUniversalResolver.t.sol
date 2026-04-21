@@ -2,11 +2,11 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {UniversalResolver, IExtendedResolver} from "../../src/nameservice/UniversalResolver.sol";
+import {SignedUniversalResolver, IExtendedResolver} from "../../src/nameservice/SignedUniversalResolver.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
-contract UniversalResolverTest is Test {
-    UniversalResolver public resolver;
+contract SignedUniversalResolverTest is Test {
+    SignedUniversalResolver public resolver;
 
     address public owner;
     address public registry;
@@ -39,7 +39,7 @@ contract UniversalResolverTest is Test {
         (signer, signerPk) = makeAddrAndKey("signer");
         (backupSigner, backupSignerPk) = makeAddrAndKey("backup");
 
-        resolver = new UniversalResolver(GATEWAY_URL, owner, registry, signer);
+        resolver = new SignedUniversalResolver(GATEWAY_URL, owner, registry, signer);
     }
 
     // --- helpers ---
@@ -109,19 +109,19 @@ contract UniversalResolverTest is Test {
 
     function test_Resolve_ShortCallData_Reverts() public {
         bytes memory shortData = hex"112233"; // only 3 bytes, below 4-byte selector
-        vm.expectRevert(abi.encodeWithSelector(UniversalResolver.CallDataTooShort.selector, uint256(3)));
+        vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.CallDataTooShort.selector, uint256(3)));
         resolver.resolve(DNS_FULL, shortData);
     }
 
     function test_Resolve_UnsupportedSelector_Reverts() public {
         bytes memory bogus = abi.encodeWithSelector(bytes4(0xdeadbeef), bytes32(0));
-        vm.expectRevert(abi.encodeWithSelector(UniversalResolver.UnsupportedSelector.selector, bytes4(0xdeadbeef)));
+        vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.UnsupportedSelector.selector, bytes4(0xdeadbeef)));
         resolver.resolve(DNS_FULL, bogus);
     }
 
     function test_Resolve_AddrMultichain_WrongCoinType_Reverts() public {
         bytes memory data = _addrMultichainCallData("example.clave.eth", 60); // ETH mainnet coin type
-        vm.expectRevert(abi.encodeWithSelector(UniversalResolver.UnsupportedCoinType.selector, uint256(60)));
+        vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.UnsupportedCoinType.selector, uint256(60)));
         resolver.resolve(DNS_FULL, data);
     }
 
@@ -207,7 +207,7 @@ contract UniversalResolverTest is Test {
         bytes memory extraData = abi.encode(DNS_FULL, data);
 
         vm.warp(uint256(expiresAt) + 1);
-        vm.expectRevert(abi.encodeWithSelector(UniversalResolver.SignatureExpired.selector, expiresAt));
+        vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.SignatureExpired.selector, expiresAt));
         resolver.resolveWithSig(response, extraData);
     }
 
@@ -221,7 +221,7 @@ contract UniversalResolverTest is Test {
         bytes memory response = abi.encode(result, expiresAt, sig);
         bytes memory extraData = abi.encode(DNS_FULL, data);
 
-        vm.expectRevert(abi.encodeWithSelector(UniversalResolver.SignatureTtlTooLong.selector, expiresAt));
+        vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.SignatureTtlTooLong.selector, expiresAt));
         resolver.resolveWithSig(response, extraData);
     }
 
@@ -235,7 +235,7 @@ contract UniversalResolverTest is Test {
         bytes memory response = abi.encode(result, expiresAt, sig);
         bytes memory extraData = abi.encode(DNS_FULL, data);
 
-        vm.expectRevert(abi.encodeWithSelector(UniversalResolver.InvalidSigner.selector, backupSigner));
+        vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.InvalidSigner.selector, backupSigner));
         resolver.resolveWithSig(response, extraData);
     }
 
@@ -280,7 +280,7 @@ contract UniversalResolverTest is Test {
         // Original signer's signatures are now rejected
         bytes memory oldSig = _signResolution(signerPk, DNS_FULL, data, result, expiresAt);
         bytes memory oldResponse = abi.encode(result, expiresAt, oldSig);
-        vm.expectRevert(abi.encodeWithSelector(UniversalResolver.InvalidSigner.selector, signer));
+        vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.InvalidSigner.selector, signer));
         resolver.resolveWithSig(oldResponse, extraData);
     }
 
@@ -290,24 +290,24 @@ contract UniversalResolverTest is Test {
     }
 
     function test_Constructor_RevertsOnZeroSigner() public {
-        vm.expectRevert(UniversalResolver.ZeroSignerAddress.selector);
-        new UniversalResolver(GATEWAY_URL, owner, registry, address(0));
+        vm.expectRevert(SignedUniversalResolver.ZeroSignerAddress.selector);
+        new SignedUniversalResolver(GATEWAY_URL, owner, registry, address(0));
     }
 
     function test_Constructor_RevertsOnEmptyUrl() public {
-        vm.expectRevert(UniversalResolver.EmptyUrl.selector);
-        new UniversalResolver("", owner, registry, signer);
+        vm.expectRevert(SignedUniversalResolver.EmptyUrl.selector);
+        new SignedUniversalResolver("", owner, registry, signer);
     }
 
     function test_SetTrustedSigner_RevertsOnZeroAddress() public {
         vm.prank(owner);
-        vm.expectRevert(UniversalResolver.ZeroSignerAddress.selector);
+        vm.expectRevert(SignedUniversalResolver.ZeroSignerAddress.selector);
         resolver.setTrustedSigner(address(0), true);
     }
 
     function test_SetTrustedSigner_CannotDisableLastSigner() public {
         vm.prank(owner);
-        vm.expectRevert(UniversalResolver.CannotDisableLastTrustedSigner.selector);
+        vm.expectRevert(SignedUniversalResolver.CannotDisableLastTrustedSigner.selector);
         resolver.setTrustedSigner(signer, false);
     }
 
@@ -338,7 +338,7 @@ contract UniversalResolverTest is Test {
 
     function test_RenounceOwnership_Reverts() public {
         vm.prank(owner);
-        vm.expectRevert(UniversalResolver.OwnershipCannotBeRenounced.selector);
+        vm.expectRevert(SignedUniversalResolver.OwnershipCannotBeRenounced.selector);
         resolver.renounceOwnership();
     }
 

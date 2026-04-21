@@ -330,7 +330,7 @@ The 5-minute max TTL guarantees that even signatures already in flight expire wi
 - [ERC-3668: CCIP Read](https://eips.ethereum.org/EIPS/eip-3668)
 - [EIP-712: Typed Structured Data Hashing and Signing](https://eips.ethereum.org/EIPS/eip-712)
 - [ERC-165: Standard Interface Detection](https://eips.ethereum.org/EIPS/eip-165)
-- `src/nameservice/UniversalResolver.sol`
-- `test/nameservice/UniversalResolver.t.sol`
+- `src/nameservice/SignedUniversalResolver.sol`
+- `test/nameservice/SignedUniversalResolver.t.sol`
 - `clk-gateway/src/resolver/signResolution.ts`
 - `clk-gateway/src/routes/resolve.ts`

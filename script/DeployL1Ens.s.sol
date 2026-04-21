@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import {Script, console} from "lib/forge-std/src/Script.sol";
-import {UniversalResolver} from "../src/nameservice/UniversalResolver.sol";
+import {SignedUniversalResolver} from "../src/nameservice/SignedUniversalResolver.sol";
 
 interface IResolverSetter {
     function setResolver(bytes32 node, address resolver) external;
@@ -17,15 +17,15 @@ contract DeployL1Ens is Script {
         address resolverAddress = vm.envOr("NS_RESOLVER_ADDR", address(0));
 
         if (resolverAddress == address(0)) {
-            console.log("Deploying UniversalResolver (signed-gateway model)...");
-            UniversalResolver l1Resolver = new UniversalResolver(
+            console.log("Deploying SignedUniversalResolver (signed-gateway model)...");
+            SignedUniversalResolver l1Resolver = new SignedUniversalResolver(
                 vm.envString("NS_OFFCHAIN_RESOLVER_URL"),
                 vm.envAddress("NS_OWNER_ADDR"),
                 vm.envAddress("NS_ADDR"),
                 vm.envAddress("NS_TRUSTED_SIGNER_ADDR")
             );
             resolverAddress = address(l1Resolver);
-            console.log("Deployed UniversalResolver at", resolverAddress);
+            console.log("Deployed SignedUniversalResolver at", resolverAddress);
         }
 
         // Optional: auto-repoint ENS to the new resolver in the same broadcast.
