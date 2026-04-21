@@ -198,12 +198,11 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
             }
         }
 
-        // Bare-domain queries (nodl.eth itself, no subdomain) are answered on L1 with
-        // the ENS "no record" convention: zero address for addr queries, empty string
-        // for text queries. The resolver only exists to answer subdomain lookups — it
-        // holds no state about the parent name. If a specific address needs to be
-        // associated with the bare domain, set it via a different resolver at the
-        // ENS registry level.
+        // Bare-domain queries (nodl.eth itself, no subdomain) are answered on L1
+        // with the ENS "no record" convention: zero address for addr(bytes32),
+        // empty bytes for addr(bytes32,uint256) per ENSIP-11, empty string for
+        // text(bytes32,string). The resolver only exists to answer subdomain
+        // lookups — it holds no state about the parent name.
         if (bytes(sub).length == 0) {
             if (functionSelector == _TEXT_SELECTOR) {
                 return abi.encode("");
