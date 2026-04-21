@@ -22,7 +22,8 @@ contract DeployL1Ens is Script {
                 vm.envString("NS_OFFCHAIN_RESOLVER_URL"),
                 vm.envAddress("NS_OWNER_ADDR"),
                 vm.envAddress("NS_ADDR"),
-                vm.envAddress("NS_TRUSTED_SIGNER_ADDR")
+                vm.envAddress("NS_TRUSTED_SIGNER_ADDR"),
+                vm.envString("NS_DOMAIN")
             );
             resolverAddress = address(l1Resolver);
             console.log("Deployed SignedUniversalResolver at", resolverAddress);

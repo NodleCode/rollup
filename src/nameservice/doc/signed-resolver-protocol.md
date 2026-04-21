@@ -2,7 +2,7 @@
 
 > Describes the on-chain contract, the off-chain gateway, and the EIP-712 message
 
-**Last updated:** 2026-04-13
+**Last updated:** 2026-04-21
 
 ---
 
@@ -106,9 +106,12 @@ Rationale: this resolver holds no state about the parent name — it exists only
 string  public url;                         // CCIP-Read gateway URL
 address public immutable registry;          // L2 NameService address — METADATA ONLY, not trusted
 mapping(address => bool) public isTrustedSigner;
+mapping(bytes32 => bool) public isAllowedDomain; // keccak256(bytes(domain)) → allowed
 ```
 
 **Trust anchor note:** `registry` is metadata for off-chain tooling and auditors. It is never consulted on-chain. The only trust anchor for resolution is the EIP-712 signer set.
+
+**Domain allowlist:** `isAllowedDomain` gates which parent domains (e.g. "nodl", "clk") the resolver will serve. The contract parses the DNS-encoded name and rejects unknown domains with `UnknownDomain(string)` before triggering `OffchainLookup`. This prevents the resolver from blindly forwarding requests if the ENS registry mistakenly points an unrelated domain at this contract. The allowlist must be kept in sync with the gateway's configured domain→contract mapping.
 
 ### 4.5 Errors
 
@@ -116,6 +119,13 @@ mapping(address => bool) public isTrustedSigner;
 error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData);
 error UnsupportedCoinType(uint256 coinType);
 error UnsupportedSelector(bytes4 selector);
+error CallDataTooShort(uint256 length);
+error EmptyUrl();
+error EmptyDomain();
+error UnknownDomain(string domain);
+error OwnershipCannotBeRenounced();
+error ZeroSignerAddress();
+error CannotDisableLastTrustedSigner();
 error SignatureExpired(uint64 expiresAt);
 error SignatureTtlTooLong(uint64 expiresAt);
 error InvalidSigner(address recovered);
@@ -125,7 +135,10 @@ error InvalidSigner(address recovered);
 
 ```solidity
 event UrlUpdated(string oldUrl, string newUrl);
-event TrustedSignerUpdated(address indexed signer, bool trusted);
+event SignerTrusted(address indexed signer);
+event SignerRevoked(address indexed signer);
+event DomainAdded(string domain);
+event DomainRemoved(string domain);
 ```
 
 ### 4.7 Admin surface
@@ -133,11 +146,15 @@ event TrustedSignerUpdated(address indexed signer, bool trusted);
 | Function | Access | Purpose |
 |---|---|---|
 | `setUrl(string)` | `onlyOwner` | Rotate gateway URL |
-| `setTrustedSigner(address, bool)` | `onlyOwner` | Add or revoke a trusted gateway signer |
-| `transferOwnership(address)` | `onlyOwner` | Standard OZ handoff |
+| `trustSigner(address)` | `onlyOwner` | Register a trusted gateway signer (idempotent) |
+| `revokeSigner(address)` | `onlyOwner` | Revoke a trusted gateway signer (idempotent, floor of 1) |
+| `addDomain(string)` | `onlyOwner` | Allow a domain to be resolved (idempotent) |
+| `removeDomain(string)` | `onlyOwner` | Remove a domain from the allowlist (idempotent) |
+| `transferOwnership(address)` | `onlyOwner` | Standard OZ `Ownable2Step` handoff |
+| `acceptOwnership()` | pending owner | Complete the two-step ownership transfer |
 | `renounceOwnership()` | **blocked** (reverts) | Prevents permanently bricking admin setters |
 
-At least one trusted signer must remain enabled at all times, or all resolution breaks.
+At least one trusted signer must remain enabled at all times, or all resolution breaks. The domain allowlist has no such floor — removing all domains effectively disables the resolver without bricking admin functions.
 
 ## 5. EIP-712 Payload
 
@@ -281,12 +298,12 @@ There is no on-chain fallback and no on-chain cache. HA must be provided operati
 ### 8.1 Signer rotation (zero downtime)
 
 1. Generate a new signing key in the secret manager.
-2. Owner calls `setTrustedSigner(newSigner, true)`.
+2. Owner calls `trustSigner(newSigner)`.
 3. Deploy gateway with the new key (blue/green or rolling) and verify it produces valid signatures end-to-end.
-4. Owner calls `setTrustedSigner(oldSigner, false)`.
+4. Owner calls `revokeSigner(oldSigner)`.
 5. Delete the old key material.
 
-At no point should the contract have zero enabled signers.
+At no point should the contract have zero enabled signers (`revokeSigner` enforces a floor of 1).
 
 ### 8.2 Gateway URL rotation
 
@@ -296,13 +313,24 @@ At no point should the contract have zero enabled signers.
 
 Note: the old `OffchainLookup` revert for in-flight requests still contains the old URL, so clients with a request already in progress will use the old URL. In practice, CCIP-Read requests are short-lived; a short overlap period is sufficient.
 
-### 8.3 Ownership handoff
+### 8.3 Domain management
 
-Standard `transferOwnership(newOwner)`. Production owner should be a multisig. `renounceOwnership` is intentionally blocked.
+Adding a new parent domain (e.g. expanding from `nodl.eth` to also serve `clk.eth`):
 
-### 8.4 Emergency: signer key compromise
+1. Deploy the L2 NameService contract for the new domain (if not already deployed).
+2. Configure the gateway with the new domain → L2 contract mapping.
+3. Owner calls `addDomain("clk")` on the L1 resolver.
+4. Point the ENS node for the new domain at this resolver.
 
-1. From the multisig, call `setTrustedSigner(compromisedSigner, false)` immediately — this is the hard kill.
+Removing a domain: owner calls `removeDomain("clk")`. Resolution for that domain stops immediately on-chain. Update the gateway config to remove the route.
+
+### 8.4 Ownership handoff
+
+Standard two-step `transferOwnership(newOwner)` + `acceptOwnership()` (Ownable2Step). Production owner should be a multisig. `renounceOwnership` is intentionally blocked.
+
+### 8.5 Emergency: signer key compromise
+
+1. From the multisig, call `revokeSigner(compromisedSigner)` immediately — this is the hard kill.
 2. Rotate the gateway to a new signer per §8.1.
 3. Audit logs for the suspected window of compromise.
 4. Communicate externally if any user-facing impact is suspected.
@@ -313,7 +341,8 @@ The 5-minute max TTL guarantees that even signatures already in flight expire wi
 
 - **Gateway is a liveness dependency.** See §7.4.
 - **No on-chain cache.** Every resolution call triggers a gateway round-trip. Clients typically cache in ENS.js or at the CDN layer.
-- **Single contract may serve multiple parent domains.** One deployment can answer for both `nodl.eth` and `clk.eth` via the gateway's domain routing. This is operationally simple but a signer compromise affects both. Blast-radius isolation requires separate deployments with separate signers.
+- **Single contract may serve multiple parent domains.** One deployment can answer for both `nodl.eth` and `clk.eth` via the on-chain domain allowlist and the gateway's domain routing. This is operationally simple but a signer compromise affects both. Blast-radius isolation requires separate deployments with separate signers.
+- **Domain allowlist must be kept in sync with the gateway.** The contract's `isAllowedDomain` mapping and the gateway's configured domain→contract mapping are independent. Adding a domain to one but not the other will cause either on-chain rejection (contract missing) or gateway 404 (gateway missing). There is no automated sync or startup health check.
 - **Reverse resolution is not supported.** This resolver does not implement `name(bytes32)` or ENSIP-19 reverse records.
 - **No on-chain record of signer identities beyond the address.** Associate human-readable labels in an off-chain rotation log.
 

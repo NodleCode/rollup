@@ -34,13 +34,15 @@ contract SignedUniversalResolverTest is Test {
     event SignerTrusted(address indexed signer);
     event SignerRevoked(address indexed signer);
 
+    string public constant INITIAL_DOMAIN = "clave";
+
     function setUp() public {
         owner = makeAddr("owner");
         registry = makeAddr("registry");
         (signer, signerPk) = makeAddrAndKey("signer");
         (backupSigner, backupSignerPk) = makeAddrAndKey("backup");
 
-        resolver = new SignedUniversalResolver(GATEWAY_URL, owner, registry, signer);
+        resolver = new SignedUniversalResolver(GATEWAY_URL, owner, registry, signer, INITIAL_DOMAIN);
     }
 
     // --- helpers ---
@@ -299,12 +301,21 @@ contract SignedUniversalResolverTest is Test {
 
     function test_Constructor_RevertsOnZeroSigner() public {
         vm.expectRevert(SignedUniversalResolver.ZeroSignerAddress.selector);
-        new SignedUniversalResolver(GATEWAY_URL, owner, registry, address(0));
+        new SignedUniversalResolver(GATEWAY_URL, owner, registry, address(0), INITIAL_DOMAIN);
     }
 
     function test_Constructor_RevertsOnEmptyUrl() public {
         vm.expectRevert(SignedUniversalResolver.EmptyUrl.selector);
-        new SignedUniversalResolver("", owner, registry, signer);
+        new SignedUniversalResolver("", owner, registry, signer, INITIAL_DOMAIN);
+    }
+
+    function test_Constructor_RevertsOnEmptyDomain() public {
+        vm.expectRevert(SignedUniversalResolver.EmptyDomain.selector);
+        new SignedUniversalResolver(GATEWAY_URL, owner, registry, signer, "");
+    }
+
+    function test_Constructor_SetsInitialDomain() public view {
+        assertTrue(resolver.isAllowedDomain(keccak256(bytes(INITIAL_DOMAIN))));
     }
 
     function test_TrustSigner_RevertsOnZeroAddress() public {
@@ -417,10 +428,221 @@ contract SignedUniversalResolverTest is Test {
         assertFalse(resolver.supportsInterface(0xdeadbeef));
     }
 
+    // --- domain allowlist ---
+
+    function test_AddDomain_OnlyOwner() public {
+        vm.expectRevert();
+        resolver.addDomain("nodl");
+    }
+
+    function test_AddDomain_Success() public {
+        vm.prank(owner);
+        resolver.addDomain("nodl");
+        assertTrue(resolver.isAllowedDomain(keccak256(bytes("nodl"))));
+    }
+
+    function test_AddDomain_IsIdempotent() public {
+        vm.prank(owner);
+        resolver.addDomain("nodl");
+        // Second add is a no-op
+        vm.prank(owner);
+        resolver.addDomain("nodl");
+        assertTrue(resolver.isAllowedDomain(keccak256(bytes("nodl"))));
+    }
+
+    function test_AddDomain_RevertsOnEmptyDomain() public {
+        vm.prank(owner);
+        vm.expectRevert(SignedUniversalResolver.EmptyDomain.selector);
+        resolver.addDomain("");
+    }
+
+    function test_RemoveDomain_OnlyOwner() public {
+        vm.expectRevert();
+        resolver.removeDomain(INITIAL_DOMAIN);
+    }
+
+    function test_RemoveDomain_Success() public {
+        vm.prank(owner);
+        resolver.removeDomain(INITIAL_DOMAIN);
+        assertFalse(resolver.isAllowedDomain(keccak256(bytes(INITIAL_DOMAIN))));
+    }
+
+    function test_RemoveDomain_IsIdempotent() public {
+        // Removing an already-disallowed domain is a no-op
+        vm.prank(owner);
+        resolver.removeDomain("nonexistent");
+    }
+
+    function test_RemoveDomain_RevertsOnEmptyDomain() public {
+        vm.prank(owner);
+        vm.expectRevert(SignedUniversalResolver.EmptyDomain.selector);
+        resolver.removeDomain("");
+    }
+
+    function test_Resolve_UnknownDomain_Reverts() public {
+        // DNS-encoded "example.unknown.eth" — domain is "unknown", not in allowlist
+        bytes memory dnsUnknown = hex"076578616d706c6507756e6b6e6f776e0365746800";
+        bytes memory data = _addrCallData("example.unknown.eth");
+
+        vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.UnknownDomain.selector, "unknown"));
+        resolver.resolve(dnsUnknown, data);
+    }
+
+    function test_Resolve_AllowedDomain_TriggersOffchainLookup() public {
+        // DNS_FULL uses "clave" domain which is in the allowlist
+        bytes memory data = _addrCallData("example.clave.eth");
+        vm.expectRevert(); // OffchainLookup
+        resolver.resolve(DNS_FULL, data);
+    }
+
+    function test_Resolve_NewlyAddedDomain_Works() public {
+        // Add "nodl" domain
+        vm.prank(owner);
+        resolver.addDomain("nodl");
+
+        // DNS-encoded "example.nodl.eth"
+        bytes memory dnsNodl = hex"076578616d706c65046e6f646c0365746800";
+        bytes memory data = _addrCallData("example.nodl.eth");
+        vm.expectRevert(); // OffchainLookup
+        resolver.resolve(dnsNodl, data);
+    }
+
+    function test_Resolve_RemovedDomain_Reverts() public {
+        // Remove the initial "clave" domain
+        vm.prank(owner);
+        resolver.removeDomain(INITIAL_DOMAIN);
+
+        bytes memory data = _addrCallData("example.clave.eth");
+        vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.UnknownDomain.selector, "clave"));
+        resolver.resolve(DNS_FULL, data);
+    }
+
     // --- sanity: initial signer was set ---
 
     function test_InitialSignerIsTrusted() public view {
         assertTrue(resolver.isTrustedSigner(signer));
         assertFalse(resolver.isTrustedSigner(backupSigner));
+    }
+
+    // --- fuzz: TTL / expiry boundaries ---
+
+    /// @notice Fuzz expiresAt across the full uint64 range.
+    ///         Partitions: expired (past), valid window, TTL too long.
+    function testFuzz_ResolveWithSig_ExpiresAt(uint64 expiresAt) public {
+        // Fix block.timestamp to a known value so the three zones are deterministic.
+        uint256 ts = 1_700_000_000;
+        vm.warp(ts);
+
+        bytes memory data = _addrCallData("example.clave.eth");
+        bytes memory result = abi.encode(makeAddr("owner"));
+
+        bytes memory sig = _signResolution(signerPk, DNS_FULL, data, result, expiresAt);
+        bytes memory response = abi.encode(result, expiresAt, sig);
+        bytes memory extraData = abi.encode(DNS_FULL, data);
+
+        if (expiresAt < ts) {
+            // Zone 1: expired — block.timestamp > expiresAt
+            vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.SignatureExpired.selector, expiresAt));
+            resolver.resolveWithSig(response, extraData);
+        } else if (expiresAt > ts + 5 minutes) {
+            // Zone 3: TTL too long — expiresAt > block.timestamp + _MAX_SIGNATURE_TTL
+            vm.expectRevert(abi.encodeWithSelector(SignedUniversalResolver.SignatureTtlTooLong.selector, expiresAt));
+            resolver.resolveWithSig(response, extraData);
+        } else {
+            // Zone 2: valid window — ts <= expiresAt <= ts + 300
+            bytes memory out = resolver.resolveWithSig(response, extraData);
+            assertEq(keccak256(out), keccak256(result));
+        }
+    }
+
+    /// @notice Fuzz block.timestamp while keeping expiresAt fixed at a known valid offset.
+    ///         Ensures the expiry check works regardless of when the chain is.
+    function testFuzz_ResolveWithSig_Timestamp(uint64 timestamp) public {
+        // Bound timestamp to avoid overflow when adding 5 minutes
+        vm.assume(timestamp > 0 && timestamp < type(uint64).max - 5 minutes);
+        vm.warp(timestamp);
+
+        bytes memory data = _addrCallData("example.clave.eth");
+        bytes memory result = abi.encode(makeAddr("owner"));
+        uint64 expiresAt = uint64(timestamp + 60); // 60s into valid window
+
+        bytes memory sig = _signResolution(signerPk, DNS_FULL, data, result, expiresAt);
+        bytes memory response = abi.encode(result, expiresAt, sig);
+        bytes memory extraData = abi.encode(DNS_FULL, data);
+
+        // Should always succeed: expiresAt = now + 60 is within [now, now + 300]
+        bytes memory out = resolver.resolveWithSig(response, extraData);
+        assertEq(keccak256(out), keccak256(result));
+    }
+
+    /// @notice Fuzz the exact boundary: expiresAt == block.timestamp (not expired, edge).
+    function testFuzz_ResolveWithSig_ExpiresAtExactlyNow(uint64 timestamp) public {
+        vm.assume(timestamp > 0 && timestamp < type(uint64).max - 5 minutes);
+        vm.warp(timestamp);
+
+        bytes memory data = _addrCallData("example.clave.eth");
+        bytes memory result = abi.encode(makeAddr("owner"));
+        uint64 expiresAt = uint64(timestamp); // exactly now
+
+        bytes memory sig = _signResolution(signerPk, DNS_FULL, data, result, expiresAt);
+        bytes memory response = abi.encode(result, expiresAt, sig);
+        bytes memory extraData = abi.encode(DNS_FULL, data);
+
+        // block.timestamp > expiresAt is false when equal → should succeed
+        bytes memory out = resolver.resolveWithSig(response, extraData);
+        assertEq(keccak256(out), keccak256(result));
+    }
+
+    /// @notice Fuzz the upper boundary: expiresAt == block.timestamp + 5 minutes (max allowed).
+    function testFuzz_ResolveWithSig_ExpiresAtMaxTtl(uint64 timestamp) public {
+        vm.assume(timestamp > 0 && timestamp < type(uint64).max - 5 minutes);
+        vm.warp(timestamp);
+
+        bytes memory data = _addrCallData("example.clave.eth");
+        bytes memory result = abi.encode(makeAddr("owner"));
+        uint64 expiresAt = uint64(timestamp + 5 minutes); // exactly at cap
+
+        bytes memory sig = _signResolution(signerPk, DNS_FULL, data, result, expiresAt);
+        bytes memory response = abi.encode(result, expiresAt, sig);
+        bytes memory extraData = abi.encode(DNS_FULL, data);
+
+        // expiresAt == block.timestamp + _MAX_SIGNATURE_TTL → not strictly greater → should succeed
+        bytes memory out = resolver.resolveWithSig(response, extraData);
+        assertEq(keccak256(out), keccak256(result));
+    }
+
+    /// @notice Fuzz DNS-encoded names with variable-length segments.
+    ///         Verifies resolve() doesn't panic on arbitrary well-formed DNS names.
+    function testFuzz_Resolve_DnsName(uint8 subLen, uint8 domLen, uint8 tldLen) public {
+        // Bound lengths to [1,63] per DNS label rules
+        subLen = uint8(bound(subLen, 1, 63));
+        domLen = uint8(bound(domLen, 1, 63));
+        tldLen = uint8(bound(tldLen, 1, 63));
+
+        // Build DNS-encoded name: <subLen><sub><domLen><dom><tldLen><tld><0x00>
+        bytes memory name = new bytes(uint256(subLen) + uint256(domLen) + uint256(tldLen) + 4);
+        name[0] = bytes1(subLen);
+        // Fill sub with 'a'
+        for (uint256 i = 0; i < subLen; i++) {
+            name[1 + i] = "a";
+        }
+        name[1 + subLen] = bytes1(domLen);
+        // Fill dom with 'b'
+        for (uint256 i = 0; i < domLen; i++) {
+            name[2 + subLen + i] = "b";
+        }
+        name[2 + subLen + domLen] = bytes1(tldLen);
+        // Fill tld with 'c'
+        for (uint256 i = 0; i < tldLen; i++) {
+            name[3 + subLen + domLen + i] = "c";
+        }
+        name[name.length - 1] = 0x00;
+
+        bytes memory data = _addrCallData("test");
+
+        // Has a subdomain → should revert (UnknownDomain for non-allowlisted
+        // domains, OffchainLookup for allowlisted ones). Either way, no panic.
+        vm.expectRevert();
+        resolver.resolve(name, data);
     }
 }

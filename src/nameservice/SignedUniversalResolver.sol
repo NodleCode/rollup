@@ -52,6 +52,8 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
     error OwnershipCannotBeRenounced();
     error ZeroSignerAddress();
     error EmptyUrl();
+    error EmptyDomain();
+    error UnknownDomain(string domain);
     error CannotDisableLastTrustedSigner();
     error SignatureExpired(uint64 expiresAt);
     error SignatureTtlTooLong(uint64 expiresAt);
@@ -75,16 +77,27 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
     ///      by the owner. The contract enforces a floor of 1 in `setTrustedSigner`.
     uint256 public trustedSignerCount;
 
+    /// @notice Domains this resolver is allowed to serve (e.g. "nodl", "clk").
+    ///         Keyed by keccak256(bytes(domain)). Prevents the resolver from blindly
+    ///         triggering OffchainLookup for domains it was never intended to handle.
+    mapping(bytes32 => bool) public isAllowedDomain;
+
     event UrlUpdated(string oldUrl, string newUrl);
     event SignerTrusted(address indexed signer);
     event SignerRevoked(address indexed signer);
+    event DomainAdded(string domain);
+    event DomainRemoved(string domain);
 
-    constructor(string memory _url, address _owner, address _registry, address _initialSigner)
-        Ownable(_owner)
-        EIP712("NodleUniversalResolver", "1")
-    {
+    constructor(
+        string memory _url,
+        address _owner,
+        address _registry,
+        address _initialSigner,
+        string memory _initialDomain
+    ) Ownable(_owner) EIP712("NodleUniversalResolver", "1") {
         if (_initialSigner == address(0)) revert ZeroSignerAddress();
         if (bytes(_url).length == 0) revert EmptyUrl();
+        if (bytes(_initialDomain).length == 0) revert EmptyDomain();
 
         url = _url;
         registry = _registry;
@@ -92,6 +105,9 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
         isTrustedSigner[_initialSigner] = true;
         trustedSignerCount = 1;
         emit SignerTrusted(_initialSigner);
+
+        isAllowedDomain[keccak256(bytes(_initialDomain))] = true;
+        emit DomainAdded(_initialDomain);
     }
 
     /// @notice Update the CCIP-Read gateway URL.
@@ -124,6 +140,28 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
         isTrustedSigner[signer] = false;
         trustedSignerCount--;
         emit SignerRevoked(signer);
+    }
+
+    /// @notice Allow a new domain to be resolved through this contract.
+    /// @dev Idempotent: re-adding an already-allowed domain is a no-op.
+    function addDomain(string memory domain) external onlyOwner {
+        if (bytes(domain).length == 0) revert EmptyDomain();
+        bytes32 key = keccak256(bytes(domain));
+        if (isAllowedDomain[key]) return;
+
+        isAllowedDomain[key] = true;
+        emit DomainAdded(domain);
+    }
+
+    /// @notice Remove a domain from the allowlist.
+    /// @dev Idempotent: removing an already-disallowed domain is a no-op.
+    function removeDomain(string memory domain) external onlyOwner {
+        if (bytes(domain).length == 0) revert EmptyDomain();
+        bytes32 key = keccak256(bytes(domain));
+        if (!isAllowedDomain[key]) return;
+
+        isAllowedDomain[key] = false;
+        emit DomainRemoved(domain);
     }
 
     /// @notice Ownership cannot be renounced: losing the owner bricks trustSigner,
@@ -175,7 +213,14 @@ contract SignedUniversalResolver is IExtendedResolver, IERC165, Ownable2Step, EI
     /// @param _name DNS-encoded name (e.g. b"\x07example\x05clave\x03eth")
     /// @param _data ABI-encoded ENS resolution call (addr / addr-multichain / text)
     function resolve(bytes calldata _name, bytes calldata _data) external view returns (bytes memory) {
-        (string memory sub,,) = _parseDnsDomain(_name);
+        (string memory sub, string memory dom,) = _parseDnsDomain(_name);
+
+        // Reject domains this resolver was never configured to serve. This prevents
+        // the resolver from blindly triggering OffchainLookup if the ENS registry
+        // mistakenly points an unrelated domain at this contract.
+        if (bytes(dom).length > 0 && !isAllowedDomain[keccak256(bytes(dom))]) {
+            revert UnknownDomain(dom);
+        }
 
         // Explicit length check so short calldata reverts with a controlled error
         // instead of a panic on the slice below.
