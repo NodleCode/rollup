@@ -2,12 +2,7 @@
 pragma solidity ^0.8.18;
 
 import {Script, console} from "lib/forge-std/src/Script.sol";
-import {SparseMerkleTree} from "lib/zksync-storage-proofs/packages/zksync-storage-contracts/src/SparseMerkleTree.sol";
-import {
-    StorageProofVerifier,
-    IZkSyncDiamond
-} from "lib/zksync-storage-proofs/packages/zksync-storage-contracts/src/StorageProofVerifier.sol";
-import {UniversalResolver} from "../src/nameservice/UniversalResolver.sol";
+import {SignedUniversalResolver} from "../src/nameservice/SignedUniversalResolver.sol";
 
 interface IResolverSetter {
     function setResolver(bytes32 node, address resolver) external;
@@ -19,51 +14,49 @@ contract DeployL1Ens is Script {
         string memory deployerPrivateKey = vm.envString("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(vm.parseUint(deployerPrivateKey));
 
-        address spvAddress = vm.envOr("STORAGE_PROOF_VERIFIER_ADDR", address(0));
-
-        if (spvAddress == address(0)) {
-            address smtAddress = vm.envOr("SPARSE_MERKLE_TREE_ADDR", address(0));
-            if (smtAddress == address(0)) {
-                console.log("Deploying SparseMerkleTree...");
-                SparseMerkleTree sparseMerkleTree = new SparseMerkleTree();
-                smtAddress = address(sparseMerkleTree);
-                console.log("Deployed SparseMerkleTree at", smtAddress);
-            } else {
-                console.log("Using SparseMerkleTree at", smtAddress);
-            }
-
-            console.log("Deploying StorageProofVerifier...");
-            StorageProofVerifier storageProofVerifier = new StorageProofVerifier(
-                IZkSyncDiamond(vm.envAddress("DIAMOND_PROXY_ADDR")), SparseMerkleTree(smtAddress)
-            );
-            spvAddress = address(storageProofVerifier);
-            console.log("Deployed StorageProofVerifier at", spvAddress);
-        } else {
-            console.log("Using StorageProofVerifier at", spvAddress);
-        }
-
         address resolverAddress = vm.envOr("NS_RESOLVER_ADDR", address(0));
 
         if (resolverAddress == address(0)) {
-            console.log("Deploying UniversalResolver...");
-            UniversalResolver l1Resolver = new UniversalResolver(
+            console.log("Deploying SignedUniversalResolver (signed-gateway model)...");
+
+            // NS_DOMAINS is a comma-separated list of domains to allowlist, e.g. "nodl,clk".
+            string[] memory domains = vm.envOr("NS_DOMAINS", ",", new string[](0));
+            if (domains.length == 0) {
+                // Fallback: single domain from NS_DOMAIN for backward compat.
+                domains = new string[](1);
+                domains[0] = vm.envString("NS_DOMAIN");
+            }
+
+            SignedUniversalResolver l1Resolver = new SignedUniversalResolver(
                 vm.envString("NS_OFFCHAIN_RESOLVER_URL"),
                 vm.envAddress("NS_OWNER_ADDR"),
                 vm.envAddress("NS_ADDR"),
-                StorageProofVerifier(spvAddress)
+                vm.envAddress("NS_TRUSTED_SIGNER_ADDR"),
+                domains
             );
             resolverAddress = address(l1Resolver);
-            console.log("Deployed UniversalResolver at", resolverAddress);
+            console.log("Deployed SignedUniversalResolver at", resolverAddress);
         }
 
-        string memory label = vm.envString("NS_DOMAIN");
-        bytes32 labelHash = keccak256(abi.encodePacked(label));
+        // Optional: auto-repoint ENS to the new resolver in the same broadcast.
+        // Enable by setting SKIP_SET_RESOLVER to 0 (default is 1 = skip, so mainnet
+        // cutover happens as a separate owner-signed tx). Useful on testnets where
+        // the deployer already controls the ENS node.
+        uint256 skipSetResolver = vm.envOr("SKIP_SET_RESOLVER", uint256(1));
+        if (skipSetResolver == 0) {
+            string memory label = vm.envString("NS_DOMAIN");
+            bytes32 labelHash = keccak256(abi.encodePacked(label));
 
-        bytes32 ETH_NODE = 0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae;
-        bytes32 node = keccak256(abi.encodePacked(ETH_NODE, labelHash));
+            bytes32 ETH_NODE = 0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae;
+            bytes32 node = keccak256(abi.encodePacked(ETH_NODE, labelHash));
 
-        IResolverSetter resolverSetter = IResolverSetter(vm.envAddress("NAME_WRAPPER_ADDR"));
-        resolverSetter.setResolver(node, resolverAddress);
+            IResolverSetter resolverSetter = IResolverSetter(vm.envAddress("NAME_WRAPPER_ADDR"));
+            resolverSetter.setResolver(node, resolverAddress);
+            console.log("Repointed ENS node to new resolver");
+        } else {
+            console.log("Skipping ENS setResolver (SKIP_SET_RESOLVER=1)");
+            console.log("Run ENSRegistry.setResolver(...) separately with the node owner.");
+        }
 
         vm.stopBroadcast();
     }
