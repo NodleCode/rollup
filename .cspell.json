@@ -70,6 +70,7 @@
     "Reentrancy",
     "SFID",
     "EXTCODECOPY",
+    "EXTCODEHASH",
     "solady",
     "SLOAD",
     "Bitmask",
@@ -101,6 +102,8 @@
     "hexlify",
     "repoint",
     "repointed",
-    "cutover"
+    "cutover",
+    "autonumber",
+    "dedup"
   ]
 }
