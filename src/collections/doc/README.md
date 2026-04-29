@@ -1,0 +1,9 @@
+# User Collections — Documentation
+
+Operator-triggered NFT collection factory: users pay in fiat off-chain, a trusted backend deploys a fully-isolated clone (ERC-721 or ERC-1155) on the user's behalf.
+
+## Contents
+
+| Document                                                                         | Description                                                                                            |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| [spec/user-collections-specification.md](spec/user-collections-specification.md) | Full technical specification (architecture, roles, interfaces, flows, storage, security, testing, ops) |
