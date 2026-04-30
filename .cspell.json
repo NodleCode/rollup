@@ -101,6 +101,13 @@
     "hexlify",
     "repoint",
     "repointed",
-    "cutover"
+    "cutover",
+    "autonumber",
+    "dedup",
+    "Linkdrop",
+    "keypair",
+    "typedata",
+    "exfiltrated",
+    "runbook"
   ]
 }
