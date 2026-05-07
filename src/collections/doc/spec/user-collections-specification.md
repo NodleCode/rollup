@@ -112,12 +112,14 @@ The factory is upgradeable so new implementation templates and bug fixes can be 
 | 2 | Deployment model               | EIP-1167 minimal proxy clones for both standards                                                                                                                |
 | 3 | Payment model                  | Fiat, off-chain; on-chain creation is purely authorization-gated                                                                                                |
 | 4 | Authorization                  | Operator-deployed: backend holds `OPERATOR_ROLE`, creator never signs creation                                                                                  |
-| 5 | Item minting rights            | Creator and operator both hold `MINTER_ROLE` on every clone                                                                                                     |
+| 5 | Item minting rights            | Creator and operator both hold `MINTER_ROLE` on every clone — operator grant is enforced on-chain by the factory (see §2.3), not by backend convention         |
 | 6 | Per-collection mutability      | `baseURI`/`uri`, `contractURI`, royalties are owner-mutable until owner locks them one-way                                                                      |
 | 7 | Upgradeability                 | Factory: UUPS-upgradeable. Clones: immutable; admin can swap implementation pointer for *future* clones only                                                    |
 | 8 | Inheritance                    | Direct from OpenZeppelin `*Upgradeable` contracts. No reuse of `BaseContentSign` (constructor-based, non-upgradeable, structurally incompatible with clones)    |
 | 9 | External-ID dedup              | On-chain map `bytes32 externalId → address collection`; reverts on reuse                                                                                        |
 | 10 | Per-creator on-chain limit    | None (backend rate-limits if needed)                                                                                                                            |
+| 11 | Royalty ceiling                | None beyond OpenZeppelin's ERC-2981 100% (10000 bps) bound. Creators have full autonomy over `royaltyBps` until they call `lockRoyalties`. Marketplace-norm enforcement (e.g. ≤10%) is deliberately out of scope — buyers and frontends are expected to inspect the on-chain value |
+| 12 | OZ alignment                   | Stay aligned with OpenZeppelin's `*Upgradeable` shapes; avoid overriding inherited methods or diverging from canonical signatures unless strictly required (e.g. role gating, lock checks). Custom batch / utility helpers ship as net-new functions, not overrides — keeps the audit surface small and lets us track upstream OZ patches without merge friction |
 
 ### 1.5 Non-Goals
 
@@ -155,11 +157,15 @@ graph LR
 
 On the factory, `DEFAULT_ADMIN_ROLE` administers `OPERATOR_ROLE`. On each clone, `OWNER_ROLE` administers `MINTER_ROLE` (so the creator can grant additional minters or revoke the operator's minting rights if they wish).
 
-### 2.3 Operator Minter Convention
+### 2.3 Operator Minter Auto-Grant
 
-The factory does not auto-grant `MINTER_ROLE` to the configured operator on new clones — the clone has no awareness of the factory's `OPERATOR_ROLE`. The backend must include the operator address in `additionalMinters` when calling `createCollection*` so that operator-mediated minting works for fiat-priced item sales.
+When the factory creates a clone, it passes `msg.sender` (the `OPERATOR_ROLE` holder that triggered creation) to the clone's `initialize` as a guaranteed minter. The clone unconditionally grants that address `MINTER_ROLE` during initialization, alongside any addresses listed in `additionalMinters`.
 
-This is enforced by backend convention, not on-chain. Creators can revoke the operator's `MINTER_ROLE` from their own collection at any time via `OWNER_ROLE`.
+This makes operator-driven minting a **contract-level invariant** rather than a backend convention: it is impossible to deploy a clone through the factory that the calling operator cannot mint into. After creation, creators retain full control via `OWNER_ROLE` and may revoke the operator's `MINTER_ROLE` at any time.
+
+**Operator key rotation.** When admin grants `OPERATOR_ROLE` to a new address, all *future* clones auto-grant `MINTER_ROLE` to the new operator. Existing clones are unaffected (immutable per release); creators must grant `MINTER_ROLE` to the new operator individually if they want operator-driven minting to continue on collections deployed before the rotation. The backend should track this as part of any rotation runbook.
+
+`additionalMinters` remains available for creators who want extra minters seeded at creation (e.g. a co-creator wallet) and is orthogonal to the operator auto-grant.
 
 <div class="page-break"></div>
 
@@ -198,9 +204,9 @@ classDiagram
         +bool royaltiesLocked
         +uint256 MAX_BATCH = 100
         --
-        +initialize(p)
+        +initialize(p, operatorMinter)
         +mint(to, tokenURI_) → tokenId
-        +mintBatch(to[], uris[])
+        +mintBatch(to[], uris[]) → tokenIds[]
         +setBaseURI(newBase)
         +setContractURI(newURI)
         +setDefaultRoyalty(recipient, bps)
@@ -214,7 +220,7 @@ classDiagram
         +bool royaltiesLocked
         +uint256 MAX_BATCH = 100
         --
-        +initialize(p)
+        +initialize(p, operatorMinter)
         +mint(to, id, amount, data)
         +mintBatch(to, ids[], amounts[], data)
         +setURI(newURI)
@@ -271,6 +277,7 @@ interface ICollectionFactory {
     error ExternalIdAlreadyUsed(bytes32 externalId);
     error InvalidExternalId();
     error ZeroAddress();
+    error NotAContract(address impl);
 
     function initialize(
         address admin,
@@ -296,14 +303,14 @@ interface ICollectionFactory {
 
 #### Behavior
 
-- `initialize` is callable once. Grants `admin → DEFAULT_ADMIN_ROLE`, `operator → OPERATOR_ROLE`. Reverts on zero addresses.
+- `initialize` is callable once. Grants `admin → DEFAULT_ADMIN_ROLE`, `operator → OPERATOR_ROLE`. Reverts `ZeroAddress` if any of `admin`, `operator`, `impl721`, `impl1155` is zero. Reverts `NotAContract(impl)` if either implementation address has zero bytecode (`impl.code.length == 0`).
 - `createCollection*`:
   - Restricted to `OPERATOR_ROLE`.
   - Reverts `InvalidExternalId` if `externalId == bytes32(0)` (forces a non-trivial ID).
   - Reverts `ExternalIdAlreadyUsed` if the ID has already been used.
-  - Atomic flow: `Clones.clone(impl)` → `clone.initialize(p)` → `collectionByExternalId[externalId] = clone` → `emit CollectionCreated`.
+  - Atomic flow: `Clones.clone(impl)` → `clone.initialize(p, msg.sender)` → `collectionByExternalId[externalId] = clone` → `emit CollectionCreated`. Passing `msg.sender` ensures the calling operator is auto-granted `MINTER_ROLE` on the new clone (see §2.3).
   - Returns the clone address.
-- `setImplementation*` is restricted to `DEFAULT_ADMIN_ROLE` and affects future clones only. Existing clones continue to delegatecall their original implementation.
+- `setImplementation*` is restricted to `DEFAULT_ADMIN_ROLE` and affects future clones only. Existing clones continue to delegatecall their original implementation. Reverts `ZeroAddress` if `impl == address(0)`. Reverts `NotAContract(impl)` if `impl.code.length == 0` (defends against EOA paste / unset env var). The setter does **not** verify the implementation matches the expected token standard (e.g. a 1155 implementation pasted into `setImplementation721`); the post-upgrade `cast` checks in §9.4 are the runbook layer that catches this.
 - `_authorizeUpgrade(address)` is `onlyRole(DEFAULT_ADMIN_ROLE)`.
 
 ### 3.5 `UserCollection721`
@@ -320,10 +327,11 @@ interface IUserCollection721 {
     error BatchTooLarge(uint256 length, uint256 max);
     error LengthMismatch();
 
-    function initialize(CreateParams721 calldata p) external;
+    function initialize(CreateParams721 calldata p, address operatorMinter) external;
 
     function mint(address to, string calldata tokenURI_) external returns (uint256 tokenId);
-    function mintBatch(address[] calldata to, string[] calldata uris) external;
+    function mintBatch(address[] calldata to, string[] calldata uris)
+        external returns (uint256[] memory tokenIds);
 
     function setBaseURI(string calldata newBase) external;
     function setContractURI(string calldata newURI) external;
@@ -342,12 +350,13 @@ interface IUserCollection721 {
 
 - Inherits `Initializable`, `ERC721Upgradeable`, `ERC721URIStorageUpgradeable`, `ERC721BurnableUpgradeable`, `ERC2981Upgradeable`, `AccessControlUpgradeable`.
 - Implementation contract calls `_disableInitializers()` in its constructor so the implementation itself can never be initialized directly.
-- `initialize` (initializer-gated): sets name/symbol via `__ERC721_init`, sets `baseURI` and `contractURI`, sets default royalty if `royaltyBps > 0`, grants `OWNER_ROLE` and `MINTER_ROLE` to `owner`, grants `MINTER_ROLE` to each `additionalMinters` entry, and calls `_setRoleAdmin(MINTER_ROLE, OWNER_ROLE)`.
+- **Bytecode-permanence invariants** (load-bearing for the §1.3 immutability promise): the implementation contains no `SELFDESTRUCT` opcode (no `selfdestruct(...)` calls in the implementation's own code or in any inherited contract), and performs no `delegatecall` to caller-provided addresses. Both properties are asserted by the unit test in §8.2 and reviewed by the auditor.
+- `initialize` (initializer-gated): sets name/symbol via `__ERC721_init`, sets `baseURI` and `contractURI`, sets default royalty if `royaltyBps > 0`, grants `OWNER_ROLE` and `MINTER_ROLE` to `owner`, grants `MINTER_ROLE` to `operatorMinter` (passed by the factory; see §2.3), grants `MINTER_ROLE` to each `additionalMinters` entry, and calls `_setRoleAdmin(MINTER_ROLE, OWNER_ROLE)`. Reverts `ZeroAddress` if `operatorMinter == address(0)`. Re-granting an already-held role is a no-op (OZ `grantRole` is idempotent), so duplicates between `owner`, `operatorMinter`, and `additionalMinters` are safe.
 - `mint`: `MINTER_ROLE`-gated. Increments `nextTokenId`, calls `_safeMint`, sets per-token URI via `ERC721URIStorage._setTokenURI`. Returns the new token ID.
-- `mintBatch`: `MINTER_ROLE`-gated. Reverts `LengthMismatch` if `to.length != uris.length`. Reverts `BatchTooLarge` if `to.length > MAX_BATCH` (100).
+- `mintBatch`: `MINTER_ROLE`-gated. Reverts `LengthMismatch` if `to.length != uris.length`. Reverts `BatchTooLarge` if `to.length > MAX_BATCH` (100). Returns `uint256[] tokenIds` in the same order as `to`; the values are a contiguous range starting at the value of `nextTokenId` at call entry. The return lets backends reconcile per-buyer attribution synchronously without parsing `Transfer` logs or racing against concurrent minters.
 - `setBaseURI`: `OWNER_ROLE`-gated. Reverts `MetadataIsLocked` when `metadataLocked == true`.
 - `setContractURI`: `OWNER_ROLE`-gated. Reverts `MetadataIsLocked` when `metadataLocked == true`. The single `metadataLocked` flag covers both per-collection (`baseURI`) and collection-level (`contractURI`) metadata so that buyers see one verifiable "metadata is frozen" signal across the whole collection. (Per-token URIs minted via `ERC721URIStorage._setTokenURI` are anchored at mint time independently of this flag — see §7.2 row 7.)
-- `setDefaultRoyalty`: `OWNER_ROLE`-gated. Reverts `RoyaltiesAreLocked` when `royaltiesLocked == true`.
+- `setDefaultRoyalty`: `OWNER_ROLE`-gated. Reverts `RoyaltiesAreLocked` when `royaltiesLocked == true`. No additional cap beyond OZ's ERC-2981 100% bound (see §1.4 row 11) — creators may set any value up to 10000 bps.
 - `lockMetadata` / `lockRoyalties`: `OWNER_ROLE`-gated, one-way; emit events for indexers.
 
 ### 3.6 `UserCollection1155`
@@ -355,10 +364,12 @@ interface IUserCollection721 {
 Mirrors §3.5 with ERC-1155 mechanics:
 
 - Inherits `Initializable`, `ERC1155Upgradeable`, `ERC1155SupplyUpgradeable`, `ERC1155BurnableUpgradeable`, `ERC2981Upgradeable`, `AccessControlUpgradeable`.
+- `initialize(CreateParams1155 calldata p, address operatorMinter)` — same role-grant semantics as §3.5: `OWNER_ROLE` + `MINTER_ROLE` to `owner`, `MINTER_ROLE` to `operatorMinter` (factory-passed; see §2.3), `MINTER_ROLE` to each `additionalMinters` entry, `_setRoleAdmin(MINTER_ROLE, OWNER_ROLE)`. Reverts `ZeroAddress` if `operatorMinter == address(0)`.
 - `mint(address to, uint256 id, uint256 amount, bytes data)` — `MINTER_ROLE`-gated.
-- `mintBatch(address to, uint256[] ids, uint256[] amounts, bytes data)` — single recipient, matching OZ's `_mintBatch`. Reverts `BatchTooLarge` when `ids.length > MAX_BATCH` and `LengthMismatch` when `ids.length != amounts.length`.
+- `mintBatch(address to, uint256[] ids, uint256[] amounts, bytes data)` — single recipient, matching OZ's `_mintBatch`. Reverts `BatchTooLarge` when `ids.length > MAX_BATCH` and `LengthMismatch` when `ids.length != amounts.length`. Multi-recipient batching (one tx, N different buyers) is intentionally out of scope for v1: it has no native OZ primitive, would require a custom loop emitting N `TransferSingle` events, and the dominant fiat-paid 1:1 flow (§5.2) doesn't naturally batch (per-buyer payments clear independently). If airdrop or allowlist-drop flows become a product requirement, a `mintBatchMulti` can be added in a future implementation pointer (admin swap, future clones only) without breaking existing callers — see §11.
 - `setURI(string newURI)` instead of `setBaseURI`. Subject to `metadataLocked`.
 - No `nextTokenId` (1155 IDs are caller-chosen).
+- **Bytecode-permanence invariants** apply identically to §3.5: implementation constructor calls `_disableInitializers()`; implementation contains no `SELFDESTRUCT` opcode and no `delegatecall` to caller-provided addresses. Asserted by the §8.3 unit test.
 
 <div class="page-break"></div>
 
@@ -386,7 +397,8 @@ sequenceDiagram
     FAC->>FAC: require externalId != 0
     FAC->>FAC: require collectionByExternalId[externalId] == 0
     FAC->>CL: Clones.clone(erc721Implementation)
-    FAC->>CL: clone.initialize(params)
+    FAC->>CL: clone.initialize(params, msg.sender)
+    Note over CL: auto-grants MINTER_ROLE to operator
     FAC->>FAC: collectionByExternalId[externalId] = clone
     FAC-->>BE: emit CollectionCreated(creator, clone, ERC721, externalId)
     BE->>App: Mark order completed; return clone address
@@ -494,11 +506,12 @@ Each clone owns its full storage independently of other clones (EIP-1167 proxies
 [OZ ERC2981Upgradeable storage]
 [OZ AccessControlUpgradeable storage]
 slot M+0 : contractURI                       (string)
-slot M+1 : nextTokenId                       (uint256, 721 only)
-slot M+2 : metadataLocked                    (bool, packed)
-slot M+3 : royaltiesLocked                   (bool, packed)
-slot M+4 : __gap[N]                          (reserved)
+slot M+1 : nextTokenId                       (uint256, 721 only — omitted on 1155, gap shifts up by one)
+slot M+2 : metadataLocked (bool, byte 0) | royaltiesLocked (bool, byte 1) | 30 bytes free
+slot M+3 : __gap[N]                          (reserved)
 ```
+
+The two lock booleans share one slot via Solidity's automatic packing (declared adjacent in source order after the `string`/`uint256` fields above). This saves one slot of `__gap`, which materially extends the headroom for future appended fields when admin swaps the implementation pointer for *future* clones.
 
 `__gap` is a defensive reservation. Clones are immutable per release, but if admin swaps the implementation pointer for *future* clones, the gap allows the new implementation to extend storage without conflict for those future clones.
 
@@ -508,6 +521,7 @@ All upgradeable contracts in this package follow the same conventions used by `s
 
 - No state variables in inherited contracts shifted between releases.
 - New variables appended only; gap reduced by the number of new slots.
+- For packed slots (e.g. the `metadataLocked` / `royaltiesLocked` slot in §6.2), the manual diff must verify both the slot index **and** the byte offset of each sub-word field — Solidity's layout is sensitive to source order within a packed slot, and a reordering moves bytes without moving slots.
 - Before each release that ships a factory upgrade, the engineer running the upgrade snapshots the previous and new layouts via `forge inspect ... storageLayout` and manually verifies that all prior slots remain at the same offsets. The full pre-upgrade checklist lives in §9.4.
 
 <div class="page-break"></div>
@@ -538,6 +552,9 @@ All upgradeable contracts in this package follow the same conventions used by `s
 | 10  | UUPS bricking via mis-set `_authorizeUpgrade`                     | Standard OZ pattern; unit test asserts non-admin cannot upgrade                                     |
 | 11  | Operator granted to wrong address at init                         | `initialize` requires explicit `operator` arg, not `msg.sender`                                     |
 | 12  | Creator revokes operator's `MINTER_ROLE` mid-flow                 | Operator-driven mints revert cleanly; backend surfaces error to operations                          |
+| 13  | Operator key rotation leaves old clones without the new operator | Auto-grant only applies to *future* clones; runbook step requires creators to grant `MINTER_ROLE` to the new key for continued operator-driven sales on pre-rotation collections |
+| 14  | Admin sets factory implementation pointer to zero / EOA / non-contract | `setImplementation*` and `initialize` reject zero addresses (`ZeroAddress`) and addresses with no bytecode (`NotAContract`); wrong-standard pointers caught by the §9.4 post-upgrade `cast` checks |
+| 15  | Implementation contract destroyed → all clones bricked         | Implementation must contain no `SELFDESTRUCT` opcode and no `delegatecall` to caller-provided addresses (§3.5/§3.6); deployed via `CREATE` (sequential nonce), never `CREATE2`, so the address can't be re-occupied with different bytecode (§9.1); §8.2/§8.3 unit test scans the implementation runtime code for `0xff` |
 
 ### 7.3 Out of Scope
 
@@ -563,28 +580,39 @@ Unit tests live under `test/collections/`, one file per contract plus an integra
 - `initialize` reverts on zero addresses.
 - Only `OPERATOR_ROLE` can call `createCollection*`.
 - Atomic clone + initialize → resulting clone has expected name/symbol, owner, base URI, contract URI, royalties, minters.
+- After `createCollection*`, the calling operator (`msg.sender`) holds `MINTER_ROLE` on the new clone even when `additionalMinters` is empty (auto-grant invariant, §2.3).
+- After admin rotates `OPERATOR_ROLE` to a new address, a clone created by the new operator auto-grants `MINTER_ROLE` to the new key; clones created by the previous operator are unaffected.
 - `externalId == bytes32(0)` reverts `InvalidExternalId`.
 - Reused `externalId` reverts `ExternalIdAlreadyUsed`.
 - `collectionByExternalId(externalId)` returns the clone address after success.
 - `setImplementation*` callable only by admin; affects future clones only (existing clones unchanged when verified by `EXTCODEHASH` or behavior probe).
-- UUPS upgrade succeeds for admin; rejected for non-admin.
+- `setImplementation*` reverts `ZeroAddress` when called with `address(0)`.
+- `setImplementation*` reverts `NotAContract` when called with an address that has no bytecode (e.g. an EOA).
+- `initialize` reverts `ZeroAddress` for any zero arg and `NotAContract` for either implementation address with empty code.
+- UUPS upgrade succeeds for admin and changes the EIP-1967 implementation slot to the new address (read the slot pre/post via `vm.load(proxy, bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1))`).
+- UUPS upgrade reverts when called by an account holding `OPERATOR_ROLE` only (no role-escalation path from operator → admin) and reverts when called by a fresh EOA with no roles. Both assertions exercise OZ's `AccessControlUnauthorizedAccount` revert.
+- UUPS upgrade preserves storage: a `CollectionFactoryV2Mock` (test-only fixture) is deployed; pre-upgrade state — admin/operator role grants, `erc721Implementation` / `erc1155Implementation` pointers, and at least one `collectionByExternalId` entry seeded by a prior `createCollection*` — must read correctly through the upgraded proxy. The mock adds a new public function whose presence post-upgrade is also asserted, confirming the upgrade path is genuinely exercised.
+- UUPS upgrade to a non-UUPS implementation reverts via OZ's `proxiableUUID` check (`ERC1967InvalidImplementation`). Test deploys a plain `ERC721Upgradeable`-based contract that does not inherit `UUPSUpgradeable` and asserts the revert.
 - `CollectionCreated` event fields are correct.
 
 ### 8.2 `UserCollection721.t.sol`
 
-- Initialize sets all fields and roles correctly.
+- Initialize sets all fields and roles correctly, including `MINTER_ROLE` for `operatorMinter`.
+- `initialize` reverts with `ZeroAddress` when called with `operatorMinter == address(0)`.
 - `_disableInitializers` blocks direct initialization on the implementation contract.
 - `mint` requires `MINTER_ROLE`; emits `Transfer`; sets correct `tokenURI`; increments `nextTokenId`.
 - `mintBatch` length-mismatch and oversize-batch reverts.
+- `mintBatch` returns the array of newly-minted token IDs; values match the `Transfer` events emitted in-order and form a contiguous range starting at the pre-call `nextTokenId`.
 - `setBaseURI` / `setContractURI` / `setDefaultRoyalty` permission and lock semantics.
 - `lockMetadata` / `lockRoyalties` are one-way; subsequent setters revert with the corresponding error.
 - Owner can grant and revoke `MINTER_ROLE` (verifies `_setRoleAdmin(MINTER_ROLE, OWNER_ROLE)`).
 - ERC-2981 returns expected royalty info.
 - `supportsInterface` returns true for ERC-721, ERC-721 metadata, ERC-2981, ERC-165, AccessControl.
+- **Bytecode permanence**: scan `address(impl721).code` and assert no byte equals `0xff` (`SELFDESTRUCT` opcode) at any reachable position. Foundry's `bytecode_hash = "none"` setting (already pinned in `foundry.toml`, see §9.1) strips the metadata trailer that would otherwise produce false positives. Same scan asserts no `0xf4` (`DELEGATECALL`) appears in our own logic ranges; OZ inherited code contains none in the imported set.
 
 ### 8.3 `UserCollection1155.t.sol`
 
-Analogous coverage adapted to ERC-1155 mechanics: per-ID supply tracking, single-recipient `mintBatch`, `setURI` lock semantics, ERC-1155 interface assertions.
+Analogous coverage adapted to ERC-1155 mechanics: per-ID supply tracking, single-recipient `mintBatch`, `setURI` lock semantics, ERC-1155 interface assertions. Includes the same **bytecode-permanence scan** as §8.2 against the 1155 implementation's runtime code.
 
 ### 8.4 `Collections.integration.t.sol`
 
@@ -602,12 +630,13 @@ End-to-end happy path:
 
 ### 8.5 Coverage Target
 
-≥ 95% line coverage on the new contracts, measured locally via `forge coverage`.
+≥ 95% line coverage on the new contracts, enforced by CI.
 
-**What CI does today** (`.github/workflows/checks.yml`):
+**What CI does** (`.github/workflows/checks.yml`):
 
-- The `Tests` job runs `yarn spellcheck`, `yarn lint`, and `forge test` on every push and PR. Tests under `test/collections/` are picked up automatically by `forge test` — no workflow change required for the new test suite to run in CI.
-- The `Coverage` job runs `forge coverage` on PRs to `main` but is currently filtered to swarms paths (`test/{Swarm*,ServiceProvider,FleetIdentity}*.t.sol`) and enforces its 95% threshold against `src/swarms/` only. Collection-coverage enforcement is **not** wired in CI today; the 95% target above is verified manually until a follow-up extends the workflow (tracked in §11).
+- The `Tests` job runs `yarn spellcheck`, `yarn lint`, and `forge test` on every push and PR. Tests under `test/collections/` are picked up automatically by `forge test`.
+- The `Coverage` job runs `forge coverage` on PRs to `main`. The `--match-path` filter includes `test/collections/*` alongside the existing swarms test files; a dedicated **"Check line coverage threshold (collections)"** step parses the lcov report for `src/collections/` and fails the build if line coverage falls below 95%. The swarms gate continues to enforce the same threshold against `src/swarms/`.
+- While `src/collections/` is documentation-only (this PR), the collections threshold step skips cleanly with a GitHub Actions warning and a non-failing exit. The gate begins enforcing the moment Solidity sources land under `src/collections/`. No follow-up workflow change is required.
 
 <div class="page-break"></div>
 
@@ -629,8 +658,8 @@ Environment variables (prefixed `N_` per repo convention; consumed by the Forge 
 
 Steps performed by the Forge script:
 
-1. Deploy `UserCollection721` implementation. Constructor calls `_disableInitializers()`.
-2. Deploy `UserCollection1155` implementation. Same.
+1. Deploy `UserCollection721` implementation via `CREATE` (sequential nonce, **never** `CREATE2`). Constructor calls `_disableInitializers()`. Deploying via `CREATE` ensures that even if the Cancun `selfdestruct` semantics on zkSync Era are looser than on L1, the implementation address can never be re-occupied with different bytecode via salt collision (see §7.2 row 15).
+2. Deploy `UserCollection1155` implementation. Same constraints (CREATE-only, `_disableInitializers()`).
 3. Deploy `CollectionFactory` logic.
 4. Deploy `ERC1967Proxy` pointing at `CollectionFactory`, with init data calling `initialize(N_FACTORY_ADMIN, N_FACTORY_OPERATOR, impl721, impl1155)`.
 5. Log all four addresses (implementation 721, implementation 1155, factory logic, factory proxy) in the same `<Name>: 0x...` format that the orchestration script greps for.
@@ -681,9 +710,19 @@ CI does not currently diff storage layouts. Before any factory upgrade is broadc
    ```bash
    forge inspect CollectionFactory storageLayout > v1-layout.json
    forge inspect CollectionFactoryV2 storageLayout > v2-layout.json
-   # Manually compare: ensure every V1 storage slot is preserved at the same offset in V2.
-   # Only appended fields (consuming __gap slots) are acceptable.
+   # Manually compare: ensure every V1 storage slot is preserved at the same slot index AND byte
+   # offset in V2 (byte offsets matter for sub-word fields packed into the same slot, e.g. the
+   # bool flags in clone storage; see §6.3). Only appended fields (consuming __gap slots) are
+   # acceptable.
    ```
+
+   **Baseline-JSON convention.** Before merging the V2 implementation, commit
+   `src/collections/layouts/CollectionFactory.v1.json` (snapshot of the current main
+   branch's layout) and `src/collections/layouts/CollectionFactory.v2.json` (snapshot of the
+   incoming V2) in the same PR. The git diff between baselines is reviewed as part of the
+   PR — any unexpected slot/offset shift is caught at code-review time without needing a
+   dedicated CI job. Same convention applies to `UserCollection721` and `UserCollection1155`
+   when the admin ships a new implementation pointer via `setImplementation*`.
 
 2. **Run all tests:**
 
@@ -739,6 +778,11 @@ test/collections/
   UserCollection721.t.sol
   UserCollection1155.t.sol
   Collections.integration.t.sol
+  mocks/
+    CollectionFactoryV2Mock.sol         (test-only; UUPS upgrade-target fixture, see §8.1)
+    NonUUPSImplementationMock.sol       (test-only; non-UUPS contract for proxiableUUID revert test)
+src/collections/layouts/
+  CollectionFactory.v1.json             (storage-layout baseline; committed in upgrade PRs, see §9.4)
 script/
   DeployCollectionFactoryZkSync.s.sol
   UpgradeCollectionFactory.s.sol
@@ -763,5 +807,5 @@ These are not blocking for v1; recorded for future iteration.
 | Per-creator on-chain rate limit            | Deferred | Backend rate-limits today; can add `mapping(address => uint256) collectionsByCreator` and a configurable cap later            |
 | Soulbound / non-transferable variant       | Deferred | Ship as a third implementation pointer; selected via a new `createCollectionSoulbound*` factory method                        |
 | Per-token-URI mutability after lock        | Deferred | If creators ever need to update individual token URIs after locking the collection, would require a `tokenLocked` map         |
-| CI storage-layout diff job                 | Deferred | Promote the manual §9.4 step 1 into a CI job that snapshots `forge inspect storageLayout` and fails on slot mutations         |
-| CI coverage enforcement for collections    | Deferred | Extend `.github/workflows/checks.yml` Coverage job to include `test/collections/**` and enforce the 95% threshold for `src/collections/` (mirrors the existing swarms-only filter)  |
+| CI storage-layout diff job                 | Deferred — required before factory upgrade | The §9.4 baseline-JSON convention covers v1 (no upgrade has shipped yet, so there is nothing for a CI diff to gate against). Trigger to wire the CI job: opening the PR for `CollectionFactoryV2`. The job snapshots `forge inspect storageLayout` per upgradeable contract and fails on slot/offset mutations against the committed baseline JSONs. |
+| Multi-recipient ERC-1155 mint batch        | Deferred | v1 keeps OZ's single-recipient `_mintBatch` shape (see §3.6). Trigger to add `mintBatchMulti`: airdrops or allowlist drops on the product roadmap. Ships as a non-breaking addition via a new implementation pointer (admin swap, future clones only) |
