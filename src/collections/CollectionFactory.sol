@@ -75,7 +75,8 @@ contract CollectionFactory is
         if (impl721.code.length == 0) revert NotAContract(impl721);
         if (impl1155.code.length == 0) revert NotAContract(impl1155);
 
-        __AccessControl_init();
+        // `__AccessControl_init` body is empty in OZ v5.6.1; the role grants
+        // below initialize all the state we need.
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(OPERATOR_ROLE, operator);

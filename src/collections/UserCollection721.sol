@@ -83,11 +83,11 @@ contract UserCollection721 is
     function initialize(CreateParams721 calldata p, address operatorMinter) external initializer {
         if (p.owner == address(0) || operatorMinter == address(0)) revert ZeroAddress();
 
+        // Only the inits with non-empty bodies in OZ v5.6.1 are called. The
+        // remaining `__<Mixin>_init` functions for ERC721URIStorage, Burnable,
+        // ERC2981, and AccessControl are empty in this version (kept by OZ as
+        // forward-compat shims). Re-add them if upgrading OZ.
         __ERC721_init(p.name, p.symbol);
-        __ERC721URIStorage_init();
-        __ERC721Burnable_init();
-        __ERC2981_init();
-        __AccessControl_init();
 
         _baseTokenURI = p.baseURI;
         _contractURI = p.contractURI;

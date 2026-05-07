@@ -76,11 +76,11 @@ contract UserCollection1155 is
     function initialize(CreateParams1155 calldata p, address operatorMinter) external initializer {
         if (p.owner == address(0) || operatorMinter == address(0)) revert ZeroAddress();
 
+        // Only the inits with non-empty bodies in OZ v5.6.1 are called. The
+        // remaining `__<Mixin>_init` functions for ERC1155Supply, Burnable,
+        // ERC2981, and AccessControl are empty in this version (kept by OZ as
+        // forward-compat shims). Re-add them if upgrading OZ.
         __ERC1155_init(p.uri);
-        __ERC1155Supply_init();
-        __ERC1155Burnable_init();
-        __ERC2981_init();
-        __AccessControl_init();
 
         _contractURI = p.contractURI;
 
