@@ -104,6 +104,10 @@
     "repointed",
     "cutover",
     "autonumber",
-    "dedup"
+    "dedup",
+    "runbook",
+    "selfdestruct",
+    "SELFDESTRUCT",
+    "proxiable"
   ]
 }
