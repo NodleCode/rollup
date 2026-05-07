@@ -1,0 +1,66 @@
+{
+  "storage": [
+    {
+      "astId": 2260,
+      "contract": "src/collections/CollectionFactory.sol:CollectionFactory",
+      "label": "_erc721Implementation",
+      "offset": 0,
+      "slot": "0",
+      "type": "t_address"
+    },
+    {
+      "astId": 2262,
+      "contract": "src/collections/CollectionFactory.sol:CollectionFactory",
+      "label": "_erc1155Implementation",
+      "offset": 0,
+      "slot": "1",
+      "type": "t_address"
+    },
+    {
+      "astId": 2266,
+      "contract": "src/collections/CollectionFactory.sol:CollectionFactory",
+      "label": "_collectionByExternalId",
+      "offset": 0,
+      "slot": "2",
+      "type": "t_mapping(t_bytes32,t_address)"
+    },
+    {
+      "astId": 2271,
+      "contract": "src/collections/CollectionFactory.sol:CollectionFactory",
+      "label": "__gap",
+      "offset": 0,
+      "slot": "3",
+      "type": "t_array(t_uint256)47_storage"
+    }
+  ],
+  "types": {
+    "t_address": {
+      "encoding": "inplace",
+      "label": "address",
+      "numberOfBytes": "20"
+    },
+    "t_array(t_uint256)47_storage": {
+      "encoding": "inplace",
+      "label": "uint256[47]",
+      "numberOfBytes": "1504",
+      "base": "t_uint256"
+    },
+    "t_bytes32": {
+      "encoding": "inplace",
+      "label": "bytes32",
+      "numberOfBytes": "32"
+    },
+    "t_mapping(t_bytes32,t_address)": {
+      "encoding": "mapping",
+      "key": "t_bytes32",
+      "label": "mapping(bytes32 => address)",
+      "numberOfBytes": "32",
+      "value": "t_address"
+    },
+    "t_uint256": {
+      "encoding": "inplace",
+      "label": "uint256",
+      "numberOfBytes": "32"
+    }
+  }
+}

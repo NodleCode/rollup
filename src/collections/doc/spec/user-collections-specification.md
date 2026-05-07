@@ -783,6 +783,8 @@ test/collections/
     NonUUPSImplementationMock.sol       (test-only; non-UUPS contract for proxiableUUID revert test)
 src/collections/layouts/
   CollectionFactory.v1.json             (storage-layout baseline; committed in upgrade PRs, see §9.4)
+  UserCollection721.v1.json             (clone-side baseline; updated when admin ships a new ERC-721 implementation)
+  UserCollection1155.v1.json            (clone-side baseline; updated when admin ships a new ERC-1155 implementation)
 script/
   DeployCollectionFactoryZkSync.s.sol
   UpgradeCollectionFactory.s.sol

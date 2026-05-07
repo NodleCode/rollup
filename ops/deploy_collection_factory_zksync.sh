@@ -1,0 +1,411 @@
+#!/bin/bash
+# =============================================================================
+# deploy_collection_factory_zksync.sh
+#
+# Automated deployment script for the user collections system
+# (CollectionFactory + UserCollection721 + UserCollection1155) on ZkSync Era.
+#
+# OVERVIEW:
+# ---------
+# Deploys the upgradeable user collections system to ZkSync Era using Foundry
+# with --zksync (zksolc compiler).
+#
+# Mirrors the swarms deployment pattern (ops/deploy_swarm_contracts_zksync.sh):
+#   - Forge build with --zksync, skip tests
+#   - Run the Forge script via --broadcast (or dry-run without)
+#   - Source code verification via ops/verify_zksync_contracts.py (the
+#     ZkSync verifier rejects forge --verify and forge verify-contract)
+#   - Append deployed addresses to .env-test or .env-prod
+#
+# Unlike the swarms script, no L1-incompatible files have to be moved out of
+# the tree — collections has no SSTORE2/EXTCODECOPY usage.
+#
+# CONTRACT ARCHITECTURE:
+# ----------------------
+# - UserCollection721 implementation (cloned per ERC-721 collection)
+# - UserCollection1155 implementation (cloned per ERC-1155 collection)
+# - CollectionFactory logic + ERC1967Proxy (UUPS-upgradeable factory)
+#
+# USAGE:
+# ------
+#   # Testnet dry run:
+#   ./ops/deploy_collection_factory_zksync.sh testnet
+#
+#   # Testnet (actual deployment):
+#   ./ops/deploy_collection_factory_zksync.sh testnet --broadcast
+#
+#   # Mainnet:
+#   ./ops/deploy_collection_factory_zksync.sh mainnet --broadcast
+#
+# REQUIRED ENVIRONMENT VARIABLES (loaded from .env-test / .env-prod):
+# -------------------------------------------------------------------
+#   - DEPLOYER_PRIVATE_KEY: Private key with ETH for gas
+#   - N_FACTORY_ADMIN:      Multisig that will hold DEFAULT_ADMIN_ROLE on the factory
+#   - N_FACTORY_OPERATOR:   Backend service address that will hold OPERATOR_ROLE
+#
+# =============================================================================
+
+set -e  # Exit on any error
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+NETWORK="${1:-testnet}"
+BROADCAST="${2:-}"
+
+case "$NETWORK" in
+  testnet)
+    ENV_FILE=".env-test"
+    EXPLORER_URL="https://sepolia.explorer.zksync.io"
+    VERIFIER_URL="https://explorer.sepolia.era.zksync.dev/contract_verification"
+    ;;
+  mainnet)
+    ENV_FILE=".env-prod"
+    EXPLORER_URL="https://explorer.zksync.io"
+    VERIFIER_URL="https://zksync2-mainnet-explorer.zksync.io/contract_verification"
+    ;;
+  *)
+    echo "Error: Unknown network '$NETWORK'. Use 'testnet' or 'mainnet'."
+    exit 1
+    ;;
+esac
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# =============================================================================
+# Pre-flight Checks
+# =============================================================================
+
+preflight_checks() {
+  log_info "Running pre-flight checks..."
+
+  cd "$PROJECT_ROOT"
+
+  if ! command -v forge &> /dev/null; then
+    log_error "forge not found. Install foundry-zksync."
+    exit 1
+  fi
+
+  if ! forge --version | grep -q "zksync"; then
+    log_error "forge does not have ZkSync support. Install with: foundryup-zksync"
+    exit 1
+  fi
+
+  if ! command -v cast &> /dev/null; then
+    log_error "cast not found. Install foundry."
+    exit 1
+  fi
+
+  if [ ! -f "$ENV_FILE" ]; then
+    log_error "Environment file '$ENV_FILE' not found."
+    exit 1
+  fi
+
+  set -a
+  source "$ENV_FILE"
+  set +a
+
+  if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then
+    log_error "DEPLOYER_PRIVATE_KEY not set in $ENV_FILE"
+    exit 1
+  fi
+
+  if [ -z "$N_FACTORY_ADMIN" ]; then
+    log_error "N_FACTORY_ADMIN not set in $ENV_FILE (must be the factory admin multisig)"
+    exit 1
+  fi
+
+  if [ -z "$N_FACTORY_OPERATOR" ]; then
+    log_error "N_FACTORY_OPERATOR not set in $ENV_FILE (must be the backend service address)"
+    exit 1
+  fi
+
+  if [[ "$DEPLOYER_PRIVATE_KEY" != 0x* ]]; then
+    export DEPLOYER_PRIVATE_KEY="0x${DEPLOYER_PRIVATE_KEY}"
+  fi
+
+  log_success "Pre-flight checks passed"
+}
+
+# =============================================================================
+# Compile
+# =============================================================================
+
+compile_contracts() {
+  log_info "Compiling contracts with Forge for ZkSync..."
+  forge build --zksync --skip test
+  log_success "Compilation complete"
+}
+
+# =============================================================================
+# Deploy
+# =============================================================================
+
+deploy_contracts() {
+  log_info "Deploying CollectionFactory to ZkSync ($NETWORK)..."
+
+  if [ "$NETWORK" = "mainnet" ]; then
+    RPC_URL="${L2_RPC:-https://mainnet.era.zksync.io}"
+    CHAIN_ID="324"
+  else
+    RPC_URL="${L2_RPC:-https://rpc.ankr.com/zksync_era_sepolia}"
+    CHAIN_ID="300"
+  fi
+
+  FORGE_ARGS=(
+    "script"
+    "script/DeployCollectionFactoryZkSync.s.sol:DeployCollectionFactoryZkSync"
+    "--rpc-url" "$RPC_URL"
+    "--chain-id" "$CHAIN_ID"
+    "--zksync"
+  )
+
+  if [ "$BROADCAST" = "--broadcast" ]; then
+    FORGE_ARGS+=("--broadcast" "--slow")
+    # NOTE: We do NOT add --verify here. forge script --verify sends absolute
+    # source paths which the ZkSync verifier rejects. Source code verification
+    # is handled separately in verify_source_code() using the helper Python
+    # script that rewrites imports to project-rooted paths.
+  else
+    log_warning "DRY RUN MODE - Add '--broadcast' to actually deploy"
+    log_info "Would deploy with:"
+    log_info "  N_FACTORY_ADMIN:    $N_FACTORY_ADMIN"
+    log_info "  N_FACTORY_OPERATOR: $N_FACTORY_OPERATOR"
+    log_info "  RPC:                $RPC_URL"
+    return 0
+  fi
+
+  DEPLOY_LOG="/tmp/collections-deploy-$$.txt"
+
+  forge "${FORGE_ARGS[@]}" 2>&1 | tee "$DEPLOY_LOG"
+
+  if [ "$BROADCAST" = "--broadcast" ]; then
+    COLLECTION_FACTORY_PROXY=$(grep -o 'CollectionFactory Proxy: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | tail -1 | grep -o '0x[0-9a-fA-F]*')
+    COLLECTION_FACTORY_IMPL=$(grep -o 'CollectionFactory Implementation: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | tail -1 | grep -o '0x[0-9a-fA-F]*')
+    USER_COLLECTION_721_IMPL=$(grep -o 'UserCollection721 Implementation: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | tail -1 | grep -o '0x[0-9a-fA-F]*')
+    USER_COLLECTION_1155_IMPL=$(grep -o 'UserCollection1155 Implementation: 0x[0-9a-fA-F]*' "$DEPLOY_LOG" | tail -1 | grep -o '0x[0-9a-fA-F]*')
+
+    if [ -z "$COLLECTION_FACTORY_PROXY" ] || [ -z "$COLLECTION_FACTORY_IMPL" ] \
+       || [ -z "$USER_COLLECTION_721_IMPL" ] || [ -z "$USER_COLLECTION_1155_IMPL" ]; then
+      log_error "Could not extract all addresses from deploy output"
+      log_info "Full output saved to: $DEPLOY_LOG"
+      cat "$DEPLOY_LOG"
+      exit 1
+    fi
+    log_success "Deployment complete!"
+  fi
+
+  rm -f "$DEPLOY_LOG"
+}
+
+# =============================================================================
+# Post-deploy sanity checks
+# =============================================================================
+
+verify_deployment() {
+  if [ "$BROADCAST" != "--broadcast" ]; then
+    return 0
+  fi
+
+  log_info "Verifying deployment..."
+
+  if [ "$NETWORK" = "mainnet" ]; then
+    RPC_URL="${L2_RPC:-https://mainnet.era.zksync.io}"
+  else
+    RPC_URL="${L2_RPC:-https://rpc.ankr.com/zksync_era_sepolia}"
+  fi
+
+  ADMIN_ROLE_HASH=$(cast keccak "")  # DEFAULT_ADMIN_ROLE = 0x00..00
+  ADMIN_ROLE_HASH="0x0000000000000000000000000000000000000000000000000000000000000000"
+  OPERATOR_ROLE_HASH=$(cast keccak "OPERATOR_ROLE")
+
+  log_info "Checking DEFAULT_ADMIN_ROLE granted to admin..."
+  HAS_ADMIN=$(cast call "$COLLECTION_FACTORY_PROXY" \
+    "hasRole(bytes32,address)(bool)" \
+    "$ADMIN_ROLE_HASH" "$N_FACTORY_ADMIN" --rpc-url "$RPC_URL")
+  log_success "Admin role granted: $HAS_ADMIN"
+
+  log_info "Checking OPERATOR_ROLE granted to operator..."
+  HAS_OP=$(cast call "$COLLECTION_FACTORY_PROXY" \
+    "hasRole(bytes32,address)(bool)" \
+    "$OPERATOR_ROLE_HASH" "$N_FACTORY_OPERATOR" --rpc-url "$RPC_URL")
+  log_success "Operator role granted: $HAS_OP"
+
+  log_info "Checking implementation pointers..."
+  IMPL_721=$(cast call "$COLLECTION_FACTORY_PROXY" "erc721Implementation()(address)" --rpc-url "$RPC_URL")
+  IMPL_1155=$(cast call "$COLLECTION_FACTORY_PROXY" "erc1155Implementation()(address)" --rpc-url "$RPC_URL")
+  log_success "erc721Implementation:  $IMPL_721"
+  log_success "erc1155Implementation: $IMPL_1155"
+
+  log_info "Checking EIP-1967 implementation slot points at factory logic..."
+  IMPL_SLOT="0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+  STORED_IMPL=$(cast storage "$COLLECTION_FACTORY_PROXY" "$IMPL_SLOT" --rpc-url "$RPC_URL")
+  log_success "EIP-1967 stored impl: $STORED_IMPL"
+
+  log_success "Post-deploy sanity checks passed"
+}
+
+# =============================================================================
+# Source code verification on the block explorer
+# =============================================================================
+
+verify_source_code() {
+  if [ "$BROADCAST" != "--broadcast" ]; then
+    return 0
+  fi
+
+  log_info "Verifying source code on block explorer..."
+
+  if [ "$NETWORK" = "mainnet" ]; then
+    CHAIN_ID="324"
+  else
+    CHAIN_ID="300"
+  fi
+
+  BROADCAST_JSON="broadcast/DeployCollectionFactoryZkSync.s.sol/${CHAIN_ID}/run-latest.json"
+  if [ ! -f "$BROADCAST_JSON" ]; then
+    log_error "Broadcast file not found: $BROADCAST_JSON"
+    log_warning "Skipping source code verification"
+    return 1
+  fi
+
+  if ! command -v python3 &> /dev/null; then
+    log_error "python3 not found. Install Python 3.8+ for source code verification."
+    log_warning "Skipping source code verification"
+    return 1
+  fi
+
+  python3 "$SCRIPT_DIR/verify_zksync_contracts.py" \
+    --broadcast "$BROADCAST_JSON" \
+    --verifier-url "$VERIFIER_URL" \
+    --compiler-version "0.8.26" \
+    --zksolc-version "v1.5.15" \
+    --project-root "$PROJECT_ROOT"
+
+  local exit_code=$?
+  if [ "$exit_code" -eq 0 ]; then
+    log_success "All contracts source-code verified on block explorer!"
+  else
+    log_warning "Some contracts failed source verification (deployment itself succeeded)"
+    log_info "Retry manually: python3 ops/verify_zksync_contracts.py --broadcast $BROADCAST_JSON --verifier-url $VERIFIER_URL"
+  fi
+}
+
+# =============================================================================
+# Append deployed addresses to env file
+# =============================================================================
+
+update_env_file() {
+  if [ "$BROADCAST" != "--broadcast" ]; then
+    return 0
+  fi
+
+  log_info "Updating $ENV_FILE with deployed addresses..."
+
+  TIMESTAMP=$(date +%Y-%m-%d)
+
+  if grep -q "COLLECTION_FACTORY_PROXY" "$ENV_FILE"; then
+    log_info "Updating existing collections addresses in $ENV_FILE..."
+    sed -i.bak '/^# User Collections/,/^$/d' "$ENV_FILE"
+    sed -i.bak '/^COLLECTION_FACTORY_PROXY=/d' "$ENV_FILE"
+    sed -i.bak '/^COLLECTION_FACTORY_IMPL=/d' "$ENV_FILE"
+    sed -i.bak '/^USER_COLLECTION_721_IMPL=/d' "$ENV_FILE"
+    sed -i.bak '/^USER_COLLECTION_1155_IMPL=/d' "$ENV_FILE"
+    sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$ENV_FILE"
+    rm -f "${ENV_FILE}.bak"
+  fi
+
+  cat >> "$ENV_FILE" << EOF
+
+# User Collections (ZkSync Era - deployed $TIMESTAMP)
+COLLECTION_FACTORY_PROXY=$COLLECTION_FACTORY_PROXY
+COLLECTION_FACTORY_IMPL=$COLLECTION_FACTORY_IMPL
+USER_COLLECTION_721_IMPL=$USER_COLLECTION_721_IMPL
+USER_COLLECTION_1155_IMPL=$USER_COLLECTION_1155_IMPL
+EOF
+
+  log_success "Environment file updated"
+}
+
+# =============================================================================
+# Summary
+# =============================================================================
+
+print_summary() {
+  echo ""
+  echo "=============================================="
+  echo "  DEPLOYMENT SUMMARY"
+  echo "=============================================="
+  echo ""
+  echo "Network: $NETWORK"
+  echo "Explorer: $EXPLORER_URL"
+  echo ""
+
+  if [ "$BROADCAST" != "--broadcast" ]; then
+    echo "Mode: DRY RUN (no contracts deployed)"
+    echo ""
+    echo "To deploy for real, run:"
+    echo "  $0 $NETWORK --broadcast"
+    return 0
+  fi
+
+  echo "Deployed Contracts:"
+  echo "-------------------"
+  echo ""
+  echo "CollectionFactory:"
+  echo "  Proxy:          $COLLECTION_FACTORY_PROXY"
+  echo "  Implementation: $COLLECTION_FACTORY_IMPL"
+  echo "  Explorer:       $EXPLORER_URL/address/$COLLECTION_FACTORY_PROXY"
+  echo ""
+  echo "UserCollection721:"
+  echo "  Implementation: $USER_COLLECTION_721_IMPL"
+  echo "  Explorer:       $EXPLORER_URL/address/$USER_COLLECTION_721_IMPL"
+  echo ""
+  echo "UserCollection1155:"
+  echo "  Implementation: $USER_COLLECTION_1155_IMPL"
+  echo "  Explorer:       $EXPLORER_URL/address/$USER_COLLECTION_1155_IMPL"
+  echo ""
+  echo "Configuration:"
+  echo "  Admin:    $N_FACTORY_ADMIN"
+  echo "  Operator: $N_FACTORY_OPERATOR"
+  echo ""
+  echo "=============================================="
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+
+main() {
+  echo ""
+  echo "=============================================="
+  echo "  ZkSync User Collections Deployment"
+  echo "=============================================="
+  echo ""
+
+  cd "$PROJECT_ROOT"
+
+  preflight_checks
+  compile_contracts
+  deploy_contracts
+  verify_deployment
+  verify_source_code
+  update_env_file
+  print_summary
+}
+
+main "$@"

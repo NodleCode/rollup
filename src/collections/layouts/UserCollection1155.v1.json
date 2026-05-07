@@ -1,0 +1,59 @@
+{
+  "storage": [
+    {
+      "astId": 7670,
+      "contract": "src/collections/UserCollection1155.sol:UserCollection1155",
+      "label": "_contractURI",
+      "offset": 0,
+      "slot": "0",
+      "type": "t_string_storage"
+    },
+    {
+      "astId": 7672,
+      "contract": "src/collections/UserCollection1155.sol:UserCollection1155",
+      "label": "_metadataLocked",
+      "offset": 0,
+      "slot": "1",
+      "type": "t_bool"
+    },
+    {
+      "astId": 7674,
+      "contract": "src/collections/UserCollection1155.sol:UserCollection1155",
+      "label": "_royaltiesLocked",
+      "offset": 1,
+      "slot": "1",
+      "type": "t_bool"
+    },
+    {
+      "astId": 7679,
+      "contract": "src/collections/UserCollection1155.sol:UserCollection1155",
+      "label": "__gap",
+      "offset": 0,
+      "slot": "2",
+      "type": "t_array(t_uint256)47_storage"
+    }
+  ],
+  "types": {
+    "t_array(t_uint256)47_storage": {
+      "encoding": "inplace",
+      "label": "uint256[47]",
+      "numberOfBytes": "1504",
+      "base": "t_uint256"
+    },
+    "t_bool": {
+      "encoding": "inplace",
+      "label": "bool",
+      "numberOfBytes": "1"
+    },
+    "t_string_storage": {
+      "encoding": "bytes",
+      "label": "string",
+      "numberOfBytes": "32"
+    },
+    "t_uint256": {
+      "encoding": "inplace",
+      "label": "uint256",
+      "numberOfBytes": "32"
+    }
+  }
+}
