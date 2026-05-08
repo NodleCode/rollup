@@ -11,14 +11,16 @@
 # with --zksync (zksolc compiler).
 #
 # Mirrors the swarms deployment pattern (ops/deploy_swarm_contracts_zksync.sh):
+#   - Temp-move L1-incompatible files (SSTORE2/EXTCODECOPY) so zksolc compiles
 #   - Forge build with --zksync, skip tests
 #   - Run the Forge script via --broadcast (or dry-run without)
 #   - Source code verification via ops/verify_zksync_contracts.py (the
 #     ZkSync verifier rejects forge --verify and forge verify-contract)
 #   - Append deployed addresses to .env-test or .env-prod
 #
-# Unlike the swarms script, no L1-incompatible files have to be moved out of
-# the tree — collections has no SSTORE2/EXTCODECOPY usage.
+# Collections itself has no SSTORE2/EXTCODECOPY usage, but `forge build --zksync`
+# compiles the entire tree, so files like SwarmRegistryL1Upgradeable and
+# test/upgrade-demo/TestUpgradeOnAnvil still need to be moved out of the way.
 #
 # CONTRACT ARCHITECTURE:
 # ----------------------
@@ -140,6 +142,67 @@ preflight_checks() {
 
   log_success "Pre-flight checks passed"
 }
+
+# =============================================================================
+# Temporarily move L1-incompatible contracts so zksolc can compile the tree.
+# Mirrors the move/restore pattern in ops/deploy_swarm_contracts_zksync.sh.
+# =============================================================================
+
+L1_BACKUP_DIR="/tmp/rollup-l1-backup-collections-deploy"
+
+move_l1_contracts() {
+  log_info "Moving L1-incompatible contracts to temporary location..."
+
+  if [ -d "$L1_BACKUP_DIR" ]; then
+    log_warning "Found previous backup, restoring first..."
+    restore_l1_contracts 2>/dev/null || true
+  fi
+
+  mkdir -p "$L1_BACKUP_DIR"
+
+  [ -f "src/swarms/SwarmRegistryL1Upgradeable.sol" ] && \
+    mv "src/swarms/SwarmRegistryL1Upgradeable.sol" "$L1_BACKUP_DIR/"
+
+  [ -f "test/SwarmRegistryL1.t.sol" ] && \
+    mv "test/SwarmRegistryL1.t.sol" "$L1_BACKUP_DIR/"
+
+  [ -d "test/upgrade-demo" ] && \
+    mv "test/upgrade-demo" "$L1_BACKUP_DIR/"
+
+  [ -f "script/DeploySwarmUpgradeable.s.sol" ] && \
+    mv "script/DeploySwarmUpgradeable.s.sol" "$L1_BACKUP_DIR/"
+
+  [ -f "script/UpgradeSwarm.s.sol" ] && \
+    mv "script/UpgradeSwarm.s.sol" "$L1_BACKUP_DIR/"
+
+  log_success "L1 contracts moved to $L1_BACKUP_DIR"
+}
+
+restore_l1_contracts() {
+  [ -d "$L1_BACKUP_DIR" ] || return 0
+  log_info "Restoring L1 contracts from backup..."
+
+  [ -f "$L1_BACKUP_DIR/SwarmRegistryL1Upgradeable.sol" ] && \
+    mv "$L1_BACKUP_DIR/SwarmRegistryL1Upgradeable.sol" "src/swarms/"
+
+  [ -f "$L1_BACKUP_DIR/SwarmRegistryL1.t.sol" ] && \
+    mv "$L1_BACKUP_DIR/SwarmRegistryL1.t.sol" "test/"
+
+  [ -d "$L1_BACKUP_DIR/upgrade-demo" ] && \
+    mv "$L1_BACKUP_DIR/upgrade-demo" "test/"
+
+  [ -f "$L1_BACKUP_DIR/DeploySwarmUpgradeable.s.sol" ] && \
+    mv "$L1_BACKUP_DIR/DeploySwarmUpgradeable.s.sol" "script/"
+
+  [ -f "$L1_BACKUP_DIR/UpgradeSwarm.s.sol" ] && \
+    mv "$L1_BACKUP_DIR/UpgradeSwarm.s.sol" "script/"
+
+  rm -rf "$L1_BACKUP_DIR"
+
+  log_success "L1 contracts restored"
+}
+
+trap restore_l1_contracts EXIT
 
 # =============================================================================
 # Compile
@@ -400,6 +463,7 @@ main() {
   cd "$PROJECT_ROOT"
 
   preflight_checks
+  move_l1_contracts
   compile_contracts
   deploy_contracts
   verify_deployment
