@@ -455,4 +455,16 @@ contract UserCollection721Test is Test {
             }
         }
     }
+
+    function test_implementationHasNoUpgradeSelectors() public view {
+        // proxiableUUID() — selector 0x52d1902d
+        (bool ok1, ) = address(impl).staticcall(abi.encodeWithSelector(0x52d1902d));
+        assertFalse(ok1, "impl must not expose proxiableUUID");
+
+        // upgradeToAndCall(address,bytes) — selector 0x4f1ef286
+        (bool ok2, ) = address(impl).staticcall(
+            abi.encodeWithSelector(0x4f1ef286, address(0), bytes(""))
+        );
+        assertFalse(ok2, "impl must not expose upgradeToAndCall");
+    }
 }
