@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
@@ -49,7 +49,7 @@ contract UserCollection1155Test is Test {
         internal
         returns (UserCollection1155 clone)
     {
-        address cloneAddr = Clones.clone(address(impl));
+        address cloneAddr = address(new ERC1967Proxy(address(impl), ""));
         clone = UserCollection1155(cloneAddr);
         clone.initialize(
             CreateParams1155({
@@ -95,7 +95,7 @@ contract UserCollection1155Test is Test {
     }
 
     function test_initialize_revertsOnZeroOwner() public {
-        address cloneAddr = Clones.clone(address(impl));
+        address cloneAddr = address(new ERC1967Proxy(address(impl), ""));
         address[] memory empty = new address[](0);
         vm.expectRevert(IUserCollection1155.ZeroAddress.selector);
         UserCollection1155(cloneAddr).initialize(
@@ -112,7 +112,7 @@ contract UserCollection1155Test is Test {
     }
 
     function test_initialize_revertsOnZeroOperatorMinter() public {
-        address cloneAddr = Clones.clone(address(impl));
+        address cloneAddr = address(new ERC1967Proxy(address(impl), ""));
         address[] memory empty = new address[](0);
         vm.expectRevert(IUserCollection1155.ZeroAddress.selector);
         UserCollection1155(cloneAddr).initialize(
