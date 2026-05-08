@@ -397,9 +397,12 @@ smoke_test_createCollection() {
   extId=$(cast keccak "smoke-$(date +%s)")
 
   log_info "Calling createCollection721($extId)..."
+  # CreateParams721 fields per src/collections/interfaces/CollectionTypes.sol:
+  # (address owner, string name, string symbol, string baseURI, string contractURI,
+  #  address royaltyRecipient, uint96 royaltyBps, address[] additionalMinters)
   cast send "$COLLECTION_FACTORY_PROXY" \
-    "createCollection721((string,string,address,address[],string,address,uint96,string),bytes32)" \
-    "(Smoke,SMK,$N_FACTORY_OPERATOR,[],ipfs://smoke/,$N_FACTORY_OPERATOR,0,ipfs://smoke.json)" \
+    "createCollection721((address,string,string,string,string,address,uint96,address[]),bytes32)" \
+    "($N_FACTORY_OPERATOR,Smoke,SMK,ipfs://smoke/,ipfs://smoke.json,$N_FACTORY_OPERATOR,0,[])" \
     "$extId" \
     --rpc-url "$rpc" \
     --private-key "$signer_key" \
