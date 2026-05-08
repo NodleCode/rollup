@@ -215,6 +215,34 @@ compile_contracts() {
 }
 
 # =============================================================================
+# Build-artifact verification — factoryDependencies must be populated.
+# Empty factoryDependencies on CollectionFactory means createCollection*
+# would revert at runtime on EraVM (the original Clones.clone() bug).
+# =============================================================================
+
+verify_build_artifacts() {
+  log_info "Verifying CollectionFactory factoryDependencies are populated..."
+
+  local artifact="zkout/CollectionFactory.sol/CollectionFactory.json"
+  if [ ! -f "$artifact" ]; then
+    log_error "Compiled artifact not found: $artifact"
+    exit 1
+  fi
+
+  local dep_count
+  dep_count=$(jq -r '.factoryDependencies | length' "$artifact")
+
+  if [ "$dep_count" -eq 0 ]; then
+    log_error "CollectionFactory.factoryDependencies is empty."
+    log_error "This means the factory cannot deploy per-collection proxies on EraVM."
+    log_error "Refer to design §3.5.2 / §7.2 row 15b — ERC1967Proxy must appear in factoryDeps."
+    exit 1
+  fi
+
+  log_success "factoryDependencies populated ($dep_count entries)"
+}
+
+# =============================================================================
 # Deploy
 # =============================================================================
 
@@ -465,6 +493,7 @@ main() {
   preflight_checks
   move_l1_contracts
   compile_contracts
+  verify_build_artifacts
   deploy_contracts
   verify_deployment
   verify_source_code
