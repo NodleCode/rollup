@@ -230,10 +230,13 @@ verify_build_artifacts() {
   fi
 
   local dep_count
-  dep_count=$(jq -r '.factoryDependencies | length' "$artifact")
+  if ! dep_count=$(jq -r '.factoryDependencies | length' "$artifact" 2>&1); then
+    log_error "jq failed parsing $artifact: $dep_count"
+    exit 1
+  fi
 
-  if [ "$dep_count" -eq 0 ]; then
-    log_error "CollectionFactory.factoryDependencies is empty."
+  if [ -z "$dep_count" ] || [ "$dep_count" -eq 0 ]; then
+    log_error "CollectionFactory.factoryDependencies is empty or unreadable."
     log_error "This means the factory cannot deploy per-collection proxies on EraVM."
     log_error "Refer to design §3.5.2 / §7.2 row 15b — ERC1967Proxy must appear in factoryDeps."
     exit 1
