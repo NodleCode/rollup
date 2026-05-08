@@ -5,7 +5,6 @@ pragma solidity ^0.8.26;
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {ICollectionFactory} from "./interfaces/ICollectionFactory.sol";
@@ -122,8 +121,13 @@ contract CollectionFactory is
     {
         _checkExternalId(externalId);
 
-        collection = Clones.clone(_erc1155Implementation);
-        IUserCollection1155(collection).initialize(p, msg.sender);
+        bytes memory initData = abi.encodeCall(
+            IUserCollection1155.initialize,
+            (p, msg.sender)
+        );
+        collection = address(
+            new ERC1967Proxy{salt: externalId}(_erc1155Implementation, initData)
+        );
 
         _collectionByExternalId[externalId] = collection;
         emit CollectionCreated(p.owner, collection, Standard.ERC1155, externalId);

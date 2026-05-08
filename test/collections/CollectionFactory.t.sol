@@ -13,6 +13,7 @@ import {ICollectionFactory} from "../../src/collections/interfaces/ICollectionFa
 import {UserCollection721} from "../../src/collections/UserCollection721.sol";
 import {UserCollection1155} from "../../src/collections/UserCollection1155.sol";
 import {IUserCollection721} from "../../src/collections/interfaces/IUserCollection721.sol";
+import {IUserCollection1155} from "../../src/collections/interfaces/IUserCollection1155.sol";
 import {Standard, CreateParams721, CreateParams1155} from "../../src/collections/interfaces/CollectionTypes.sol";
 
 import {CollectionFactoryV2Mock} from "./mocks/CollectionFactoryV2Mock.sol";
@@ -160,6 +161,34 @@ contract CollectionFactoryTest is Test {
         address actual = factory.createCollection721(p, externalId);
 
         assertEq(actual, predicted, "deployed address must match CREATE2 derivation");
+    }
+
+    function test_createCollection1155_addressMatchesCreate2Derivation() public {
+        bytes32 externalId = keccak256("derivation-test-1155");
+        CreateParams1155 memory p = _params1155(CREATOR);
+
+        bytes memory initData = abi.encodeCall(
+            IUserCollection1155.initialize,
+            (p, OPERATOR)
+        );
+
+        bytes32 initCodeHash = keccak256(
+            abi.encodePacked(
+                type(ERC1967Proxy).creationCode,
+                abi.encode(address(impl1155), initData)
+            )
+        );
+
+        address predicted = Create2.computeAddress(
+            externalId,
+            initCodeHash,
+            address(factory)
+        );
+
+        vm.prank(OPERATOR);
+        address actual = factory.createCollection1155(p, externalId);
+
+        assertEq(actual, predicted, "deployed 1155 address must match CREATE2 derivation");
     }
 
     function test_createCollection1155_atomicAndEmits() public {
