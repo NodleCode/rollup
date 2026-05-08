@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
+import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
@@ -11,6 +12,7 @@ import {CollectionFactory} from "../../src/collections/CollectionFactory.sol";
 import {ICollectionFactory} from "../../src/collections/interfaces/ICollectionFactory.sol";
 import {UserCollection721} from "../../src/collections/UserCollection721.sol";
 import {UserCollection1155} from "../../src/collections/UserCollection1155.sol";
+import {IUserCollection721} from "../../src/collections/interfaces/IUserCollection721.sol";
 import {Standard, CreateParams721, CreateParams1155} from "../../src/collections/interfaces/CollectionTypes.sol";
 
 import {CollectionFactoryV2Mock} from "./mocks/CollectionFactoryV2Mock.sol";
@@ -130,6 +132,34 @@ contract CollectionFactoryTest is Test {
         assertTrue(c.hasRole(keccak256("OWNER_ROLE"), CREATOR));
         // Operator auto-grant invariant — see §2.3.
         assertTrue(c.hasRole(MINTER_ROLE, OPERATOR));
+    }
+
+    function test_createCollection721_addressMatchesCreate2Derivation() public {
+        bytes32 externalId = keccak256("derivation-test-721");
+        CreateParams721 memory p = _params721(CREATOR);
+
+        bytes memory initData = abi.encodeCall(
+            IUserCollection721.initialize,
+            (p, OPERATOR)
+        );
+
+        bytes32 initCodeHash = keccak256(
+            abi.encodePacked(
+                type(ERC1967Proxy).creationCode,
+                abi.encode(address(impl721), initData)
+            )
+        );
+
+        address predicted = Create2.computeAddress(
+            externalId,
+            initCodeHash,
+            address(factory)
+        );
+
+        vm.prank(OPERATOR);
+        address actual = factory.createCollection721(p, externalId);
+
+        assertEq(actual, predicted, "deployed address must match CREATE2 derivation");
     }
 
     function test_createCollection1155_atomicAndEmits() public {
