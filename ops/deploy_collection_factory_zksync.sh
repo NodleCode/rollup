@@ -372,22 +372,37 @@ smoke_test_createCollection() {
     rpc="${L2_RPC:-https://rpc.ankr.com/zksync_era_sepolia}"
   fi
 
+  # Determine which private key holds OPERATOR_ROLE for signing.
+  # Production typically separates the deployer EOA from the operator multisig
+  # or backend key; only run the smoke test if we have a key that can sign.
+  local signer_key
+  if [ -n "$OPERATOR_PRIVATE_KEY" ]; then
+    signer_key="$OPERATOR_PRIVATE_KEY"
+    [[ "$signer_key" != 0x* ]] && signer_key="0x${signer_key}"
+  else
+    local deployer_addr
+    deployer_addr=$(cast wallet address --private-key "$DEPLOYER_PRIVATE_KEY")
+    if [ "$(echo "$deployer_addr" | tr '[:upper:]' '[:lower:]')" = "$(echo "$N_FACTORY_OPERATOR" | tr '[:upper:]' '[:lower:]')" ]; then
+      signer_key="$DEPLOYER_PRIVATE_KEY"
+    else
+      log_warning "Skipping smoke test: deployer address ($deployer_addr) is not the operator ($N_FACTORY_OPERATOR), and OPERATOR_PRIVATE_KEY is not set."
+      log_warning "To run the smoke test against a multisig/separate operator, export OPERATOR_PRIVATE_KEY with a key that holds OPERATOR_ROLE."
+      return 0
+    fi
+  fi
+
   # Build a minimal CreateParams721 calldata. owner = operator,
   # additionalMinters = empty array, royaltyBps = 0, simple URIs.
   local extId
   extId=$(cast keccak "smoke-$(date +%s)")
 
-  local params
-  params=$(cast abi-encode \
-    "f((string,string,address,address[],string,address,uint96,string))" \
-    "(\"Smoke\",\"SMK\",$N_FACTORY_OPERATOR,[],\"ipfs://smoke/\",$N_FACTORY_OPERATOR,0,\"ipfs://smoke.json\")")
-
   log_info "Calling createCollection721($extId)..."
   cast send "$COLLECTION_FACTORY_PROXY" \
     "createCollection721((string,string,address,address[],string,address,uint96,string),bytes32)" \
-    "$params" "$extId" \
+    "(Smoke,SMK,$N_FACTORY_OPERATOR,[],ipfs://smoke/,$N_FACTORY_OPERATOR,0,ipfs://smoke.json)" \
+    "$extId" \
     --rpc-url "$rpc" \
-    --private-key "$DEPLOYER_PRIVATE_KEY" \
+    --private-key "$signer_key" \
     --zksync \
     || { log_error "createCollection721 reverted on-chain"; exit 1; }
 
