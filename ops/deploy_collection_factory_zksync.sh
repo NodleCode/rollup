@@ -24,8 +24,8 @@
 #
 # CONTRACT ARCHITECTURE:
 # ----------------------
-# - UserCollection721 implementation (cloned per ERC-721 collection)
-# - UserCollection1155 implementation (cloned per ERC-1155 collection)
+# - UserCollection721 implementation (deployed behind a per-collection ERC1967Proxy)
+# - UserCollection1155 implementation (deployed behind a per-collection ERC1967Proxy)
 # - CollectionFactory logic + ERC1967Proxy (UUPS-upgradeable factory)
 #
 # USAGE:
