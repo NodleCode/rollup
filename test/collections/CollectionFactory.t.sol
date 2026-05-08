@@ -315,11 +315,11 @@ contract CollectionFactoryTest is Test {
         factory.setImplementation1155(address(0xBEEF));
     }
 
-    function test_setImplementation_affectsFutureClonesOnly() public {
+    function test_setImplementation_affectsFutureCollectionsOnly() public {
         bytes32 firstId = keccak256("first");
         vm.prank(OPERATOR);
-        address oldClone = factory.createCollection721(_params721(CREATOR), firstId);
-        bytes32 oldHash = oldClone.codehash;
+        address oldCollection = factory.createCollection721(_params721(CREATOR), firstId);
+        bytes32 oldHash = oldCollection.codehash;
 
         UserCollection721 newImpl = new UserCollection721();
         vm.expectEmit(true, true, true, true);
@@ -329,14 +329,14 @@ contract CollectionFactoryTest is Test {
 
         bytes32 secondId = keccak256("second");
         vm.prank(OPERATOR);
-        address newClone = factory.createCollection721(_params721(CREATOR), secondId);
+        address newCollection = factory.createCollection721(_params721(CREATOR), secondId);
 
-        // Old clone unchanged; new clone may share the same EIP-1167 codehash but
-        // its delegate target is the new implementation. Verify by reading the
-        // factory's stored pointer post-set.
-        assertEq(oldClone.codehash, oldHash);
+        // Old collection unchanged; new collection points at the new implementation
+        // via its ERC1967 proxy. Verify by reading the factory's stored pointer
+        // post-set.
+        assertEq(oldCollection.codehash, oldHash);
         assertEq(factory.erc721Implementation(), address(newImpl));
-        assertTrue(newClone != oldClone);
+        assertTrue(newCollection != oldCollection);
     }
 
     // ──────────────────────────────────────────────
@@ -380,7 +380,7 @@ contract CollectionFactoryTest is Test {
         // Seed pre-upgrade state.
         bytes32 externalId = keccak256("pre-upgrade");
         vm.prank(OPERATOR);
-        address seededClone = factory.createCollection721(_params721(CREATOR), externalId);
+        address seededCollection = factory.createCollection721(_params721(CREATOR), externalId);
 
         CollectionFactoryV2Mock v2Logic = new CollectionFactoryV2Mock();
         vm.prank(ADMIN);
@@ -393,7 +393,7 @@ contract CollectionFactoryTest is Test {
         assertEq(factory.erc721Implementation(), address(impl721));
         assertEq(factory.erc1155Implementation(), address(impl1155));
         // Pre-upgrade collection mapping preserved.
-        assertEq(factory.collectionByExternalId(externalId), seededClone);
+        assertEq(factory.collectionByExternalId(externalId), seededCollection);
         // V2-only function callable on the upgraded proxy — proves real delegation.
         assertEq(CollectionFactoryV2Mock(address(factory)).v2Sentinel(), 4242);
     }
