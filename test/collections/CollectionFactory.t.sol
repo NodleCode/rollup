@@ -28,6 +28,7 @@ contract CollectionFactoryTest is Test {
     address internal constant OPERATOR = address(0x09);
     address internal constant CREATOR = address(0xCAFE);
     address internal constant STRANGER = address(0xDEAD);
+    address internal constant ALICE = address(0xA1);
 
     bytes32 internal constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 internal constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -37,6 +38,8 @@ contract CollectionFactoryTest is Test {
         address indexed creator, address indexed collection, Standard standard, bytes32 indexed externalId
     );
     event ImplementationUpdated(Standard standard, address newImpl);
+    event Upgraded(address indexed implementation);
+    event Initialized(uint64 version);
 
     function setUp() public {
         impl721 = new UserCollection721();
@@ -118,8 +121,16 @@ contract CollectionFactoryTest is Test {
 
     function test_createCollection721_atomicAndEmits() public {
         bytes32 externalId = keccak256("order-1");
-        // Indexed topic order: (creator, collection, externalId). We don't know
-        // the clone address up front, so leave the second topic unchecked.
+
+        // Order: Upgraded(impl) → Initialized(1) → ... role grants ... → CollectionCreated
+        vm.expectEmit(true, false, false, false);
+        emit Upgraded(address(impl721));
+
+        vm.expectEmit(false, false, false, true);
+        emit Initialized(1);
+
+        // CollectionCreated indexed topics: (creator, collection, externalId).
+        // We don't know the collection address up front, so leave its topic unchecked.
         vm.expectEmit(true, false, true, true);
         emit CollectionCreated(CREATOR, address(0), Standard.ERC721, externalId);
 
@@ -193,8 +204,22 @@ contract CollectionFactoryTest is Test {
 
     function test_createCollection1155_atomicAndEmits() public {
         bytes32 externalId = keccak256("order-1155");
+
+        // Order: Upgraded(impl) → Initialized(1) → ... role grants ... → CollectionCreated
+        vm.expectEmit(true, false, false, false);
+        emit Upgraded(address(impl1155));
+
+        vm.expectEmit(false, false, false, true);
+        emit Initialized(1);
+
+        // CollectionCreated indexed topics: (creator, collection, externalId).
+        // We don't know the collection address up front, so leave its topic unchecked.
+        vm.expectEmit(true, false, true, true);
+        emit CollectionCreated(CREATOR, address(0), Standard.ERC1155, externalId);
+
         vm.prank(OPERATOR);
         address collection = factory.createCollection1155(_params1155(CREATOR), externalId);
+
         assertEq(factory.collectionByExternalId(externalId), collection);
         UserCollection1155 c = UserCollection1155(collection);
         assertTrue(c.hasRole(keccak256("OWNER_ROLE"), CREATOR));
@@ -231,6 +256,19 @@ contract CollectionFactoryTest is Test {
         address collection = factory.createCollection721(_params721(CREATOR), externalId);
         // additionalMinters is empty — operator must still be a minter via auto-grant.
         assertTrue(UserCollection721(collection).hasRole(MINTER_ROLE, OPERATOR));
+    }
+
+    function test_createCollection721_canMintImmediatelyInSameTx() public {
+        bytes32 externalId = keccak256("immediate-mint-721");
+
+        vm.startPrank(OPERATOR);
+        address collection = factory.createCollection721(_params721(CREATOR), externalId);
+        // Operator was auto-granted MINTER_ROLE during constructor delegatecall —
+        // can mint without any extra setup transactions.
+        uint256 tokenId = UserCollection721(collection).mint(ALICE, "ipfs://token-0.json");
+        vm.stopPrank();
+
+        assertEq(UserCollection721(collection).ownerOf(tokenId), ALICE);
     }
 
     // ──────────────────────────────────────────────
