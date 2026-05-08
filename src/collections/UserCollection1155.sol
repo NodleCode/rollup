@@ -16,7 +16,7 @@ import {CreateParams1155} from "./interfaces/CollectionTypes.sol";
 
 /**
  * @title UserCollection1155
- * @notice ERC-1155 implementation cloned per creator by `CollectionFactory`.
+ * @notice ERC-1155 implementation deployed behind a per-collection `ERC1967Proxy` by `CollectionFactory`.
  * @dev See `src/collections/doc/spec/user-collections-specification.md` (§3.6).
  *
  *      Bytecode-permanence invariants apply identically to UserCollection721

@@ -16,7 +16,7 @@ import {CreateParams721} from "./interfaces/CollectionTypes.sol";
 
 /**
  * @title UserCollection721
- * @notice ERC-721 implementation cloned per creator by `CollectionFactory`.
+ * @notice ERC-721 implementation deployed behind a per-collection `ERC1967Proxy` by `CollectionFactory`.
  * @dev See `src/collections/doc/spec/user-collections-specification.md` (§3.5).
  *
  *      Bytecode-permanence invariants (load-bearing for the §1.3 immutability
@@ -69,8 +69,9 @@ contract UserCollection721 is
     // ──────────────────────────────────────────────
 
     /// @dev Disables initializers on the implementation so it cannot be
-    ///      initialized directly. Each clone calls `initialize` exactly once
-    ///      via the factory's atomic clone+init flow.
+    ///      initialized directly. Each per-collection proxy calls `initialize`
+    ///      exactly once via the factory's atomic constructor-frame deploy+init
+    ///      flow.
     constructor() {
         _disableInitializers();
     }

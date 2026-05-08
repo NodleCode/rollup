@@ -6,7 +6,7 @@ import {CreateParams721} from "./CollectionTypes.sol";
 
 /**
  * @title IUserCollection721
- * @notice Public API for the ERC-721 implementation cloned per creator.
+ * @notice Public API for the ERC-721 implementation deployed behind a per-collection `ERC1967Proxy`.
  * @dev See `src/collections/doc/spec/user-collections-specification.md` (§3.5).
  */
 interface IUserCollection721 {

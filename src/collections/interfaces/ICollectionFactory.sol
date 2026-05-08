@@ -15,9 +15,9 @@ interface ICollectionFactory {
     // Events
     // ──────────────────────────────────────────────
 
-    /// @notice Emitted when a new collection clone is deployed and initialized.
-    /// @param creator The address that received `OWNER_ROLE` on the new clone.
-    /// @param collection The address of the newly-deployed clone.
+    /// @notice Emitted when a new per-collection `ERC1967Proxy` is deployed and initialized.
+    /// @param creator The address that received `OWNER_ROLE` on the new collection.
+    /// @param collection The address of the newly-deployed per-collection proxy.
     /// @param standard The token standard (ERC721 or ERC1155).
     /// @param externalId The off-chain reconciliation identifier supplied by the operator.
     event CollectionCreated(
@@ -27,7 +27,7 @@ interface ICollectionFactory {
         bytes32 indexed externalId
     );
 
-    /// @notice Emitted when admin updates an implementation pointer for future clones.
+    /// @notice Emitted when admin updates an implementation pointer for future per-collection proxies.
     event ImplementationUpdated(Standard standard, address newImpl);
 
     // ──────────────────────────────────────────────

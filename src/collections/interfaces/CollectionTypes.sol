@@ -18,8 +18,8 @@ enum Standard {
 /// @notice Parameters supplied by the operator when creating an ERC-721 collection.
 /// @dev `additionalMinters` is orthogonal to the operator auto-grant: the calling
 ///      operator (`msg.sender` on the factory) is auto-granted `MINTER_ROLE` by the
-///      clone's `initialize` regardless of this list. Use `additionalMinters` for
-///      creator-seeded extras (e.g. a co-creator wallet).
+///      collection's `initialize` regardless of this list. Use `additionalMinters`
+///      for creator-seeded extras (e.g. a co-creator wallet).
 struct CreateParams721 {
     address owner;
     string name;

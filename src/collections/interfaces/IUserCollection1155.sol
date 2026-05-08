@@ -6,7 +6,7 @@ import {CreateParams1155} from "./CollectionTypes.sol";
 
 /**
  * @title IUserCollection1155
- * @notice Public API for the ERC-1155 implementation cloned per creator.
+ * @notice Public API for the ERC-1155 implementation deployed behind a per-collection `ERC1967Proxy`.
  * @dev See `src/collections/doc/spec/user-collections-specification.md` (§3.6).
  */
 interface IUserCollection1155 {
