@@ -134,10 +134,13 @@ contract CollectionsIntegrationTest is Test {
             }),
             keccak256("order-alpha-v2")
         );
-        // Both clones use the EIP-1167 minimal-proxy template, so codehashes
-        // are equal — the difference is the delegate target written into each
-        // clone's runtime by `Clones.clone`. The factory pointer is the
-        // observable state that proves the upgrade took effect for new clones.
+        // Each per-collection ERC1967Proxy delegates to the factory's
+        // `_erc721Implementation` / `_erc1155Implementation` via the EIP-1967
+        // implementation slot, captured at deploy time. The factory pointer
+        // is the observable state that proves the upgrade took effect for
+        // newly deployed collections; existing collections keep delegating
+        // to whichever implementation address was written into their slot
+        // when they were created.
         assertEq(factory.erc721Implementation(), address(newImpl721));
         // Old collection still operates normally.
         assertEq(col721.ownerOf(alphaTokenId), THIRD_PARTY);
