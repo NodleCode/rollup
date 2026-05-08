@@ -6,6 +6,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {ICollectionFactory} from "./interfaces/ICollectionFactory.sol";
 import {IUserCollection721} from "./interfaces/IUserCollection721.sol";
@@ -14,18 +15,22 @@ import {Standard, CreateParams721, CreateParams1155} from "./interfaces/Collecti
 
 /**
  * @title CollectionFactory
- * @notice UUPS-upgradeable, operator-triggered factory that deploys EIP-1167
- *         minimal-proxy clones of `UserCollection721` / `UserCollection1155`.
+ * @notice UUPS-upgradeable, operator-triggered factory that deploys per-collection
+ *         `ERC1967Proxy` instances of `UserCollection721` / `UserCollection1155`.
  * @dev See `src/collections/doc/spec/user-collections-specification.md`.
  *
- *      The factory atomically clones an implementation, invokes the clone's
- *      `initialize` (passing `msg.sender` as the auto-granted operator
- *      minter — see §2.3), records the off-chain `externalId → clone`
- *      mapping, and emits `CollectionCreated`. Reverts on reused or zero
- *      `externalId`.
+ *      The factory atomically deploys a per-collection `ERC1967Proxy`
+ *      pointing at the standard's implementation, with an `abi.encodeCall`
+ *      to `initialize(p, msg.sender)` baked into the constructor so init
+ *      runs in the proxy's storage in the same frame. `msg.sender` is
+ *      auto-granted `MINTER_ROLE` (see §2.3). Records the
+ *      `externalId → collection` mapping and emits `CollectionCreated`.
+ *      Reverts on reused or zero `externalId`.
  *
- *      Already-deployed clones are immutable. Admin can swap implementation
- *      pointers via `setImplementation*`, which only affects future clones.
+ *      Already-deployed collections are immutable (impls do not inherit
+ *      `UUPSUpgradeable`; the EIP-1967 implementation slot is constructor-
+ *      fixed). Admin can swap implementation pointers via `setImplementation*`,
+ *      which only affects future collections.
  */
 contract CollectionFactory is
     Initializable,
@@ -97,8 +102,13 @@ contract CollectionFactory is
     {
         _checkExternalId(externalId);
 
-        collection = Clones.clone(_erc721Implementation);
-        IUserCollection721(collection).initialize(p, msg.sender);
+        bytes memory initData = abi.encodeCall(
+            IUserCollection721.initialize,
+            (p, msg.sender)
+        );
+        collection = address(
+            new ERC1967Proxy{salt: externalId}(_erc721Implementation, initData)
+        );
 
         _collectionByExternalId[externalId] = collection;
         emit CollectionCreated(p.owner, collection, Standard.ERC721, externalId);
