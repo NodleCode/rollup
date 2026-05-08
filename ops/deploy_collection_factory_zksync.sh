@@ -354,6 +354,68 @@ verify_deployment() {
 }
 
 # =============================================================================
+# End-to-end smoke test — exercise createCollection721 on the live network.
+# This is the empirical check that the EraVM-compiled output works at runtime.
+# =============================================================================
+
+smoke_test_createCollection() {
+  if [ "$BROADCAST" != "--broadcast" ]; then
+    return 0
+  fi
+
+  log_info "Running end-to-end smoke test: createCollection721..."
+
+  local rpc
+  if [ "$NETWORK" = "mainnet" ]; then
+    rpc="${L2_RPC:-https://mainnet.era.zksync.io}"
+  else
+    rpc="${L2_RPC:-https://rpc.ankr.com/zksync_era_sepolia}"
+  fi
+
+  # Build a minimal CreateParams721 calldata. owner = operator,
+  # additionalMinters = empty array, royaltyBps = 0, simple URIs.
+  local extId
+  extId=$(cast keccak "smoke-$(date +%s)")
+
+  local params
+  params=$(cast abi-encode \
+    "f((string,string,address,address[],string,address,uint96,string))" \
+    "(\"Smoke\",\"SMK\",$N_FACTORY_OPERATOR,[],\"ipfs://smoke/\",$N_FACTORY_OPERATOR,0,\"ipfs://smoke.json\")")
+
+  log_info "Calling createCollection721($extId)..."
+  cast send "$COLLECTION_FACTORY_PROXY" \
+    "createCollection721((string,string,address,address[],string,address,uint96,string),bytes32)" \
+    "$params" "$extId" \
+    --rpc-url "$rpc" \
+    --private-key "$DEPLOYER_PRIVATE_KEY" \
+    --zksync \
+    || { log_error "createCollection721 reverted on-chain"; exit 1; }
+
+  # Read the resulting collection address from the mapping.
+  local collection
+  collection=$(cast call "$COLLECTION_FACTORY_PROXY" \
+    "collectionByExternalId(bytes32)(address)" "$extId" --rpc-url "$rpc")
+
+  log_info "Smoke collection deployed at: $collection"
+
+  # Assert non-empty code at the collection address.
+  local code_size
+  code_size=$(cast code "$collection" --rpc-url "$rpc" | wc -c)
+  if [ "$code_size" -lt 10 ]; then
+    log_error "Smoke collection has empty bytecode"
+    exit 1
+  fi
+
+  # Assert EIP-1967 impl slot equals expected impl.
+  local EIP1967_IMPL_SLOT="0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+  local stored
+  stored=$(cast storage "$collection" "$EIP1967_IMPL_SLOT" --rpc-url "$rpc")
+  log_info "EIP-1967 impl slot: $stored (expected impl: $USER_COLLECTION_721_IMPL)"
+
+  log_success "Smoke test passed: createCollection721 succeeded; collection has code; EIP-1967 slot set"
+}
+
+# =============================================================================
 # Source code verification on the block explorer
 # =============================================================================
 
@@ -499,6 +561,7 @@ main() {
   verify_build_artifacts
   deploy_contracts
   verify_deployment
+  smoke_test_createCollection
   verify_source_code
   update_env_file
   print_summary
