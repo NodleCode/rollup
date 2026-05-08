@@ -1,6 +1,6 @@
 ---
 title: "Nodle User Collections — Technical Specification"
-subtitle: "Operator-Triggered NFT Collection Factory with Per-Collection Clone Isolation"
+subtitle: "Operator-Triggered NFT Collection Factory with Per-Collection ERC1967Proxy Isolation"
 date: "April 2026"
 version: "1.0"
 ---
@@ -11,7 +11,7 @@ version: "1.0"
 
 ## Technical Specification
 
-**Operator-Triggered NFT Collection Factory with Per-Collection Clone Isolation**
+**Operator-Triggered NFT Collection Factory with Per-Collection ERC1967Proxy Isolation**
 
 Version 1.0 — April 2026
 
@@ -39,11 +39,11 @@ Version 1.0 — April 2026
 
 ### 1.1 System Overview
 
-The User Collections system lets users create their own ERC-721 or ERC-1155 NFT collections on the Nodle zkSync L2. Creation is paid in fiat off-chain; the on-chain deployment is triggered by a trusted backend after the fiat payment clears. Each collection is a fully-isolated minimal proxy clone with its own address, owner, and metadata.
+The User Collections system lets users create their own ERC-721 or ERC-1155 NFT collections on the Nodle zkSync L2. Creation is paid in fiat off-chain; the on-chain deployment is triggered by a trusted backend after the fiat payment clears. Each collection is a fully-isolated per-collection ERC1967Proxy with its own address, owner, and metadata.
 
 The on-chain layer provides:
 
-- A single upgradeable factory that deploys cheap clones of fixed-behavior implementation contracts.
+- A single upgradeable factory that deploys per-collection `ERC1967Proxy` instances pointing at fixed-behavior implementation contracts.
 - Two implementation templates (ERC-721 and ERC-1155), both inheriting OpenZeppelin's audited upgradeable primitives.
 - Role-scoped permissions: a backend operator can trigger creation and mint into any collection, while creators retain ownership and minting rights on their own collection.
 - Reconciliation hooks (`externalId` events and lookup map) so the off-chain payment ledger can deterministically locate the on-chain artifact for every order.
@@ -67,18 +67,18 @@ graph TB
         I1155["<b>UserCollection1155</b><br/>ERC-1155 logic"]
     end
 
-    subgraph Clones["User Collections (EIP-1167 minimal proxies)"]
-        C1["Clone A<br/><i>creator α</i>"]
-        C2["Clone B<br/><i>creator β</i>"]
-        C3["Clone C<br/><i>creator γ</i>"]
+    subgraph Collections["User Collections (ERC1967Proxy per collection)"]
+        C1["Collection A<br/><i>creator α</i>"]
+        C2["Collection B<br/><i>creator β</i>"]
+        C3["Collection C<br/><i>creator γ</i>"]
     end
 
     APP -- "create / mint" --> BE
     BE -- "fiat charge" --> PAY
     BE -- "createCollection*" --> FAC
-    FAC -- "Clones.clone" --> C1
-    FAC -- "Clones.clone" --> C2
-    FAC -- "Clones.clone" --> C3
+    FAC -- "new ERC1967Proxy{salt}" --> C1
+    FAC -- "new ERC1967Proxy{salt}" --> C2
+    FAC -- "new ERC1967Proxy{salt}" --> C3
     C1 -. "delegatecall" .-> I721
     C2 -. "delegatecall" .-> I1155
     C3 -. "delegatecall" .-> I721
@@ -99,27 +99,29 @@ graph TB
 | Contract              | Role                                                           | Pattern                  | Upgradeability                            |
 | :-------------------- | :------------------------------------------------------------- | :----------------------- | :---------------------------------------- |
 | `CollectionFactory`   | Operator-triggered factory; emits creation events              | UUPS proxy               | Admin-upgradeable                         |
-| `UserCollection721`   | ERC-721 implementation cloned per creator                      | EIP-1167 clone target    | Immutable per clone                       |
-| `UserCollection1155`  | ERC-1155 implementation cloned per creator                     | EIP-1167 clone target    | Immutable per clone                       |
+| `UserCollection721`   | ERC-721 implementation behind a per-collection ERC1967Proxy    | `ERC1967Proxy` implementation | Immutable per collection                  |
+| `UserCollection1155`  | ERC-1155 implementation behind a per-collection ERC1967Proxy   | `ERC1967Proxy` implementation | Immutable per collection                  |
 
-The factory is upgradeable so new implementation templates and bug fixes can be shipped without disrupting existing creators. Already-deployed clones cannot be upgraded — buyers and creators retain a permanent guarantee about each collection's behavior.
+The factory is upgradeable so new implementation templates and bug fixes can be shipped without disrupting existing creators. Already-deployed collections cannot be upgraded — buyers and creators retain a permanent guarantee about each collection's behavior.
 
 ### 1.4 Design Decisions
 
 | # | Decision                       | Choice                                                                                                                                                          |
 | :- | :----------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1 | Token standards                | Both ERC-721 and ERC-1155, selected per-collection                                                                                                              |
-| 2 | Deployment model               | EIP-1167 minimal proxy clones for both standards                                                                                                                |
+| 2 | Deployment model               | Per-collection `ERC1967Proxy` deployed via `CREATE2` with `externalId` salt; implementations deployed via `CREATE` only                                          |
 | 3 | Payment model                  | Fiat, off-chain; on-chain creation is purely authorization-gated                                                                                                |
 | 4 | Authorization                  | Operator-deployed: backend holds `OPERATOR_ROLE`, creator never signs creation                                                                                  |
-| 5 | Item minting rights            | Creator and operator both hold `MINTER_ROLE` on every clone — operator grant is enforced on-chain by the factory (see §2.3), not by backend convention         |
+| 5 | Item minting rights            | Creator and operator both hold `MINTER_ROLE` on every collection — operator grant is enforced on-chain by the factory (see §2.3), not by backend convention    |
 | 6 | Per-collection mutability      | `baseURI`/`uri`, `contractURI`, royalties are owner-mutable until owner locks them one-way                                                                      |
-| 7 | Upgradeability                 | Factory: UUPS-upgradeable. Clones: immutable; admin can swap implementation pointer for *future* clones only                                                    |
-| 8 | Inheritance                    | Direct from OpenZeppelin `*Upgradeable` contracts. No reuse of `BaseContentSign` (constructor-based, non-upgradeable, structurally incompatible with clones)    |
+| 7 | Upgradeability                 | Factory: UUPS-upgradeable. Per-collection proxies: immutable (impls do not inherit `UUPSUpgradeable`, no admin slot); admin can swap implementation pointer for *future* collections only [^upgradeability]  |
+| 8 | Inheritance                    | Direct from OpenZeppelin `*Upgradeable` contracts. No reuse of `BaseContentSign` (constructor-based, non-upgradeable, structurally incompatible with proxy initialization) |
 | 9 | External-ID dedup              | On-chain map `bytes32 externalId → address collection`; reverts on reuse                                                                                        |
 | 10 | Per-creator on-chain limit    | None (backend rate-limits if needed)                                                                                                                            |
 | 11 | Royalty ceiling                | None beyond OpenZeppelin's ERC-2981 100% (10000 bps) bound. Creators have full autonomy over `royaltyBps` until they call `lockRoyalties`. Marketplace-norm enforcement (e.g. ≤10%) is deliberately out of scope — buyers and frontends are expected to inspect the on-chain value |
 | 12 | OZ alignment                   | Stay aligned with OpenZeppelin's `*Upgradeable` shapes; avoid overriding inherited methods or diverging from canonical signatures unless strictly required (e.g. role gating, lock checks). Custom batch / utility helpers ship as net-new functions, not overrides — keeps the audit surface small and lets us track upstream OZ patches without merge friction |
+
+[^upgradeability]: We use `ERC1967Proxy` directly (not `TransparentUpgradeableProxy`, not `BeaconProxy`) because the implementation contracts deliberately do not inherit `UUPSUpgradeable`. With no upgrade selector exposed and no `ProxyAdmin` slot pattern, the proxy's implementation pointer is constructor-fixed and the per-collection immutability promise is enforced by code that already exists in the OZ canonical libraries — no custom upgrade gating needed. We migrated away from the EIP-1167 minimal-proxy pattern because it is incompatible with zkSync Era's `ContractDeployer` factoryDeps model (see `2026-05-08-clones-replacement-design.md`).
 
 ### 1.5 Non-Goals
 
@@ -139,15 +141,15 @@ The factory is upgradeable so new implementation templates and bug fixes can be 
 | :-------------------- | :----------------------- | :------------ | :------------------------------------------------------------------------------------------------- |
 | `DEFAULT_ADMIN_ROLE`  | L2 admin Safe (multisig) | Factory       | Upgrade factory; swap implementation pointers; grant/revoke `OPERATOR_ROLE`                        |
 | `OPERATOR_ROLE`       | Backend service key      | Factory       | Call `createCollection721` / `createCollection1155`                                                |
-| `OWNER_ROLE`          | Collection creator       | Each clone    | Set/lock `baseURI`/`uri`, `contractURI`, royalties; grant/revoke `MINTER_ROLE` on their collection |
-| `MINTER_ROLE`         | Creator + operator       | Each clone    | Mint items into the collection                                                                     |
+| `OWNER_ROLE`          | Collection creator       | Each collection | Set/lock `baseURI`/`uri`, `contractURI`, royalties; grant/revoke `MINTER_ROLE` on their collection |
+| `MINTER_ROLE`         | Creator + operator       | Each collection | Mint items into the collection                                                                     |
 
 ### 2.2 Role Admin Hierarchy
 
 ```mermaid
 graph LR
     DAR["DEFAULT_ADMIN_ROLE<br/>(factory)"] --> OPR["OPERATOR_ROLE<br/>(factory)"]
-    OWN["OWNER_ROLE<br/>(per-clone)"] --> MIN["MINTER_ROLE<br/>(per-clone)"]
+    OWN["OWNER_ROLE<br/>(per-collection)"] --> MIN["MINTER_ROLE<br/>(per-collection)"]
 
     style DAR fill:#ff9f43,color:#fff
     style OPR fill:#ff9f43,color:#fff
@@ -155,15 +157,15 @@ graph LR
     style MIN fill:#2ecc71,color:#fff
 ```
 
-On the factory, `DEFAULT_ADMIN_ROLE` administers `OPERATOR_ROLE`. On each clone, `OWNER_ROLE` administers `MINTER_ROLE` (so the creator can grant additional minters or revoke the operator's minting rights if they wish).
+On the factory, `DEFAULT_ADMIN_ROLE` administers `OPERATOR_ROLE`. On each collection, `OWNER_ROLE` administers `MINTER_ROLE` (so the creator can grant additional minters or revoke the operator's minting rights if they wish).
 
 ### 2.3 Operator Minter Auto-Grant
 
-When the factory creates a clone, it passes `msg.sender` (the `OPERATOR_ROLE` holder that triggered creation) to the clone's `initialize` as a guaranteed minter. The clone unconditionally grants that address `MINTER_ROLE` during initialization, alongside any addresses listed in `additionalMinters`.
+When the factory creates a collection, it passes `msg.sender` (the `OPERATOR_ROLE` holder that triggered creation) to the collection's `initialize` as a guaranteed minter. The collection unconditionally grants that address `MINTER_ROLE` during initialization, alongside any addresses listed in `additionalMinters`.
 
-This makes operator-driven minting a **contract-level invariant** rather than a backend convention: it is impossible to deploy a clone through the factory that the calling operator cannot mint into. After creation, creators retain full control via `OWNER_ROLE` and may revoke the operator's `MINTER_ROLE` at any time.
+This makes operator-driven minting a **contract-level invariant** rather than a backend convention: it is impossible to deploy a collection through the factory that the calling operator cannot mint into. After creation, creators retain full control via `OWNER_ROLE` and may revoke the operator's `MINTER_ROLE` at any time.
 
-**Operator key rotation.** When admin grants `OPERATOR_ROLE` to a new address, all *future* clones auto-grant `MINTER_ROLE` to the new operator. Existing clones are unaffected (immutable per release); creators must grant `MINTER_ROLE` to the new operator individually if they want operator-driven minting to continue on collections deployed before the rotation. The backend should track this as part of any rotation runbook.
+**Operator key rotation.** When admin grants `OPERATOR_ROLE` to a new address, all *future* collections auto-grant `MINTER_ROLE` to the new operator. Existing collections are unaffected (immutable per release); creators must grant `MINTER_ROLE` to the new operator individually if they want operator-driven minting to continue on collections deployed before the rotation. The backend should track this as part of any rotation runbook.
 
 `additionalMinters` remains available for creators who want extra minters seeded at creation (e.g. a co-creator wallet) and is orthogonal to the operator auto-grant.
 
@@ -230,8 +232,8 @@ classDiagram
         +lockRoyalties()
     }
 
-    CollectionFactory --> UserCollection721 : clones
-    CollectionFactory --> UserCollection1155 : clones
+    CollectionFactory --> UserCollection721 : deploys proxy
+    CollectionFactory --> UserCollection1155 : deploys proxy
 ```
 
 ### 3.3 Shared Types
@@ -308,9 +310,9 @@ interface ICollectionFactory {
   - Restricted to `OPERATOR_ROLE`.
   - Reverts `InvalidExternalId` if `externalId == bytes32(0)` (forces a non-trivial ID).
   - Reverts `ExternalIdAlreadyUsed` if the ID has already been used.
-  - Atomic flow: `Clones.clone(impl)` → `clone.initialize(p, msg.sender)` → `collectionByExternalId[externalId] = clone` → `emit CollectionCreated`. Passing `msg.sender` ensures the calling operator is auto-granted `MINTER_ROLE` on the new clone (see §2.3).
-  - Returns the clone address.
-- `setImplementation*` is restricted to `DEFAULT_ADMIN_ROLE` and affects future clones only. Existing clones continue to delegatecall their original implementation. Reverts `ZeroAddress` if `impl == address(0)`. Reverts `NotAContract(impl)` if `impl.code.length == 0` (defends against EOA paste / unset env var). The setter does **not** verify the implementation matches the expected token standard (e.g. a 1155 implementation pasted into `setImplementation721`); the post-upgrade `cast` checks in §9.4 are the runbook layer that catches this.
+  - Atomic flow: `abi.encodeCall(initialize, (p, msg.sender))` → `new ERC1967Proxy{salt: externalId}(impl, initData)` (deploy + delegatecall init in a single constructor frame) → `collectionByExternalId[externalId] = collection` → `emit CollectionCreated`. Passing `msg.sender` into `initData` ensures the calling operator is auto-granted `MINTER_ROLE` on the new collection (see §2.3).
+  - Returns the collection address.
+- `setImplementation*` is restricted to `DEFAULT_ADMIN_ROLE` and affects future collections only. Existing collections continue to delegatecall their original implementation. Reverts `ZeroAddress` if `impl == address(0)`. Reverts `NotAContract(impl)` if `impl.code.length == 0` (defends against EOA paste / unset env var). The setter does **not** verify the implementation matches the expected token standard (e.g. a 1155 implementation pasted into `setImplementation721`); the post-upgrade `cast` checks in §9.4 are the runbook layer that catches this.
 - `_authorizeUpgrade(address)` is `onlyRole(DEFAULT_ADMIN_ROLE)`.
 
 ### 3.5 `UserCollection721`
@@ -366,7 +368,7 @@ Mirrors §3.5 with ERC-1155 mechanics:
 - Inherits `Initializable`, `ERC1155Upgradeable`, `ERC1155SupplyUpgradeable`, `ERC1155BurnableUpgradeable`, `ERC2981Upgradeable`, `AccessControlUpgradeable`.
 - `initialize(CreateParams1155 calldata p, address operatorMinter)` — same role-grant semantics as §3.5: `OWNER_ROLE` + `MINTER_ROLE` to `owner`, `MINTER_ROLE` to `operatorMinter` (factory-passed; see §2.3), `MINTER_ROLE` to each `additionalMinters` entry, `_setRoleAdmin(MINTER_ROLE, OWNER_ROLE)`. Reverts `ZeroAddress` if `operatorMinter == address(0)`.
 - `mint(address to, uint256 id, uint256 amount, bytes data)` — `MINTER_ROLE`-gated.
-- `mintBatch(address to, uint256[] ids, uint256[] amounts, bytes data)` — single recipient, matching OZ's `_mintBatch`. Reverts `BatchTooLarge` when `ids.length > MAX_BATCH` and `LengthMismatch` when `ids.length != amounts.length`. Multi-recipient batching (one tx, N different buyers) is intentionally out of scope for v1: it has no native OZ primitive, would require a custom loop emitting N `TransferSingle` events, and the dominant fiat-paid 1:1 flow (§5.2) doesn't naturally batch (per-buyer payments clear independently). If airdrop or allowlist-drop flows become a product requirement, a `mintBatchMulti` can be added in a future implementation pointer (admin swap, future clones only) without breaking existing callers — see §11.
+- `mintBatch(address to, uint256[] ids, uint256[] amounts, bytes data)` — single recipient, matching OZ's `_mintBatch`. Reverts `BatchTooLarge` when `ids.length > MAX_BATCH` and `LengthMismatch` when `ids.length != amounts.length`. Multi-recipient batching (one tx, N different buyers) is intentionally out of scope for v1: it has no native OZ primitive, would require a custom loop emitting N `TransferSingle` events, and the dominant fiat-paid 1:1 flow (§5.2) doesn't naturally batch (per-buyer payments clear independently). If airdrop or allowlist-drop flows become a product requirement, a `mintBatchMulti` can be added in a future implementation pointer (admin swap, future collections only) without breaking existing callers — see §11.
 - `setURI(string newURI)` instead of `setBaseURI`. Subject to `metadataLocked`.
 - No `nextTokenId` (1155 IDs are caller-chosen).
 - **Bytecode-permanence invariants** apply identically to §3.5: implementation constructor calls `_disableInitializers()`; implementation contains no `SELFDESTRUCT` opcode and no `delegatecall` to caller-provided addresses. Asserted by the §8.3 unit test.
@@ -385,7 +387,7 @@ sequenceDiagram
     participant BE as Backend
     participant Pay as Fiat Processor
     participant FAC as CollectionFactory
-    participant CL as New Clone
+    participant CL as New Collection
 
     U->>App: Submit collection params
     App->>BE: createCollection request + payment authorization
@@ -396,37 +398,55 @@ sequenceDiagram
     Note over FAC: only OPERATOR_ROLE may call
     FAC->>FAC: require externalId != 0
     FAC->>FAC: require collectionByExternalId[externalId] == 0
-    FAC->>CL: Clones.clone(erc721Implementation)
-    FAC->>CL: clone.initialize(params, msg.sender)
+    FAC->>CL: new ERC1967Proxy{salt: externalId}(erc721Implementation, encodeCall(initialize, (p, msg.sender)))
+    Note over CL: emit Upgraded(impl), emit Initialized(1) inside constructor
     Note over CL: auto-grants MINTER_ROLE to operator
-    FAC->>FAC: collectionByExternalId[externalId] = clone
-    FAC-->>BE: emit CollectionCreated(creator, clone, ERC721, externalId)
-    BE->>App: Mark order completed; return clone address
+    FAC->>FAC: collectionByExternalId[externalId] = collection
+    FAC-->>BE: emit CollectionCreated(creator, collection, ERC721, externalId)
+    BE->>App: Mark order completed; return collection address
     App-->>U: Display collection address
 ```
 
 ### 4.2 Atomicity & Front-Running
 
-The clone is deployed and initialized inside the same transaction. The clone is never visible on-chain in an uninitialized state, so initialization cannot be front-run by an external observer.
+The collection is deployed and initialized inside the same transaction. The collection is never visible on-chain in an uninitialized state, so initialization cannot be front-run by an external observer. Deploy and initialize occur in a single constructor frame; there is no transient window where the proxy exists in an uninitialized state.
 
 ### 4.3 Reconciliation
 
 `externalId` is emitted as an indexed event topic and stored in `collectionByExternalId`. The backend can:
 
-- Confirm a clone exists for an order: `factory.collectionByExternalId(externalId)`.
+- Confirm a collection exists for an order: `factory.collectionByExternalId(externalId)`.
 - Detect duplicate triggers: revert on reuse prevents double-creation.
-- Recover from local state loss: re-derive `externalId = keccak256(orderId)` and look up the clone on-chain.
+- Recover from local state loss: re-derive `externalId = keccak256(orderId)` and look up the collection on-chain.
 
 ### 4.4 Gas Profile
 
 A successful `createCollection721`:
 
-- Deploys an EIP-1167 minimal proxy (~45,000 gas on EVM L1 baseline).
-- Calls `clone.initialize(...)` — variable, dominated by string storage (`baseURI`, `contractURI`).
+- On zkSync Era, per-collection deploy is dominated by `ContractDeployer.create2` plus the constructor's delegatecall init. Gas measured by `Collections.integration.t.sol` and quoted from the test output (target: < 1.5M gas on zkSync Sepolia for a typical `createCollection721`). The previous EIP-1167 baseline (~45k gas on EVM L1) is no longer applicable because we don't deploy minimal proxies.
+- Calls `initialize(...)` via the proxy constructor — variable, dominated by string storage (`baseURI`, `contractURI`).
 - Writes the `collectionByExternalId` mapping (one warm SSTORE).
 - Emits the event.
 
 On zkSync Era the absolute cost is dominated by L1 calldata fees and is well under one cent at typical L1 gas prices.
+
+### 4.5 Address Determinism
+
+Per-collection addresses are deterministic on-chain because the factory uses `new ERC1967Proxy{salt: externalId}(...)`. The address is a pure function of:
+
+- `factory` proxy address (constant per environment)
+- `externalId` (the salt; supplied by the operator)
+- `_erc721Implementation` / `_erc1155Implementation` (read once via `erc721Implementation()` / `erc1155Implementation()`; refresh after admin upgrades)
+- `initData = abi.encodeCall(initialize, (params, operatorAddress))`
+- `ERC1967Proxy` zk bytecode hash (constant per zksolc release; pin in backend artifacts at the version used at factory deploy time)
+
+Backends can pre-derive the collection address before broadcasting `createCollection*` using `zksync-ethers` `utils.create2Address`. The on-chain `_collectionByExternalId[externalId]` mapping remains the canonical registry — pre-derivation is a redundant off-chain lookup path, not a replacement.
+
+**Caveats:**
+1. Address is sensitive to every input — different `params` or different operator → different address.
+2. Operator rotation (§2.3): pre-derive using the *current* OPERATOR_ROLE holder.
+3. `_collectionByExternalId` mapping stays canonical and enforces uniqueness via `_checkExternalId`.
+4. Pin the `ERC1967Proxy` zk bytecode hash; refresh only during a coordinated zksolc bump.
 
 <div class="page-break"></div>
 
@@ -495,9 +515,9 @@ slot N+3 : __gap[47]                         (reserved for future fields)
 
 Actual slot indices are determined by the inheritance chain. Storage layout is verified **manually** against the previous release before every factory upgrade — see §9.4 for the pre-upgrade checklist.
 
-### 6.2 Clone Storage
+### 6.2 Per-Collection Storage
 
-Each clone owns its full storage independently of other clones (EIP-1167 proxies `delegatecall` logic but persist state in the proxy's own address).
+Each collection owns its full storage independently (`ERC1967Proxy` `delegatecall`s logic at the address in the EIP-1967 implementation slot but persists state in the proxy's own address).
 
 ```
 [OZ ERC721Upgradeable / ERC1155Upgradeable storage]
@@ -511,9 +531,9 @@ slot M+2 : metadataLocked (bool, byte 0) | royaltiesLocked (bool, byte 1) | 30 b
 slot M+3 : __gap[N]                          (reserved)
 ```
 
-The two lock booleans share one slot via Solidity's automatic packing (declared adjacent in source order after the `string`/`uint256` fields above). This saves one slot of `__gap`, which materially extends the headroom for future appended fields when admin swaps the implementation pointer for *future* clones.
+The two lock booleans share one slot via Solidity's automatic packing (declared adjacent in source order after the `string`/`uint256` fields above). This saves one slot of `__gap`, which materially extends the headroom for future appended fields when admin swaps the implementation pointer for *future* collections.
 
-`__gap` is a defensive reservation. Clones are immutable per release, but if admin swaps the implementation pointer for *future* clones, the gap allows the new implementation to extend storage without conflict for those future clones.
+`__gap` is a defensive reservation. Per-collection proxies are immutable per release, but if admin swaps the implementation pointer for *future* collections, the gap allows the new implementation to extend storage without conflict for those future collections.
 
 ### 6.3 Storage-Layout Discipline
 
@@ -533,7 +553,7 @@ All upgradeable contracts in this package follow the same conventions used by `s
 | Principal             | Trusted to                                                                    | Compromise impact                                                                       |
 | :-------------------- | :---------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
 | Backend operator key  | Trigger creation only after fiat payment clears; not mint maliciously         | Free collections; mass minting into any collection where operator holds `MINTER_ROLE`   |
-| Factory admin (Safe)  | Upgrade factory benignly; rotate operator role responsibly                    | Affects *future* creations only; already-deployed clones are immutable                  |
+| Factory admin (Safe)  | Upgrade factory benignly; rotate operator role responsibly                    | Affects *future* creations only; already-deployed collections are immutable             |
 | Collection creators   | Trusted by their own buyers (not by the platform)                             | Creator-side rugs (metadata / royalty) mitigated by opt-in lock flags                   |
 
 ### 7.2 Risks & Mitigations
@@ -543,7 +563,7 @@ All upgradeable contracts in this package follow the same conventions used by `s
 | 1   | Operator key compromise → free collections / mass mint            | HSM/KMS storage; role rotation via `grantRole`/`revokeRole`; off-chain monitoring on creation rate  |
 | 2   | External-ID replay (double-creation)                              | On-chain `collectionByExternalId` map; revert on reuse                                              |
 | 3   | Implementation contract initialized directly                      | `_disableInitializers()` in implementation constructor                                              |
-| 4   | Initialization front-run on a fresh clone                         | Atomic clone+init inside factory's `createCollection*`; clone never observable uninitialized        |
+| 4   | Initialization front-run on a fresh collection                    | Atomic deploy+init inside the proxy constructor; collection never observable uninitialized          |
 | 5   | Storage-layout corruption on factory upgrade                      | `__gap` reserved slots; manual pre-upgrade `forge inspect storageLayout` diff against previous release (§9.4)  |
 | 6   | Royalty rug (creator sets 100% post-mint)                         | `royaltiesLocked` opt-in; `RoyaltiesLocked` event indexed for buyer due-diligence                   |
 | 7   | Metadata rug (creator changes baseURI mid-mint)                   | `metadataLocked` opt-in; per-token URIs anchored via `ERC721URIStorage`, stable post-mint           |
@@ -552,9 +572,11 @@ All upgradeable contracts in this package follow the same conventions used by `s
 | 10  | UUPS bricking via mis-set `_authorizeUpgrade`                     | Standard OZ pattern; unit test asserts non-admin cannot upgrade                                     |
 | 11  | Operator granted to wrong address at init                         | `initialize` requires explicit `operator` arg, not `msg.sender`                                     |
 | 12  | Creator revokes operator's `MINTER_ROLE` mid-flow                 | Operator-driven mints revert cleanly; backend surfaces error to operations                          |
-| 13  | Operator key rotation leaves old clones without the new operator | Auto-grant only applies to *future* clones; runbook step requires creators to grant `MINTER_ROLE` to the new key for continued operator-driven sales on pre-rotation collections |
+| 13  | Operator key rotation leaves old collections without the new operator | Auto-grant only applies to *future* collections; runbook step requires creators to grant `MINTER_ROLE` to the new key for continued operator-driven sales on pre-rotation collections |
 | 14  | Admin sets factory implementation pointer to zero / EOA / non-contract | `setImplementation*` and `initialize` reject zero addresses (`ZeroAddress`) and addresses with no bytecode (`NotAContract`); wrong-standard pointers caught by the §9.4 post-upgrade `cast` checks |
-| 15  | Implementation contract destroyed → all clones bricked         | Implementation must contain no `SELFDESTRUCT` opcode and no `delegatecall` to caller-provided addresses (§3.5/§3.6); deployed via `CREATE` (sequential nonce), never `CREATE2`, so the address can't be re-occupied with different bytecode (§9.1); §8.2/§8.3 unit test scans the implementation runtime code for `0xff` |
+| 15a | Implementation bytecode permanence | Implementations deployed via `CREATE` only (sequential nonce, never `CREATE2`); no `SELFDESTRUCT` in own/inherited code; no `delegatecall` to caller-provided addresses; verified by opcode-walker test |
+| 15b | Per-collection proxy permanence    | Deployed via `CREATE2` with `externalId` salt using canonical OZ `ERC1967Proxy` unmodified; impls do not inherit `UUPSUpgradeable`; no `ProxyAdmin` pattern; therefore the EIP-1967 impl slot is constructor-fixed and the proxy bytecode is permanent. Verified by: (i) lockfile-pinned OZ import, (ii) opcode-walker test on `ERC1967Proxy` runtime, (iii) unit test asserting impls have no `upgradeTo*` selectors |
+| 16  | Audit posture for OZ proxy import | Audit must verify `import {ERC1967Proxy} from '@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol'` resolves to canonical OZ at the lockfile-pinned version; remappings or forks of OZ proxy contracts are out of band and would invalidate the bytecode-permanence proof |
 
 ### 7.3 Out of Scope
 
@@ -579,13 +601,13 @@ Unit tests live under `test/collections/`, one file per contract plus an integra
 - `initialize` succeeds once; second call reverts `InvalidInitialization`.
 - `initialize` reverts on zero addresses.
 - Only `OPERATOR_ROLE` can call `createCollection*`.
-- Atomic clone + initialize → resulting clone has expected name/symbol, owner, base URI, contract URI, royalties, minters.
-- After `createCollection*`, the calling operator (`msg.sender`) holds `MINTER_ROLE` on the new clone even when `additionalMinters` is empty (auto-grant invariant, §2.3).
-- After admin rotates `OPERATOR_ROLE` to a new address, a clone created by the new operator auto-grants `MINTER_ROLE` to the new key; clones created by the previous operator are unaffected.
+- Atomic deploy + initialize → resulting collection has expected name/symbol, owner, base URI, contract URI, royalties, minters.
+- After `createCollection*`, the calling operator (`msg.sender`) holds `MINTER_ROLE` on the new collection even when `additionalMinters` is empty (auto-grant invariant, §2.3).
+- After admin rotates `OPERATOR_ROLE` to a new address, a collection created by the new operator auto-grants `MINTER_ROLE` to the new key; collections created by the previous operator are unaffected.
 - `externalId == bytes32(0)` reverts `InvalidExternalId`.
 - Reused `externalId` reverts `ExternalIdAlreadyUsed`.
-- `collectionByExternalId(externalId)` returns the clone address after success.
-- `setImplementation*` callable only by admin; affects future clones only (existing clones unchanged when verified by `EXTCODEHASH` or behavior probe).
+- `collectionByExternalId(externalId)` returns the collection address after success.
+- `setImplementation*` callable only by admin; affects future collections only (existing collections unchanged when verified by `EXTCODEHASH` or behavior probe).
 - `setImplementation*` reverts `ZeroAddress` when called with `address(0)`.
 - `setImplementation*` reverts `NotAContract` when called with an address that has no bytecode (e.g. an EOA).
 - `initialize` reverts `ZeroAddress` for any zero arg and `NotAContract` for either implementation address with empty code.
@@ -661,7 +683,7 @@ Steps performed by the Forge script:
 1. Deploy `UserCollection721` implementation via `CREATE` (sequential nonce, **never** `CREATE2`). Constructor calls `_disableInitializers()`. Deploying via `CREATE` ensures that even if the Cancun `selfdestruct` semantics on zkSync Era are looser than on L1, the implementation address can never be re-occupied with different bytecode via salt collision (see §7.2 row 15).
 2. Deploy `UserCollection1155` implementation. Same constraints (CREATE-only, `_disableInitializers()`).
 3. Deploy `CollectionFactory` logic.
-4. Deploy `ERC1967Proxy` pointing at `CollectionFactory`, with init data calling `initialize(N_FACTORY_ADMIN, N_FACTORY_OPERATOR, impl721, impl1155)`.
+4. Deploy `ERC1967Proxy` pointing at `CollectionFactory`, with init data calling `initialize(N_FACTORY_ADMIN, N_FACTORY_OPERATOR, impl721, impl1155)`. Note: this `ERC1967Proxy(factoryImpl, ...)` is the *factory's own* proxy. The per-collection `ERC1967Proxy` instances are deployed by the factory itself at `createCollection*` time, not by this script.
 5. Log all four addresses (implementation 721, implementation 1155, factory logic, factory proxy) in the same `<Name>: 0x...` format that the orchestration script greps for.
 
 Steps performed by the orchestration shell script (after the Forge script broadcasts):
@@ -679,8 +701,8 @@ Steps performed by the orchestration shell script (after the Forge script broadc
 
 Subquery (`subquery/` package) extension required:
 
-- **Top-level source**: factory address. Handler on `CollectionCreated` writes a `Collection` entity and dynamically registers the new clone address as a `Transfer`-listening source (subquery dynamic-source pattern).
-- **Per-clone handlers**: `Transfer` writes `Token` and `Owner` entities scoped by collection. Lock events (`MetadataLocked`, `RoyaltiesLocked`) update the corresponding `Collection` entity flags for buyer due-diligence.
+- **Top-level source**: factory address. Handler on `CollectionCreated` writes a `Collection` entity and dynamically registers the new collection address as a `Transfer`-listening source (subquery dynamic-source pattern).
+- **Per-collection handlers**: `Transfer` writes `Token` and `Owner` entities scoped by collection. Lock events (`MetadataLocked`, `RoyaltiesLocked`) update the corresponding `Collection` entity flags for buyer due-diligence.
 
 Indexer wiring is out of this repo's contract scope but is referenced here so the implementation plan can include a tracking task for the subquery package.
 
@@ -693,13 +715,13 @@ The operator account uses the existing `BondTreasuryPaymaster` for L2 gas. The o
 | Operation                            | Procedure                                                                                                     |
 | :----------------------------------- | :------------------------------------------------------------------------------------------------------------ |
 | Upgrade factory logic                | Run pre-upgrade checklist (below), then admin calls `factory.upgradeTo(newImpl)` (UUPS)                       |
-| Ship a new ERC-721 template          | Deploy new implementation; admin calls `setImplementation721(newImpl)`; affects *future* clones only          |
-| Ship a new ERC-1155 template         | Deploy new implementation; admin calls `setImplementation1155(newImpl)`; affects *future* clones only         |
+| Ship a new ERC-721 template          | Deploy new implementation; admin calls `setImplementation721(newImpl)`; affects *future* collections only     |
+| Ship a new ERC-1155 template         | Deploy new implementation; admin calls `setImplementation1155(newImpl)`; affects *future* collections only    |
 | Rotate operator key                  | Admin calls `revokeRole(OPERATOR_ROLE, oldKey)` then `grantRole(OPERATOR_ROLE, newKey)`                       |
 | Pause new creations                  | Admin revokes all addresses from `OPERATOR_ROLE`. Existing creations unaffected; new requests revert          |
-| Rollback a faulty template           | Admin calls `setImplementation*` pointing back to the previous implementation; affects future clones only     |
+| Rollback a faulty template           | Admin calls `setImplementation*` pointing back to the previous implementation; affects future collections only|
 
-There is no rollback path for already-deployed clones — that is the explicit immutability guarantee. Bug fixes that require touching deployed clones must take the form of off-chain workarounds or new collections.
+There is no rollback path for already-deployed collections — that is the explicit immutability guarantee. Bug fixes that require touching deployed collections must take the form of off-chain workarounds or new collections.
 
 #### Pre-Upgrade Checklist (factory only)
 
@@ -712,7 +734,7 @@ CI does not currently diff storage layouts. Before any factory upgrade is broadc
    forge inspect CollectionFactoryV2 storageLayout > v2-layout.json
    # Manually compare: ensure every V1 storage slot is preserved at the same slot index AND byte
    # offset in V2 (byte offsets matter for sub-word fields packed into the same slot, e.g. the
-   # bool flags in clone storage; see §6.3). Only appended fields (consuming __gap slots) are
+   # bool flags in per-collection storage; see §6.3). Only appended fields (consuming __gap slots) are
    # acceptable.
    ```
 
@@ -748,9 +770,18 @@ CI does not currently diff storage layouts. Before any factory upgrade is broadc
    cast call $FACTORY_PROXY "hasRole(bytes32,address)(bool)" \
      $(cast keccak "DEFAULT_ADMIN_ROLE") $ADMIN --rpc-url $RPC_URL
 
-   # Stored implementation pointers unchanged (existing clones unaffected)
+   # Stored implementation pointers unchanged (existing collections unaffected)
    cast call $FACTORY_PROXY "erc721Implementation()(address)" --rpc-url $RPC_URL
    cast call $FACTORY_PROXY "erc1155Implementation()(address)" --rpc-url $RPC_URL
+   ```
+
+   Per-collection EIP-1967 implementation slot check (run after each `createCollection*` to
+   confirm the proxy points at the expected implementation):
+
+   ```bash
+   EIP1967_IMPL_SLOT=0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc
+   cast storage "$COLLECTION_ADDR" "$EIP1967_IMPL_SLOT" --rpc-url "$L2_RPC"
+   # expected: padded address of UserCollection721 (or 1155) impl
    ```
 
 Promoting any of these checks into a CI job is tracked under §11.
@@ -783,8 +814,8 @@ test/collections/
     NonUUPSImplementationMock.sol       (test-only; non-UUPS contract for proxiableUUID revert test)
 src/collections/layouts/
   CollectionFactory.v1.json             (storage-layout baseline; committed in upgrade PRs, see §9.4)
-  UserCollection721.v1.json             (clone-side baseline; updated when admin ships a new ERC-721 implementation)
-  UserCollection1155.v1.json            (clone-side baseline; updated when admin ships a new ERC-1155 implementation)
+  UserCollection721.v1.json             (collection-side baseline; updated when admin ships a new ERC-721 implementation)
+  UserCollection1155.v1.json            (collection-side baseline; updated when admin ships a new ERC-1155 implementation)
 script/
   DeployCollectionFactoryZkSync.s.sol
   UpgradeCollectionFactory.s.sol
@@ -804,10 +835,10 @@ These are not blocking for v1; recorded for future iteration.
 
 | Item                                       | Status   | Notes                                                                                                                         |
 | :----------------------------------------- | :------- | :---------------------------------------------------------------------------------------------------------------------------- |
-| Deterministic clone addresses              | Deferred | Switch to `Clones.cloneDeterministic(salt)` and add `predictAddress` view if app needs pre-creation address reservation       |
+| Deterministic collection addresses         | Done     | `new ERC1967Proxy{salt: externalId}(...)` already gives deterministic per-collection addresses; backends pre-derive via `zksync-ethers` `utils.create2Address` (see §4.5)            |
 | Voucher-style non-custodial creation       | Deferred | Adds an EIP-712 signed-voucher path for power users; can ship as a parallel `createCollectionWithVoucher` without breaking v1 |
 | Per-creator on-chain rate limit            | Deferred | Backend rate-limits today; can add `mapping(address => uint256) collectionsByCreator` and a configurable cap later            |
 | Soulbound / non-transferable variant       | Deferred | Ship as a third implementation pointer; selected via a new `createCollectionSoulbound*` factory method                        |
 | Per-token-URI mutability after lock        | Deferred | If creators ever need to update individual token URIs after locking the collection, would require a `tokenLocked` map         |
 | CI storage-layout diff job                 | Deferred — required before factory upgrade | The §9.4 baseline-JSON convention covers v1 (no upgrade has shipped yet, so there is nothing for a CI diff to gate against). Trigger to wire the CI job: opening the PR for `CollectionFactoryV2`. The job snapshots `forge inspect storageLayout` per upgradeable contract and fails on slot/offset mutations against the committed baseline JSONs. |
-| Multi-recipient ERC-1155 mint batch        | Deferred | v1 keeps OZ's single-recipient `_mintBatch` shape (see §3.6). Trigger to add `mintBatchMulti`: airdrops or allowlist drops on the product roadmap. Ships as a non-breaking addition via a new implementation pointer (admin swap, future clones only) |
+| Multi-recipient ERC-1155 mint batch        | Deferred | v1 keeps OZ's single-recipient `_mintBatch` shape (see §3.6). Trigger to add `mintBatchMulti`: airdrops or allowlist drops on the product roadmap. Ships as a non-breaking addition via a new implementation pointer (admin swap, future collections only) |
