@@ -224,7 +224,8 @@ contract PeanutV4RouterTest is Test {
         // Pretend that there were some transfers and some fee was collected in the peanut router
         testToken.mint(address(this), collectedTokens);
         testToken.transfer(address(peanutV4Router), collectedTokens);
-        payable(address(peanutV4Router)).transfer(collectedEth);
+        (bool ok,) = payable(address(peanutV4Router)).call{value: collectedEth}("");
+        require(ok, "ETH seed transfer failed");
 
         // Non-owner can't withdraw
         vm.prank(SAMPLE_ADDRESS);
