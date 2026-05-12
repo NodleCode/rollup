@@ -22,7 +22,7 @@ contract PeanutV4RouterTest is Test {
 
     function setUp() public {
         testToken = new ERC20Mock();
-        peanutV4 = new PeanutV4(address(0));
+        peanutV4 = new PeanutV4(address(0), address(0));
         squidMock = new SquidMock();
         peanutV4Router = new PeanutV4Router(address(squidMock));
     }

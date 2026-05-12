@@ -22,7 +22,7 @@ contract RecipientBoundTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        peanutV4 = new PeanutV4(address(0));
+        peanutV4 = new PeanutV4(address(0), address(0));
         testToken.mint(address(this), 1000);
         testToken.approve(address(peanutV4), 1000);
     }

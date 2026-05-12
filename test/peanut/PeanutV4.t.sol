@@ -30,7 +30,7 @@ contract PeanutV4Test is Test {
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();
-        peanutV4 = new PeanutV4(address(0));
+        peanutV4 = new PeanutV4(address(0), address(0));
 
         // Mint tokens for test accounts
         testToken.mint(address(this), 1000);
@@ -75,7 +75,7 @@ contract PeanutV4Test is Test {
     // makeDeposit function must revert.
     function testECOMaliciousDeposit() public {
         // pretent that testToken is ECO
-        PeanutV4 peanutV4ECO = new PeanutV4(address(testToken));
+        PeanutV4 peanutV4ECO = new PeanutV4(address(testToken), address(0));
 
         // approve tokens to be spent by the new peanut instance
         testToken.approve(address(peanutV4), 1000);

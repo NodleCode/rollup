@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.23;
+pragma solidity 0.8.26;
 
 // Super simple smart contract wallet that implements EIP-1271
 // Code taken from https://eips.ethereum.org/EIPS/eip-1271

@@ -1,18 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.23;
+pragma solidity 0.8.26;
 
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
-import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
-import "./PeanutV4.4.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import {IERC1155Receiver} from "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {PeanutV4} from "./PeanutV4.4.sol";
 
+/// @title  Peanut Batcher V4.4
+/// @notice Stateless helper that pulls tokens from msg.sender then forwards N deposits
+///         to a target PeanutV4 vault.
+/// @dev    Holds no persistent state — the PeanutV4 reference is taken per call so the
+///         contract can fan out to multiple vaults and so EraVM doesn't charge pubdata
+///         for storage writes on the hot path.
 contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
     using SafeERC20 for IERC20;
-
-    PeanutV4 public peanut;
 
     function _setAllowanceIfZero(address tokenAddress, address spender) internal {
         uint256 currentAllowance = IERC20(tokenAddress).allowance(address(this), spender);
@@ -21,60 +25,44 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         }
     }
 
-    /**
-     * @notice supportsInterface function
-     *     @dev ERC165 interface detection
-     *     @param _interfaceId bytes4 the interface identifier, as specified in ERC-165
-     *     @return bool true if the contract implements the interface specified in _interfaceId
-     */
-    function supportsInterface(bytes4 _interfaceId) external pure override returns (bool) {
+    function supportsInterface(bytes4 _interfaceId) external pure override(IERC165) returns (bool) {
         return _interfaceId == type(IERC165).interfaceId || _interfaceId == type(IERC721Receiver).interfaceId
             || _interfaceId == type(IERC1155Receiver).interfaceId;
     }
 
-    /**
-     * @notice Erc721 token receiver function
-     * @dev These functions are called by the token contracts when a token is sent to this contract
-     */
-    function onERC721Received(address _operator, address _from, uint256 _tokenId, bytes calldata _data)
+    /// @notice ERC-721 receiver hook. Self-only — unsolicited transfers revert (S1).
+    function onERC721Received(address _operator, address, uint256, bytes calldata)
         external
+        view
         override
         returns (bytes4)
     {
-        if (_operator == address(this)) {
-            return this.onERC721Received.selector;
-        }
+        require(_operator == address(this), "DIRECT TRANSFERS NOT ALLOWED");
+        return this.onERC721Received.selector;
     }
 
-    /**
-     * @notice Erc1155 token receiver function
-     * @dev These functions are called by the token contracts when a token is sent to this contract
-     */
-    function onERC1155Received(address _operator, address _from, uint256 _tokenId, uint256 _value, bytes calldata _data)
+    /// @notice ERC-1155 receiver hook. Self-only — unsolicited transfers revert (S1).
+    function onERC1155Received(address _operator, address, uint256, uint256, bytes calldata)
         external
+        view
         override
         returns (bytes4)
     {
-        if (_operator == address(this)) {
-            return this.onERC1155Received.selector;
-        }
+        require(_operator == address(this), "DIRECT TRANSFERS NOT ALLOWED");
+        return this.onERC1155Received.selector;
     }
 
-    /**
-     * @notice Erc1155 token receiver function
-     * @dev These functions are called by the token contracts when a set of tokens is sent to this contract
-     */
+    /// @notice ERC-1155 batch receiver hook. Self-only — unsolicited transfers revert (S1).
     function onERC1155BatchReceived(
         address _operator,
-        address _from,
-        uint256[] calldata _ids,
-        uint256[] calldata _values,
-        bytes calldata _data
-    ) external override returns (bytes4) {
-        if (_operator == address(this)) {
-            return this.onERC1155BatchReceived.selector;
-        }
-     }
+        address,
+        uint256[] calldata,
+        uint256[] calldata,
+        bytes calldata
+    ) external view override returns (bytes4) {
+        require(_operator == address(this), "DIRECT TRANSFERS NOT ALLOWED");
+        return this.onERC1155BatchReceived.selector;
+    }
 
     function batchMakeDeposit(
         address _peanutAddress,
@@ -84,7 +72,7 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         uint256 _tokenId,
         address[] calldata _pubKeys20
     ) external payable returns (uint256[] memory) {
-        peanut = PeanutV4(_peanutAddress);
+        PeanutV4 peanut = PeanutV4(_peanutAddress);
         uint256 totalAmount = _amount * _pubKeys20.length;
         uint256 etherAmount;
 
@@ -94,27 +82,25 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         } else if (_contractType == 1) {
             IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), totalAmount);
             _setAllowanceIfZero(_tokenAddress, address(peanut));
-            etherAmount = 0;
         } else if (_contractType == 2) {
-            // revert not implemented
             revert("ERC721 batch not implemented");
         } else if (_contractType == 3) {
             IERC1155(_tokenAddress).safeTransferFrom(msg.sender, address(this), _tokenId, totalAmount, "");
             IERC1155(_tokenAddress).setApprovalForAll(address(peanut), true);
-            etherAmount = 0;
         }
 
         uint256[] memory depositIndexes = new uint256[](_pubKeys20.length);
-
         for (uint256 i = 0; i < _pubKeys20.length; i++) {
-            depositIndexes[i] =
-                peanut.makeSelflessDeposit{value: etherAmount}(_tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender);
+            depositIndexes[i] = peanut.makeSelflessDeposit{value: etherAmount}(
+                _tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender
+            );
         }
-
         return depositIndexes;
     }
 
-    // Arbitrary but samesy deposit. Assumes all deposits are the same. Gas efficient
+    /// @notice Variant of batchMakeDeposit that does not allocate the return array.
+    /// @dev Assumes all deposits are the same; uses msg.value as etherAmount per call
+    ///      (only meaningful when called with a single deposit, or when sending only ETH dust).
     function batchMakeDepositNoReturn(
         address _peanutAddress,
         address _tokenAddress,
@@ -123,14 +109,14 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         uint256 _tokenId,
         address[] calldata _pubKeys20
     ) external payable {
-        peanut = PeanutV4(_peanutAddress);
-
+        PeanutV4 peanut = PeanutV4(_peanutAddress);
         for (uint256 i = 0; i < _pubKeys20.length; i++) {
-            peanut.makeSelflessDeposit{value: msg.value}(_tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender);
+            peanut.makeSelflessDeposit{value: msg.value}(
+                _tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender
+            );
         }
     }
 
-    // arbitrary deposits
     function batchMakeDepositArbitrary(
         address _peanutAddress,
         address[] memory _tokenAddresses,
@@ -142,13 +128,13 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
     ) external payable returns (uint256[] memory) {
         require(
             _tokenAddresses.length == _pubKeys20.length && _contractTypes.length == _pubKeys20.length
-                && _amounts.length == _pubKeys20.length && _tokenIds.length == _pubKeys20.length,
+                && _amounts.length == _pubKeys20.length && _tokenIds.length == _pubKeys20.length
+                && _withMFAs.length == _pubKeys20.length,
             "PARAMETERS LENGTH MISMATCH"
         );
-        peanut = PeanutV4(_peanutAddress);
+        PeanutV4 peanut = PeanutV4(_peanutAddress);
 
         uint256[] memory depositIndexes = new uint256[](_amounts.length);
-
         for (uint256 i = 0; i < _amounts.length; i++) {
             uint256 etherAmount;
 
@@ -157,14 +143,11 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
             } else if (_contractTypes[i] == 1) {
                 IERC20(_tokenAddresses[i]).safeTransferFrom(msg.sender, address(this), _amounts[i]);
                 _setAllowanceIfZero(_tokenAddresses[i], _peanutAddress);
-                etherAmount = 0;
             } else if (_contractTypes[i] == 2) {
-                // revert not implemented
                 revert("ERC721 batch not implemented");
             } else if (_contractTypes[i] == 3) {
                 IERC1155(_tokenAddresses[i]).safeTransferFrom(msg.sender, address(this), _tokenIds[i], _amounts[i], "");
                 IERC1155(_tokenAddresses[i]).setApprovalForAll(_peanutAddress, true);
-                etherAmount = 0;
             }
 
             depositIndexes[i] = peanut.makeCustomDeposit{value: etherAmount}(
@@ -173,15 +156,14 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
                 _amounts[i],
                 _tokenIds[i],
                 _pubKeys20[i],
-                msg.sender, // deposit ownerm
+                msg.sender, // deposit owner
                 _withMFAs[i],
                 address(0), // not recipient-bound
-                uint40(0), // not recipient-bound
-                false, // not a EIP-3009 deposit
-                "" // not a EIP-3009 deposit
+                uint40(0),
+                false, // not EIP-3009
+                "" // not EIP-3009
             );
         }
-
         return depositIndexes;
     }
 
@@ -192,35 +174,28 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         uint256[] calldata _amounts,
         address _pubKey20
     ) external payable returns (uint256[] memory) {
-        require(
-            _contractType == 0 || _contractType == 1,
-            "ONLY ETH AND ERC20 RAFFLES ARE SUPPORTED"
-        );
+        require(_contractType == 0 || _contractType == 1, "ONLY ETH AND ERC20 RAFFLES ARE SUPPORTED");
+        PeanutV4 peanut = PeanutV4(_peanutAddress);
 
-        peanut = PeanutV4(_peanutAddress);
         if (_contractType == 1) {
             _setAllowanceIfZero(_tokenAddress, _peanutAddress);
             uint256 totalAmount;
-            for(uint256 i = 0; i < _amounts.length; i++) {
+            for (uint256 i = 0; i < _amounts.length; i++) {
                 totalAmount += _amounts[i];
             }
             IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), totalAmount);
         }
 
         uint256[] memory depositIndexes = new uint256[](_amounts.length);
-
         for (uint256 i = 0; i < _amounts.length; i++) {
             uint256 etherAmount;
-
             if (_contractType == 0) {
                 etherAmount = _amounts[i];
             }
-
             depositIndexes[i] = peanut.makeSelflessDeposit{value: etherAmount}(
                 _tokenAddress, _contractType, _amounts[i], 0, _pubKey20, msg.sender
             );
         }
-
         return depositIndexes;
     }
 
@@ -231,35 +206,28 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         uint256[] calldata _amounts,
         address _pubKey20
     ) external payable returns (uint256[] memory) {
-        require(
-            _contractType == 0 || _contractType == 1,
-            "ONLY ETH AND ERC20 RAFFLES ARE SUPPORTED"
-        );
+        require(_contractType == 0 || _contractType == 1, "ONLY ETH AND ERC20 RAFFLES ARE SUPPORTED");
+        PeanutV4 peanut = PeanutV4(_peanutAddress);
 
-        peanut = PeanutV4(_peanutAddress);
         if (_contractType == 1) {
             _setAllowanceIfZero(_tokenAddress, _peanutAddress);
             uint256 totalAmount;
-            for(uint256 i = 0; i < _amounts.length; i++) {
+            for (uint256 i = 0; i < _amounts.length; i++) {
                 totalAmount += _amounts[i];
             }
             IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), totalAmount);
         }
 
         uint256[] memory depositIndexes = new uint256[](_amounts.length);
-
         for (uint256 i = 0; i < _amounts.length; i++) {
             uint256 etherAmount;
-
             if (_contractType == 0) {
                 etherAmount = _amounts[i];
             }
-
             depositIndexes[i] = peanut.makeSelflessMFADeposit{value: etherAmount}(
                 _tokenAddress, _contractType, _amounts[i], 0, _pubKey20, msg.sender
             );
         }
-
         return depositIndexes;
     }
 }

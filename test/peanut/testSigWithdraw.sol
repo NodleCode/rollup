@@ -24,7 +24,7 @@ contract TestSigWithdrawEther is Test {
 
     function setUp() public {
         console.log("Setting up test");
-        peanutV4 = new PeanutV4(address(0));
+        peanutV4 = new PeanutV4(address(0), address(0));
     }
 
     // test sender withdrawal of ETH

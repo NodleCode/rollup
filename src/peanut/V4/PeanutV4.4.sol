@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.23;
+pragma solidity 0.8.26;
 
 //////////////////////////////////////////////////////////////////////////////////////
 // @title   Peanut Protocol
@@ -30,16 +30,17 @@ pragma solidity ^0.8.23;
 //
 //////////////////////////////////////////////////////////////////////////////////////
 
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
-import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
-import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import {IERC1155Receiver} from "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {IL2ECO} from "../util/IL2ECO.sol";
 import {IEIP3009} from "../util/IEIP3009.sol";
 
@@ -75,7 +76,9 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
     bytes32 public constant EIP712DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
-    address public constant MFA_AUTHORIZER = 0x3B14D43Bf521EF7FD9600533bEB73B6e9178DE7C;
+    /// @notice Address authorized to issue MFA signatures gating withdrawMFADeposit calls.
+    /// @dev Configurable per deployment. Address(0) disables MFA — withdrawMFADeposit will revert.
+    address public immutable MFA_AUTHORIZER;
 
     struct EIP712Domain {
         string name;
@@ -102,13 +105,12 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
     );
     event MessageEvent(string message);
 
-    // constructor. Accepts ECO token address to prohibit ECO usage in normal
-    // ERC20 deposits.
-    // Initializes DOMAIN_SEPARATOR.
-    // Wishes you a nutty day.
-    constructor(address _ecoAddress) {
+    /// @param _ecoAddress address of the ECO token to gate from regular ERC20 deposits (use address(0) to disable).
+    /// @param _mfaAuthorizer address authorized to sign MFA withdraw approvals (use address(0) to disable MFA).
+    constructor(address _ecoAddress, address _mfaAuthorizer) {
         emit MessageEvent("Hello World, have a nutty day!");
         ecoAddress = _ecoAddress;
+        MFA_AUTHORIZER = _mfaAuthorizer;
         DOMAIN_SEPARATOR = hash(
             EIP712Domain({name: "Peanut", version: "4.4", chainId: block.chainid, verifyingContract: address(this)})
         );
@@ -153,7 +155,7 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
      *     @param _interfaceId bytes4 the interface identifier, as specified in ERC-165
      *     @return bool true if the contract implements the interface specified in _interfaceId
      */
-    function supportsInterface(bytes4 _interfaceId) external pure override returns (bool) {
+    function supportsInterface(bytes4 _interfaceId) external pure override(IERC165) returns (bool) {
         return _interfaceId == type(IERC165).interfaceId || _interfaceId == type(IERC721Receiver).interfaceId
             || _interfaceId == type(IERC1155Receiver).interfaceId;
     }
@@ -353,6 +355,11 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         address _recipient,
         uint40 _reclaimableAfter
     ) internal returns (uint256) {
+        // A deposit must have *some* withdrawal authority: either a pubKey20 whose
+        // private key can sign the withdrawal, or a recipient address that's the only
+        // one who can claim. Both being zero would make the deposit claimable by anyone.
+        require(_pubKey20 != address(0) || _recipient != address(0), "DEPOSIT MUST HAVE AUTH");
+
         // create deposit
         deposits.push(
             Deposit({
@@ -420,15 +427,11 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
             token.safeTransferFrom(msg.sender, address(this), _tokenId, _amount, "Internal transfer");
         } else if (_contractType == 4) {
             // REMINDER: User must approve this contract to spend the tokens before calling this function
-            IL2ECO token = IL2ECO(_tokenAddress);
-
-            // transfer the tokens to the contract
-            require(
-                token.transferFrom(msg.sender, address(this), _amount), "TRANSFER FAILED. CHECK ALLOWANCE & BALANCE"
-            );
-
-            // calculate the rebase invariant amount to store in the deposits array
-            _amount *= token.linearInflationMultiplier();
+            // SafeERC20 normalizes the return-bool surface for non-standard tokens (and is required
+            // for tokens that don't return on success). linearInflationMultiplier() is read via the
+            // IL2ECO interface separately.
+            IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), _amount);
+            _amount *= IL2ECO(_tokenAddress).linearInflationMultiplier();
         }
 
         return _amount;
@@ -554,49 +557,41 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         );
     }
 
-    /**
-     * @notice Erc721 token receiver function
-     * @dev These functions are called by the token contracts when a token is sent to this contract
-     */
-    function onERC721Received(address _operator, address _from, uint256 _tokenId, bytes calldata _data)
+    /// @notice ERC-721 receiver hook. Accepts tokens transferred *by this contract* (e.g. during
+    /// withdraw); rejects unsolicited direct transfers explicitly so they cannot get stuck.
+    function onERC721Received(address _operator, address, /* _from */ uint256, /* _tokenId */ bytes calldata /* _data */ )
         external
+        view
         override
         returns (bytes4)
     {
-        if (_operator == address(this)) {
-            return this.onERC721Received.selector;
-        }
+        require(_operator == address(this), "DIRECT TRANSFERS NOT ALLOWED");
+        return this.onERC721Received.selector;
     }
 
-    /**
-     * @notice Erc1155 token receiver function
-     * @dev These functions are called by the token contracts when a token is sent to this contract
-     */
-    function onERC1155Received(address _operator, address _from, uint256 _tokenId, uint256 _value, bytes calldata _data)
-        external
-        override
-        returns (bytes4)
-    {
-        if (_operator == address(this)) {
-            return this.onERC1155Received.selector;
-        }
+    /// @notice ERC-1155 receiver hook. Same self-only policy as onERC721Received.
+    function onERC1155Received(
+        address _operator,
+        address, /* _from */
+        uint256, /* _tokenId */
+        uint256, /* _value */
+        bytes calldata /* _data */
+    ) external view override returns (bytes4) {
+        require(_operator == address(this), "DIRECT TRANSFERS NOT ALLOWED");
+        return this.onERC1155Received.selector;
     }
 
-    /**
-     * @notice Erc1155 token receiver function
-     * @dev These functions are called by the token contracts when a set of tokens is sent to this contract
-     */
+    /// @notice ERC-1155 batch receiver hook. Same self-only policy as onERC721Received.
     function onERC1155BatchReceived(
         address _operator,
-        address _from,
-        uint256[] calldata _ids,
-        uint256[] calldata _values,
-        bytes calldata _data
-    ) external override returns (bytes4) {
-        if (_operator == address(this)) {
-            return this.onERC1155BatchReceived.selector;
-        }
-     }
+        address, /* _from */
+        uint256[] calldata, /* _ids */
+        uint256[] calldata, /* _values */
+        bytes calldata /* _data */
+    ) external view override returns (bytes4) {
+        require(_operator == address(this), "DIRECT TRANSFERS NOT ALLOWED");
+        return this.onERC1155BatchReceived.selector;
+    }
 
     /**
      * @notice Function to withdraw tokens. Can be called by anyone.
@@ -742,9 +737,8 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
             token.safeTransferFrom(address(this), _recipientAddress, _deposit.tokenId, _deposit.amount, "");
         } else if (_deposit.contractType == 4) {
             /// handle rebasing erc20 deposits on l2
-            IL2ECO token = IL2ECO(_deposit.tokenAddress);
-            uint256 scaledAmount = _deposit.amount / token.linearInflationMultiplier();
-            require(token.transfer(_deposit.senderAddress, scaledAmount), "TRANSFER FAILED");
+            uint256 scaledAmount = _deposit.amount / IL2ECO(_deposit.tokenAddress).linearInflationMultiplier();
+            IERC20(_deposit.tokenAddress).safeTransfer(_recipientAddress, scaledAmount);
         }
 
         return true;
@@ -792,9 +786,8 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
             token.safeTransferFrom(address(this), _deposit.senderAddress, _deposit.tokenId, _deposit.amount, "");
         } else if (_deposit.contractType == 4) {
             /// handle rebasing erc20 deposits on l2
-            IL2ECO token = IL2ECO(_deposit.tokenAddress);
-            uint256 scaledAmount = _deposit.amount / token.linearInflationMultiplier();
-            require(token.transfer(_deposit.senderAddress, scaledAmount), "TRANSFER FAILED");
+            uint256 scaledAmount = _deposit.amount / IL2ECO(_deposit.tokenAddress).linearInflationMultiplier();
+            IERC20(_deposit.tokenAddress).safeTransfer(_deposit.senderAddress, scaledAmount);
         }
 
         return true;

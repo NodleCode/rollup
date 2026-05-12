@@ -11,8 +11,12 @@ contract PeanutV4MFATest is Test {
     address public constant SAMPLE_ADDRESS = address(0x8fd379246834eac74B8419FfdA202CF8051F7A03);
     bytes32 public constant SAMPLE_PRIVKEY = 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
 
+    // Upstream Squirrel-Labs MFA authorizer address. The hardcoded `authorization` blob below
+    // was signed by the corresponding offline private key — keep both together.
+    address public constant LEGACY_MFA_AUTHORIZER = 0x3B14D43Bf521EF7FD9600533bEB73B6e9178DE7C;
+
     function setUp() public {
-        peanutV4 = new PeanutV4(address(0));
+        peanutV4 = new PeanutV4(address(0), LEGACY_MFA_AUTHORIZER);
     }
 
     function testMFADeposit() public {

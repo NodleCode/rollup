@@ -4,7 +4,7 @@
  * Copyright (c) 2018-2020 CENTRE SECZ
  */
 
-pragma solidity ^0.8.23;
+pragma solidity 0.8.26;
 
 contract EIP712Domain {
     /**

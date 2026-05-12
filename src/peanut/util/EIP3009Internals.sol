@@ -4,7 +4,7 @@
  * Copyright (c) 2018-2020 CENTRE SECZ
  */
 
-pragma solidity ^0.8.23;
+pragma solidity 0.8.26;
 
 import {EIP712Domain} from "./EIP712Domain.sol";
 import {EIP712} from "./EIP712.sol";

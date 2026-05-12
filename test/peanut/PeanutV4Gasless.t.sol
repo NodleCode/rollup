@@ -27,7 +27,7 @@ contract PeanutV4GaslessTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        peanutV4 = new PeanutV4(address(0));
+        peanutV4 = new PeanutV4(address(0), address(0));
     }
 
     function testMakeDepostERC20WithAuthorization() public {
