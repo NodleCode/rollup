@@ -3,8 +3,8 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 import "../../src/peanut/V4/PeanutV4.4.sol";
-import "../../src/peanut/util/ERC20Mock.sol";
-import "../../src/peanut/util/SampleSCW.sol";
+import "./mocks/ERC20Mock.sol";
+import "./mocks/SampleSCW.sol";
 
 contract PeanutV4GaslessTest is Test {
     PeanutV4 public peanutV4;

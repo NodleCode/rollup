@@ -8,7 +8,7 @@ pragma solidity 0.8.26;
 
 import {EIP712Domain} from "./EIP712Domain.sol";
 import {EIP712} from "./EIP712.sol";
-import {IEIP3009} from "./IEIP3009.sol";
+import {IEIP3009} from "../../../src/peanut/util/IEIP3009.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 abstract contract EIP3009Internals is EIP712Domain, ERC20 {

@@ -7,9 +7,9 @@ pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
 import "../../src/peanut/V4/PeanutV4.4.sol";
-import "../../src/peanut/util/ERC20Mock.sol";
-import "../../src/peanut/util/ERC721Mock.sol";
-import "../../src/peanut/util/ERC1155Mock.sol";
+import "./mocks/ERC20Mock.sol";
+import "./mocks/ERC721Mock.sol";
+import "./mocks/ERC1155Mock.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 

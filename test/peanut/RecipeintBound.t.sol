@@ -3,9 +3,9 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 import "../../src/peanut/V4/PeanutV4.4.sol";
-import "../../src/peanut/util/ERC20Mock.sol";
-import "../../src/peanut/util/ERC721Mock.sol";
-import "../../src/peanut/util/ERC1155Mock.sol";
+import "./mocks/ERC20Mock.sol";
+import "./mocks/ERC721Mock.sol";
+import "./mocks/ERC1155Mock.sol";
 
 contract RecipientBoundTest is Test {
     PeanutV4 public peanutV4;

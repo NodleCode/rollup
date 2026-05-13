@@ -3,8 +3,8 @@ pragma solidity ^0.8.23;
 
 import "forge-std/Test.sol";
 import "../../src/peanut/V4/PeanutRouter.sol";
-import "../../src/peanut/util/SquidMock.sol";
-import "../../src/peanut/util/ERC20Mock.sol";
+import "./mocks/SquidMock.sol";
+import "./mocks/ERC20Mock.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
