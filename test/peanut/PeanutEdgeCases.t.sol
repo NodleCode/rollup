@@ -284,6 +284,41 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         batcher.batchMakeDepositArbitrary(address(peanut), tokens, types, amounts, ids, pks, mfa);
     }
 
+    // batchMakeDepositNoReturn — ETH path must require exact total, non-ETH path must reject msg.value.
+    // Both rules were added during PR review (upstream forwarded msg.value per iteration, which
+    // reverts on iteration 2 when length > 1).
+
+    function test_BatchNoReturnEth_HappyPath() public {
+        address[] memory pubKeys = new address[](3);
+        for (uint256 i = 0; i < 3; i++) pubKeys[i] = LINK_PUBKEY20;
+
+        batcher.batchMakeDepositNoReturn{value: 3 ether}(
+            address(peanut), address(0), 0, 1 ether, 0, pubKeys
+        );
+        assertEq(peanut.getDepositCount(), 3);
+    }
+
+    function test_RevertWhen_BatchNoReturnEthAmountMismatch() public {
+        address[] memory pubKeys = new address[](3);
+        for (uint256 i = 0; i < 3; i++) pubKeys[i] = LINK_PUBKEY20;
+        vm.expectRevert("INVALID TOTAL ETHER SENT");
+        batcher.batchMakeDepositNoReturn{value: 1 ether}(
+            address(peanut), address(0), 0, 1 ether, 0, pubKeys
+        );
+    }
+
+    function test_RevertWhen_BatchNoReturnEthSentForErc20() public {
+        // ERC-20 path must reject msg.value — would otherwise strand dust in the vault.
+        erc20.mint(address(this), 1000);
+        erc20.approve(address(batcher), 1000);
+        address[] memory pubKeys = new address[](2);
+        for (uint256 i = 0; i < 2; i++) pubKeys[i] = LINK_PUBKEY20;
+        vm.expectRevert("ETH NOT ACCEPTED FOR NON-ETH DEPOSIT");
+        batcher.batchMakeDepositNoReturn{value: 1 wei}(
+            address(peanut), address(erc20), 1, 100, 0, pubKeys
+        );
+    }
+
     function test_RevertWhen_BatchRaffleErc721NotSupported() public {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = 1;

@@ -9,6 +9,7 @@ import {BasePaymaster} from "../../src/paymasters/BasePaymaster.sol";
 import {QuotaControl} from "../../src/QuotaControl.sol";
 import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
 import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymasterFlow.sol";
+import {SampleWallet} from "../peanut/mocks/SampleSCW.sol";
 
 /// @dev Bootloader address — paymaster validation must be called from this address.
 address constant BOOTLOADER = address(uint160(0x8001));
@@ -414,5 +415,35 @@ contract EnvelopeApprovalPaymasterTest is Test {
     function test_nonWithdrawerCannotDrain() public {
         vm.expectRevert();
         paymaster.withdraw(address(0x77), 1);
+    }
+
+    // ── EIP-1271 contract signer support ───────────────────────────────────
+    // The paymaster verifies grants via SignatureChecker.isValidSignatureNow so a
+    // smart-contract account (e.g. a multisig) can sign as operator.
+
+    function test_acceptsEip1271ContractSigner() public {
+        SampleWallet scw = new SampleWallet();
+        // SampleWallet.isValidSignature returns the magic value iff bytes32(sig) == hash.
+        // So a "valid signature" for this SCW is just the digest bytes themselves.
+
+        // Deploy a fresh paymaster whose operatorSigner is the SCW.
+        EnvelopeApprovalPaymaster scwPaymaster = new EnvelopeApprovalPaymaster(
+            admin, withdrawer, address(scw), envelope, MAX_ETH_PER_TX, QUOTA, PERIOD
+        );
+        vm.deal(address(scwPaymaster), 1 ether);
+
+        bytes32 nonce = keccak256("scw-grant");
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes32 structHash = keccak256(abi.encode(scwPaymaster.GRANT_TYPEHASH(), user, deadline, nonce));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", scwPaymaster.DOMAIN_SEPARATOR(), structHash));
+        bytes memory sig = abi.encodePacked(digest); // SampleWallet's "valid signature" semantics
+
+        bytes memory pmInput = _buildPaymasterInput(deadline, nonce, sig);
+
+        vm.prank(BOOTLOADER);
+        scwPaymaster.validateAndPayForPaymasterTransaction(
+            bytes32(0), bytes32(0), _txTo(sponsoredToken, _approveCall(envelope, 1), pmInput, 100_000, 1 gwei)
+        );
+        assertTrue(scwPaymaster.isNonceUsed(nonce), "EIP-1271 path should mark nonce used");
     }
 }

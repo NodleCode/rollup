@@ -110,8 +110,21 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         address[] calldata _pubKeys20
     ) external payable {
         PeanutV4 peanut = PeanutV4(_peanutAddress);
+        // For ETH (contractType == 0), the batcher only receives msg.value once; forwarding
+        // {value: msg.value} per loop iteration would revert on iteration 2 with insufficient
+        // balance. Either require msg.value == _amount * N and forward _amount per call, or
+        // for non-ETH paths require msg.value == 0 (no stuck dust in the vault).
+        uint256 etherPerCall;
+        if (_contractType == 0) {
+            require(msg.value == _amount * _pubKeys20.length, "INVALID TOTAL ETHER SENT");
+            etherPerCall = _amount;
+        } else {
+            require(msg.value == 0, "ETH NOT ACCEPTED FOR NON-ETH DEPOSIT");
+            etherPerCall = 0;
+        }
+
         for (uint256 i = 0; i < _pubKeys20.length; i++) {
-            peanut.makeSelflessDeposit{value: msg.value}(
+            peanut.makeSelflessDeposit{value: etherPerCall}(
                 _tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender
             );
         }

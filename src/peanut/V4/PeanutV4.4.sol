@@ -94,7 +94,7 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
     }
 
     Deposit[] public deposits; // array of deposits
-    address public ecoAddress; // address of the ECO token
+    address public immutable ecoAddress; // address of the ECO token (set at deploy, never changes)
 
     // events
     event DepositEvent(

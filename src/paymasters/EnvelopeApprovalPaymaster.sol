@@ -7,7 +7,7 @@ import {
 } from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymaster.sol";
 import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymasterFlow.sol";
 import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {BasePaymaster, BOOTLOADER_FORMAL_ADDRESS} from "./BasePaymaster.sol";
 import {QuotaControl} from "../QuotaControl.sol";
 
@@ -143,7 +143,11 @@ contract EnvelopeApprovalPaymaster is BasePaymaster, QuotaControl {
 
         bytes32 structHash = keccak256(abi.encode(GRANT_TYPEHASH, user, deadline, nonce));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
-        if (ECDSA.recover(digest, signature) != operatorSigner) revert InvalidGrantSignature();
+        // SignatureChecker supports both EOA ECDSA signatures and EIP-1271 contract signers,
+        // so operatorSigner can be a multisig / smart account in production.
+        if (!SignatureChecker.isValidSignatureNow(operatorSigner, digest, signature)) {
+            revert InvalidGrantSignature();
+        }
 
         isNonceUsed[nonce] = true;
     }
