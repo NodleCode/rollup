@@ -42,7 +42,7 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         bytes32, /*_txHash*/
         bytes32, /*_suggestedSignedHash*/
         Transaction calldata transaction
-    ) external payable returns (bytes4 magic, bytes memory context) {
+    ) external payable virtual returns (bytes4 magic, bytes memory context) {
         _mustBeBootloader();
 
         // By default we consider the transaction as accepted.

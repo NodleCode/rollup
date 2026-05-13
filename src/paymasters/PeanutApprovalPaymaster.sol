@@ -3,18 +3,13 @@ pragma solidity 0.8.26;
 
 import {
     IPaymaster,
-    ExecutionResult,
     PAYMASTER_VALIDATION_SUCCESS_MAGIC
 } from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymaster.sol";
 import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymasterFlow.sol";
 import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {BasePaymaster, BOOTLOADER_FORMAL_ADDRESS} from "./BasePaymaster.sol";
 import {QuotaControl} from "../QuotaControl.sol";
-
-/// @dev Bootloader address (duplicated from era-contracts/system-contracts/Constants.sol —
-/// the canonical file uses a template variable that can't be imported).
-uint160 constant SYSTEM_CONTRACTS_OFFSET = 0x8000;
-address payable constant BOOTLOADER_FORMAL_ADDRESS = payable(address(SYSTEM_CONTRACTS_OFFSET + 0x01));
 
 /// @title  Peanut Approval Paymaster
 /// @notice Sponsors gas for a *narrow* set of operations: ERC-20 / ERC-721 `approve(peanut, ...)`
@@ -25,12 +20,15 @@ address payable constant BOOTLOADER_FORMAL_ADDRESS = payable(address(SYSTEM_CONT
 ///           - inner selector is approve(address,uint256) or setApprovalForAll(address,bool)
 ///           - the spender/operator argument == peanutVault
 ///           - the user holds an unexpired EIP-712 grant signed by `operatorSigner`
-///           - daily quota (in wei) hasn't been exhausted
+///           - daily wei quota hasn't been exhausted (QuotaControl)
+///         Overrides `validateAndPayForPaymasterTransaction` directly (instead of the
+///         `_validateAndPayGeneralFlow` hook) because validation requires the full
+///         `Transaction` calldata — the hook signature hides `transaction.data` and
+///         `transaction.paymasterInput`.
 ///         Storage writes in validation (nonce, quota counters) are permitted by EraVM's
 ///         paymaster-validation rules.
-contract PeanutApprovalPaymaster is IPaymaster, QuotaControl {
+contract PeanutApprovalPaymaster is BasePaymaster, QuotaControl {
     bytes32 public constant ALLOWLIST_ADMIN_ROLE = keccak256("ALLOWLIST_ADMIN_ROLE");
-    bytes32 public constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
 
     bytes4 internal constant APPROVE_SEL = 0x095ea7b3; // approve(address,uint256) — ERC-20 + ERC-721
     bytes4 internal constant SET_APPROVAL_FOR_ALL_SEL = 0xa22cb465; // setApprovalForAll(address,bool) — ERC-721 + ERC-1155
@@ -51,11 +49,8 @@ contract PeanutApprovalPaymaster is IPaymaster, QuotaControl {
     event TokensRevoked(address[] tokens);
     event OperatorSignerUpdated(address indexed previousSigner, address indexed newSigner);
     event ApprovalSponsored(address indexed user, address indexed token, bytes32 indexed nonce, uint256 gasPaid);
-    event Withdrawn(address indexed to, uint256 amount);
 
-    error OnlyBootloader();
     error WrongFlow();
-    error InvalidPaymasterInput();
     error GrantExpired();
     error NonceAlreadyUsed();
     error InvalidGrantSignature();
@@ -63,8 +58,8 @@ contract PeanutApprovalPaymaster is IPaymaster, QuotaControl {
     error UnsupportedSelector();
     error SpenderNotPeanut();
     error InsufficientPaymasterBalance();
-    error WithdrawFailed();
     error ZeroAddress();
+    error Unused();
 
     /// @param admin            DEFAULT_ADMIN_ROLE + ALLOWLIST_ADMIN_ROLE
     /// @param withdrawer       WITHDRAWER_ROLE
@@ -79,10 +74,9 @@ contract PeanutApprovalPaymaster is IPaymaster, QuotaControl {
         address peanut_,
         uint256 initialQuota,
         uint256 initialPeriod
-    ) QuotaControl(initialQuota, initialPeriod, admin) {
+    ) BasePaymaster(admin, withdrawer) QuotaControl(initialQuota, initialPeriod, admin) {
         if (admin == address(0) || peanut_ == address(0) || operatorSigner_ == address(0)) revert ZeroAddress();
         _grantRole(ALLOWLIST_ADMIN_ROLE, admin);
-        _grantRole(WITHDRAWER_ROLE, withdrawer);
 
         peanutVault = peanut_;
         operatorSigner = operatorSigner_;
@@ -101,12 +95,15 @@ contract PeanutApprovalPaymaster is IPaymaster, QuotaControl {
     function validateAndPayForPaymasterTransaction(bytes32, bytes32, Transaction calldata transaction)
         external
         payable
-        returns (bytes4 magic, bytes memory context)
+        override
+        returns (bytes4 magic, bytes memory)
     {
-        if (msg.sender != BOOTLOADER_FORMAL_ADDRESS) revert OnlyBootloader();
+        _mustBeBootloader();
 
         // 1. Flow selector — only general supported.
-        if (transaction.paymasterInput.length < 4) revert InvalidPaymasterInput();
+        if (transaction.paymasterInput.length < 4) {
+            revert InvalidPaymasterInput("paymasterInput must contain at least a flow selector");
+        }
         bytes4 flow = bytes4(transaction.paymasterInput[0:4]);
         if (flow != IPaymasterFlow.general.selector) revert WrongFlow();
 
@@ -154,19 +151,20 @@ contract PeanutApprovalPaymaster is IPaymaster, QuotaControl {
         magic = PAYMASTER_VALIDATION_SUCCESS_MAGIC;
     }
 
-    function postTransaction(
-        bytes calldata, /*_context*/
-        Transaction calldata, /*_transaction*/
-        bytes32, /*_txHash*/
-        bytes32, /*_suggestedSignedHash*/
-        ExecutionResult, /*_txResult*/
-        uint256 /*_maxRefundedGas*/
-    ) external payable {
-        if (msg.sender != BOOTLOADER_FORMAL_ADDRESS) revert OnlyBootloader();
-        // Refunds are not supported.
+    /// @dev Unused — full validation lives in `validateAndPayForPaymasterTransaction`.
+    /// Required because BasePaymaster declares this hook abstract.
+    function _validateAndPayGeneralFlow(address, address, uint256) internal pure override {
+        revert Unused();
     }
 
-    receive() external payable {}
+    /// @dev Unused — only the `general` flow is supported.
+    function _validateAndPayApprovalBasedFlow(address, address, address, uint256, bytes memory, uint256)
+        internal
+        pure
+        override
+    {
+        revert PaymasterFlowNotSupported();
+    }
 
     // ── Admin ──────────────────────────────────────────────────────────────
 
@@ -188,12 +186,5 @@ contract PeanutApprovalPaymaster is IPaymaster, QuotaControl {
         if (newSigner == address(0)) revert ZeroAddress();
         emit OperatorSignerUpdated(operatorSigner, newSigner);
         operatorSigner = newSigner;
-    }
-
-    /// @notice Withdraw native ETH from the paymaster.
-    function withdraw(address to, uint256 amount) external onlyRole(WITHDRAWER_ROLE) {
-        emit Withdrawn(to, amount);
-        (bool ok,) = payable(to).call{value: amount}("");
-        if (!ok) revert WithdrawFailed();
     }
 }

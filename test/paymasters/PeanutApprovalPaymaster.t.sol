@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {AccessControlUtils} from "../__helpers__/AccessControlUtils.sol";
 import {PeanutApprovalPaymaster} from "../../src/paymasters/PeanutApprovalPaymaster.sol";
+import {BasePaymaster} from "../../src/paymasters/BasePaymaster.sol";
 import {QuotaControl} from "../../src/QuotaControl.sol";
 import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
 import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymasterFlow.sol";
@@ -151,7 +152,7 @@ contract PeanutApprovalPaymasterTest is Test {
         bytes memory pmInput = _buildPaymasterInput(deadline, nonce, sig);
         Transaction memory tx_ = _txTo(allowedToken, _approveCall(peanut, 1), pmInput, 100_000, 1 gwei);
 
-        vm.expectRevert(PeanutApprovalPaymaster.OnlyBootloader.selector);
+        vm.expectRevert(BasePaymaster.AccessRestrictedToBootloader.selector);
         paymaster.validateAndPayForPaymasterTransaction(bytes32(0), bytes32(0), tx_);
     }
 
