@@ -1,0 +1,10 @@
+# Vendored Peanut Protocol V4.4 sources — kept close to upstream
+# (peanutprotocol/peanut-contracts@main) for diff parity. Upstream uses
+# require-string style; converting to custom errors would diverge
+# significantly without any security/correctness benefit.
+#
+# Our own code (EnvelopeApprovalPaymaster, anything authored in this repo)
+# is NOT in this list and remains lint-clean.
+src/peanut/V4/PeanutV4.4.sol
+src/peanut/V4/PeanutBatcherV4.4.sol
+src/peanut/V4/PeanutRouter.sol
