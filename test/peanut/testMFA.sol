@@ -47,7 +47,7 @@ contract PeanutV4MFATest is Test {
         vm.expectRevert("REQUIRES AUTHORIZATION");
         peanutV4.withdrawDeposit(depositIndex, address(this), signature);
 
-        // Withdrawing with incorrect authorizattion signature
+        // Withdrawing with incorrect authorization signature
         vm.expectRevert("WRONG MFA SIGNATURE");
         peanutV4.withdrawMFADeposit(depositIndex, address(this), signature, signature);
 

@@ -74,7 +74,7 @@ contract PeanutV4Test is Test {
     // If we attempt to deposit ECO tokens as pure ERC20s (i.e. with _contractType = 1),
     // makeDeposit function must revert.
     function testECOMaliciousDeposit() public {
-        // pretent that testToken is ECO
+        // pretend that testToken is ECO
         PeanutV4 peanutV4ECO = new PeanutV4(address(testToken), address(0));
 
         // approve tokens to be spent by the new peanut instance

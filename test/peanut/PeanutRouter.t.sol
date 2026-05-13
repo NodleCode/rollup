@@ -64,7 +64,7 @@ contract PeanutV4RouterTest is Test {
 
     function testWithdrawERC20AndBridge(
         uint128 amountDeposited, // uint128 to prevent total supply overflow
-        uint96 requiredSquidFee, // uint96 to not run out of the default fuceted ETH amount
+        uint96 requiredSquidFee, // uint96 to not run out of the default faucet ETH amount
         uint256 requiredPeanutFee
     ) public {
         vm.assume(requiredPeanutFee < amountDeposited);

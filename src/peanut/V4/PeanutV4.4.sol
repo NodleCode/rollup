@@ -291,10 +291,10 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
      * @param _tokenId uint256 of the id of the token being sent if erc721 or erc1155
      * @param _pubKey20 last 20 bytes of the public key of the deposit signer
      * @param _onBehalfOf who will be able to reclaim the link if the private key is lost
-     * @param _withMFA whether an external auhorisation is required for withdrawal
+     * @param _withMFA whether an external authorisation is required for withdrawal
      * @param _recipient if not 0x00.00, only _recipient will be able to withdraw
      * @param _reclaimableAfter if _recipient is set, the sender will be able to reclaim only after this timestamp
-     * @param _isGasless3009 if true, the deposit will be made via eip-3009, see makeDepositWithAuthorization funfction for more info
+     * @param _isGasless3009 if true, the deposit will be made via eip-3009, see makeDepositWithAuthorization function for more info
      * @param _args3009 all the arguments for an EIP-3009 deposit, used if _isGasless3009 is true. Encoded with abi.encode, this is: address (from), bytes32 (_nonce), uint256 (_validAfter), uint256 (_validBefore), uint8 (_v), bytes32 (_r), bytes32 (_s). Unfortunately we have to encode it this way, because else we get a stack too deep error (EVM supports max 16 variables on the stack). 
      * @return uint256 index of the deposit
     */
@@ -548,7 +548,7 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
             _tokenAddress,
             1, // contractType is always 1 here (ERC20)
             _amount,
-            0, // it's alwasy ERC20, so tokenId doesn't matter
+            0, // it's always ERC20, so tokenId doesn't matter
             _pubKey20,
             _from,
             false, // no MFA

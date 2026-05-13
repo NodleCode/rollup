@@ -15,7 +15,7 @@ contract SquidMock {
 
     function superPowerfulBridge(address bridgedToken, uint256 bridgedAmount) public payable {
         if (bridgedToken == address(0)) {
-            require(msg.value == bridgedAmount, "msg.value DOESNT MATCH bridgedAmount");
+            require(msg.value == bridgedAmount, "msg.value DOES NOT MATCH bridgedAmount");
         } else {
             IERC20(bridgedToken).safeTransferFrom(msg.sender, address(this), bridgedAmount);
         }

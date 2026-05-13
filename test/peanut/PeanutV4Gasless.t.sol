@@ -30,7 +30,7 @@ contract PeanutV4GaslessTest is Test {
         peanutV4 = new PeanutV4(address(0), address(0));
     }
 
-    function testMakeDepostERC20WithAuthorization() public {
+    function testMakeDepositERC20WithAuthorization() public {
         testToken.mint(SAMPLE_ADDRESS, 1000);
 
         uint256 amount = 1000;
@@ -115,7 +115,7 @@ contract PeanutV4GaslessTest is Test {
         _withdrawDepositSenderGaslessEOA(depositIndex2, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, "DEPOSIT ALREADY WITHDRAWN");
 
         // Correct depositor address, but wrong private key.
-        // Private key and the provied address don't match.
+        // Private key and the provided address don't match.
         _withdrawDepositSenderGaslessEOA(depositIndex1, SAMPLE_ADDRESS, SAMPLE_PRIVKEY_2, "INVALID SIGNATURE");
 
         // Provided address and private key do match, but they are wrong.
@@ -132,7 +132,7 @@ contract PeanutV4GaslessTest is Test {
         _withdrawDepositSenderGaslessEOA(depositIndex3, SAMPLE_ADDRESS_2, SAMPLE_PRIVKEY_2, "");
     }
 
-    // Test that smart contract wallets are able to withdraw gsalessly too
+    // Test that smart contract wallets are able to withdraw gaslessly too
     function testWithdrawDepositSenderGaslessSCW() public {
         // Make a deposit
         SampleWallet scwallet = new SampleWallet();
