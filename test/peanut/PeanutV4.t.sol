@@ -67,7 +67,7 @@ contract PeanutV4Test is Test {
         vm.expectRevert("NOT THE SENDER");
         peanutV4.withdrawDepositSender(depositIndex);
 
-        vm.prank(SAMPLE_ADDRESS); // Now we talkin'!
+        vm.prank(SAMPLE_ADDRESS); // selfless deposit's owner can reclaim
         peanutV4.withdrawDepositSender(depositIndex);
     }
 

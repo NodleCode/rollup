@@ -75,8 +75,8 @@ contract RecipientBoundTest is Test {
         vm.expectRevert("TOO EARLY TO RECLAIM");
         peanutV4.withdrawDepositSender(depositIndex);
 
-        vm.warp(block.timestamp + 11); // wooooooosh! Controlling the time :)
-        peanutV4.withdrawDepositSender(depositIndex); // reclaim! 
+        vm.warp(block.timestamp + 11); // advance past reclaimableAfter
+        peanutV4.withdrawDepositSender(depositIndex);
         require(testToken.balanceOf(address(this)) == 1000, "WAS NOT REFUNDED!");
    }
 }

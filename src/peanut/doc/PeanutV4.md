@@ -168,7 +168,7 @@ Note that `getAllDeposits` / `getAllDepositsForAddress` scale linearly with arra
 
 | Suite | File |
 |---|---|
-| Vendored upstream tests | `test/peanut/PeanutV4.t.sol`, `testDeposit.sol`, `testSigWithdraw.sol`, `testSenderWithdraw.sol`, `testMFA.sol`, `RecipientBound.t.sol`, `testIntegration.sol`, `PeanutV4Gasless.t.sol` |
+| Vendored upstream tests | `test/peanut/PeanutV4.t.sol`, `Deposit.t.sol`, `SigWithdraw.t.sol`, `SenderWithdraw.t.sol`, `MFA.t.sol`, `RecipientBound.t.sol`, `Integration.t.sol`, `PeanutV4Gasless.t.sol` |
 | Hardening (S1–S4 + T1–T4) | `test/peanut/PeanutHardening.t.sol` |
 
 71 tests pass.
