@@ -11,15 +11,20 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {BasePaymaster, BOOTLOADER_FORMAL_ADDRESS} from "./BasePaymaster.sol";
 import {QuotaControl} from "../QuotaControl.sol";
 
-/// @title  Peanut Approval Paymaster
-/// @notice Sponsors gas for a *narrow* set of operations: ERC-20 / ERC-721 `approve(peanut, ...)`
-///         and ERC-721 / ERC-1155 `setApprovalForAll(peanut, ...)` — the txs needed to grant
-///         PeanutV4 access to a user's tokens before the operator submits `makeCustomDeposit`.
-/// @dev    Validation enforced per call:
-///           - tx.to is on the per-token allowlist
+/// @title  Envelope Approval Paymaster
+/// @notice Sponsors gas for a *narrow* set of operations: ERC-20 / ERC-721 `approve(envelope, ...)`
+///         and ERC-721 / ERC-1155 `setApprovalForAll(envelope, ...)` — the txs needed to grant
+///         the Envelope vault access to a user's tokens before the operator submits
+///         `makeCustomDeposit`.
+/// @dev    Authorization is fully operator-driven: each sponsored tx must carry a fresh
+///         EIP-712 grant signed by `operatorSigner`. No per-token allowlist — the strict
+///         operator-grant gate + per-tx ETH cap + global daily quota together bound the
+///         worst-case drain even under operator-key compromise.
+///         Validation gates:
+///           - tx.from holds an unexpired single-use EIP-712 grant signed by operatorSigner
 ///           - inner selector is approve(address,uint256) or setApprovalForAll(address,bool)
-///           - the spender/operator argument == peanutVault
-///           - the user holds an unexpired EIP-712 grant signed by `operatorSigner`
+///           - the spender/operator argument == envelopeVault
+///           - requiredETH (= gasLimit * maxFeePerGas) ≤ maxEthPerTx
 ///           - daily wei quota hasn't been exhausted (QuotaControl)
 ///         Overrides `validateAndPayForPaymasterTransaction` directly (instead of the
 ///         `_validateAndPayGeneralFlow` hook) because validation requires the full
@@ -27,26 +32,24 @@ import {QuotaControl} from "../QuotaControl.sol";
 ///         `transaction.paymasterInput`.
 ///         Storage writes in validation (nonce, quota counters) are permitted by EraVM's
 ///         paymaster-validation rules.
-contract PeanutApprovalPaymaster is BasePaymaster, QuotaControl {
-    bytes32 public constant ALLOWLIST_ADMIN_ROLE = keccak256("ALLOWLIST_ADMIN_ROLE");
-
+contract EnvelopeApprovalPaymaster is BasePaymaster, QuotaControl {
     bytes4 internal constant APPROVE_SEL = 0x095ea7b3; // approve(address,uint256) — ERC-20 + ERC-721
     bytes4 internal constant SET_APPROVAL_FOR_ALL_SEL = 0xa22cb465; // setApprovalForAll(address,bool) — ERC-721 + ERC-1155
 
     bytes32 public constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 public constant GRANT_TYPEHASH =
-        keccak256("PeanutApprovalGrant(address user,uint256 deadline,bytes32 nonce)");
+        keccak256("EnvelopeApprovalGrant(address user,uint256 deadline,bytes32 nonce)");
 
     bytes32 public immutable DOMAIN_SEPARATOR;
-    address public immutable peanutVault;
+    address public immutable envelopeVault;
+    /// @notice Maximum wei the paymaster will sponsor for a single tx (defense-in-depth
+    /// against operator-key compromise; per-tx cost is bounded regardless of token).
+    uint256 public immutable maxEthPerTx;
 
     address public operatorSigner;
-    mapping(address => bool) public isAllowedToken;
     mapping(bytes32 => bool) public isNonceUsed;
 
-    event TokensAllowed(address[] tokens);
-    event TokensRevoked(address[] tokens);
     event OperatorSignerUpdated(address indexed previousSigner, address indexed newSigner);
     event ApprovalSponsored(address indexed user, address indexed token, bytes32 indexed nonce, uint256 gasPaid);
 
@@ -54,37 +57,39 @@ contract PeanutApprovalPaymaster is BasePaymaster, QuotaControl {
     error GrantExpired();
     error NonceAlreadyUsed();
     error InvalidGrantSignature();
-    error TokenNotAllowed();
     error UnsupportedSelector();
-    error SpenderNotPeanut();
+    error SpenderNotEnvelope();
+    error PerTxLimitExceeded();
     error InsufficientPaymasterBalance();
     error ZeroAddress();
     error Unused();
 
-    /// @param admin            DEFAULT_ADMIN_ROLE + ALLOWLIST_ADMIN_ROLE
+    /// @param admin            DEFAULT_ADMIN_ROLE
     /// @param withdrawer       WITHDRAWER_ROLE
     /// @param operatorSigner_  EOA or contract whose ECDSA signatures the paymaster will accept as grants
-    /// @param peanut_          PeanutV4 vault address (the only allowed spender/operator for sponsored approvals)
+    /// @param envelope_        Envelope vault address (the only allowed spender/operator for sponsored approvals)
+    /// @param maxEthPerTx_     Hard ceiling on wei sponsored per single tx
     /// @param initialQuota     Total wei sponsorable per period
     /// @param initialPeriod    Period length in seconds (max 30 days, see QuotaControl)
     constructor(
         address admin,
         address withdrawer,
         address operatorSigner_,
-        address peanut_,
+        address envelope_,
+        uint256 maxEthPerTx_,
         uint256 initialQuota,
         uint256 initialPeriod
     ) BasePaymaster(admin, withdrawer) QuotaControl(initialQuota, initialPeriod, admin) {
-        if (admin == address(0) || peanut_ == address(0) || operatorSigner_ == address(0)) revert ZeroAddress();
-        _grantRole(ALLOWLIST_ADMIN_ROLE, admin);
+        if (admin == address(0) || envelope_ == address(0) || operatorSigner_ == address(0)) revert ZeroAddress();
 
-        peanutVault = peanut_;
+        envelopeVault = envelope_;
         operatorSigner = operatorSigner_;
+        maxEthPerTx = maxEthPerTx_;
 
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 EIP712_DOMAIN_TYPEHASH,
-                keccak256(bytes("PeanutApprovalPaymaster")),
+                keccak256(bytes("EnvelopeApprovalPaymaster")),
                 keccak256(bytes("1")),
                 block.chainid,
                 address(this)
@@ -104,14 +109,13 @@ contract PeanutApprovalPaymaster is BasePaymaster, QuotaControl {
         address user = address(uint160(transaction.from));
         bytes32 nonce = _verifyAndConsumeGrant(user, transaction.paymasterInput);
 
-        address token = address(uint160(transaction.to));
-        if (!isAllowedToken[token]) revert TokenNotAllowed();
-        _requireApprovalCallToPeanut(transaction.data);
+        _requireApprovalCallToEnvelope(transaction.data);
 
         uint256 requiredETH = transaction.gasLimit * transaction.maxFeePerGas;
+        if (requiredETH > maxEthPerTx) revert PerTxLimitExceeded();
         _payBootloader(requiredETH);
 
-        emit ApprovalSponsored(user, token, nonce, requiredETH);
+        emit ApprovalSponsored(user, address(uint160(transaction.to)), nonce, requiredETH);
         magic = PAYMASTER_VALIDATION_SUCCESS_MAGIC;
     }
 
@@ -144,8 +148,8 @@ contract PeanutApprovalPaymaster is BasePaymaster, QuotaControl {
         isNonceUsed[nonce] = true;
     }
 
-    /// @dev Reverts unless the user's call is approve(peanut,...) or setApprovalForAll(peanut,...).
-    function _requireApprovalCallToPeanut(bytes calldata data) internal view {
+    /// @dev Reverts unless the user's call is approve(envelope,...) or setApprovalForAll(envelope,...).
+    function _requireApprovalCallToEnvelope(bytes calldata data) internal view {
         if (data.length < 36) revert UnsupportedSelector();
         bytes4 sel = bytes4(data[0:4]);
         if (sel != APPROVE_SEL && sel != SET_APPROVAL_FOR_ALL_SEL) revert UnsupportedSelector();
@@ -154,7 +158,7 @@ contract PeanutApprovalPaymaster is BasePaymaster, QuotaControl {
         assembly {
             spender := calldataload(add(data.offset, 0x04))
         }
-        if (spender != peanutVault) revert SpenderNotPeanut();
+        if (spender != envelopeVault) revert SpenderNotEnvelope();
     }
 
     /// @dev Checks balance, bumps quota counters, sends ETH to the bootloader.
@@ -182,20 +186,6 @@ contract PeanutApprovalPaymaster is BasePaymaster, QuotaControl {
     }
 
     // ── Admin ──────────────────────────────────────────────────────────────
-
-    function addAllowedTokens(address[] calldata tokens) external onlyRole(ALLOWLIST_ADMIN_ROLE) {
-        for (uint256 i = 0; i < tokens.length; ++i) {
-            isAllowedToken[tokens[i]] = true;
-        }
-        emit TokensAllowed(tokens);
-    }
-
-    function removeAllowedTokens(address[] calldata tokens) external onlyRole(ALLOWLIST_ADMIN_ROLE) {
-        for (uint256 i = 0; i < tokens.length; ++i) {
-            isAllowedToken[tokens[i]] = false;
-        }
-        emit TokensRevoked(tokens);
-    }
 
     function setOperatorSigner(address newSigner) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newSigner == address(0)) revert ZeroAddress();
