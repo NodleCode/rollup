@@ -99,56 +99,71 @@ contract PeanutApprovalPaymaster is BasePaymaster, QuotaControl {
         returns (bytes4 magic, bytes memory)
     {
         _mustBeBootloader();
+        _requireGeneralFlow(transaction.paymasterInput);
 
-        // 1. Flow selector — only general supported.
-        if (transaction.paymasterInput.length < 4) {
+        address user = address(uint160(transaction.from));
+        bytes32 nonce = _verifyAndConsumeGrant(user, transaction.paymasterInput);
+
+        address token = address(uint160(transaction.to));
+        if (!isAllowedToken[token]) revert TokenNotAllowed();
+        _requireApprovalCallToPeanut(transaction.data);
+
+        uint256 requiredETH = transaction.gasLimit * transaction.maxFeePerGas;
+        _payBootloader(requiredETH);
+
+        emit ApprovalSponsored(user, token, nonce, requiredETH);
+        magic = PAYMASTER_VALIDATION_SUCCESS_MAGIC;
+    }
+
+    /// @dev Reverts unless paymasterInput starts with the `general` flow selector.
+    function _requireGeneralFlow(bytes calldata paymasterInput) internal pure {
+        if (paymasterInput.length < 4) {
             revert InvalidPaymasterInput("paymasterInput must contain at least a flow selector");
         }
-        bytes4 flow = bytes4(transaction.paymasterInput[0:4]);
-        if (flow != IPaymasterFlow.general.selector) revert WrongFlow();
+        if (bytes4(paymasterInput[0:4]) != IPaymasterFlow.general.selector) revert WrongFlow();
+    }
 
-        // 2. Decode grant from the inner bytes.
-        bytes memory inner = abi.decode(transaction.paymasterInput[4:], (bytes));
-        (uint256 deadline, bytes32 nonce, bytes memory signature) = abi.decode(inner, (uint256, bytes32, bytes));
+    /// @dev Decodes the EIP-712 grant from the inner bytes, verifies the signature,
+    ///      checks deadline + nonce-uniqueness, and marks the nonce used.
+    function _verifyAndConsumeGrant(address user, bytes calldata paymasterInput)
+        internal
+        returns (bytes32 nonce)
+    {
+        bytes memory inner = abi.decode(paymasterInput[4:], (bytes));
+        uint256 deadline;
+        bytes memory signature;
+        (deadline, nonce, signature) = abi.decode(inner, (uint256, bytes32, bytes));
 
         if (block.timestamp > deadline) revert GrantExpired();
         if (isNonceUsed[nonce]) revert NonceAlreadyUsed();
 
-        address user = address(uint160(transaction.from));
         bytes32 structHash = keccak256(abi.encode(GRANT_TYPEHASH, user, deadline, nonce));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
-        address signer = ECDSA.recover(digest, signature);
-        if (signer != operatorSigner) revert InvalidGrantSignature();
+        if (ECDSA.recover(digest, signature) != operatorSigner) revert InvalidGrantSignature();
 
-        // 3. Token allowlist.
-        address token = address(uint160(transaction.to));
-        if (!isAllowedToken[token]) revert TokenNotAllowed();
+        isNonceUsed[nonce] = true;
+    }
 
-        // 4. Inner selector + first arg (spender / operator) must equal peanut.
-        bytes calldata innerCall = transaction.data;
-        if (innerCall.length < 36) revert UnsupportedSelector();
-        bytes4 sel = bytes4(innerCall[0:4]);
+    /// @dev Reverts unless the user's call is approve(peanut,...) or setApprovalForAll(peanut,...).
+    function _requireApprovalCallToPeanut(bytes calldata data) internal view {
+        if (data.length < 36) revert UnsupportedSelector();
+        bytes4 sel = bytes4(data[0:4]);
         if (sel != APPROVE_SEL && sel != SET_APPROVAL_FOR_ALL_SEL) revert UnsupportedSelector();
         address spender;
-        // Both target selectors have an `address` as their first argument; read it directly.
+        // Both target selectors have an `address` as their first argument.
         assembly {
-            spender := calldataload(add(innerCall.offset, 0x04))
+            spender := calldataload(add(data.offset, 0x04))
         }
         if (spender != peanutVault) revert SpenderNotPeanut();
+    }
 
-        // 5. Settle.
-        uint256 requiredETH = transaction.gasLimit * transaction.maxFeePerGas;
+    /// @dev Checks balance, bumps quota counters, sends ETH to the bootloader.
+    function _payBootloader(uint256 requiredETH) internal {
         if (address(this).balance < requiredETH) revert InsufficientPaymasterBalance();
-
         _checkedResetClaimed();
         _checkedUpdateClaimed(requiredETH);
-        isNonceUsed[nonce] = true;
-
         (bool ok,) = BOOTLOADER_FORMAL_ADDRESS.call{value: requiredETH}("");
         if (!ok) revert InsufficientPaymasterBalance();
-
-        emit ApprovalSponsored(user, token, nonce, requiredETH);
-        magic = PAYMASTER_VALIDATION_SUCCESS_MAGIC;
     }
 
     /// @dev Unused — full validation lives in `validateAndPayForPaymasterTransaction`.
