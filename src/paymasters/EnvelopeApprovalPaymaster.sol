@@ -30,7 +30,7 @@ import {QuotaControl} from "../QuotaControl.sol";
 ///         `_validateAndPayGeneralFlow` hook) because validation requires the full
 ///         `Transaction` calldata — the hook signature hides `transaction.data` and
 ///         `transaction.paymasterInput`.
-///         Storage writes in validation (nonce, quota counters) are permitted by EraVM's
+///         Storage writes in validation (nonce, quota counters) are permitted by EraVM
 ///         paymaster-validation rules.
 contract EnvelopeApprovalPaymaster is BasePaymaster, QuotaControl {
     bytes4 internal constant APPROVE_SEL = 0x095ea7b3; // approve(address,uint256) — ERC-20 + ERC-721

@@ -270,7 +270,7 @@ contract EnvelopeApprovalPaymasterTest is Test {
     }
 
     function test_revertsOnPerTxLimitExceeded() public {
-        bytes32 nonce = keccak256("nonce-pertx");
+        bytes32 nonce = keccak256("nonce-per-tx");
         uint256 deadline = block.timestamp + 1 hours;
         bytes memory sig = _signGrant(deadline, nonce, user, operatorPk);
         bytes memory pmInput = _buildPaymasterInput(deadline, nonce, sig);
