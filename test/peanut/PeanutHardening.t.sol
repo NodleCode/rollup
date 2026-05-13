@@ -7,6 +7,7 @@ pragma solidity 0.8.26;
 //   T2 — MFA_AUTHORIZER is now a per-deploy constructor arg (fix for S3 hardcoded key)
 //   T3 — PeanutRouter.withdrawFees uses safeTransfer for non-returning ERC20s (fix for S2)
 //   T4 — _storeDeposit rejects deposits with no withdrawal authority (fix for S4)
+//   T5 — _withdrawDeposit L2ECO branch sends to recipient, not sender (upstream bug fix)
 
 import {Test} from "forge-std/Test.sol";
 import {PeanutV4} from "../../src/peanut/V4/PeanutV4.4.sol";
@@ -15,6 +16,7 @@ import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";
 import {SquidMock} from "./mocks/SquidMock.sol";
+import {L2ECOMock} from "./mocks/L2ECOMock.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
@@ -220,6 +222,84 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
             address(0), 0, 1, 0, address(0), address(this), false, ALICE, uint40(0), false, ""
         );
         assertEq(idx, 0);
+    }
+
+    // ── T5 ─────────────────────────────────────────────────────────────────
+    // Upstream copy-paste bug: _withdrawDeposit's contractType==4 (L2ECO) branch
+    // transferred to _deposit.senderAddress instead of _recipientAddress. The
+    // recipient would receive nothing while the deposit was marked claimed.
+    // Patch sends to _recipientAddress (matching all other contractType branches)
+    // and routes through SafeERC20 (consistent with the contractType==1 branch).
+
+    function test_T5_L2ECOWithdrawGoesToRecipientNotSender() public {
+        uint256 depositPrivKey = uint256(keccak256("l2eco-link-key"));
+        address pubKey20 = vm.addr(depositPrivKey);
+        uint256 senderPk = uint256(keccak256("l2eco-sender"));
+        address sender = vm.addr(senderPk);
+        address recipient = address(0xDECAF);
+
+        // Multiplier = 2 → vault stores `amount * 2` (inflation-invariant).
+        L2ECOMock eco = new L2ECOMock(2);
+        eco.mint(sender, 100);
+
+        vm.prank(sender);
+        eco.approve(address(peanut), 100);
+
+        vm.prank(sender);
+        uint256 idx = peanut.makeDeposit(address(eco), 4, 100, 0, pubKey20);
+
+        // Sanity: vault holds the raw tokens, deposit stores the scaled amount.
+        assertEq(eco.balanceOf(address(peanut)), 100, "vault should hold raw tokens");
+        assertEq(eco.balanceOf(sender), 0, "sender's tokens should be in the vault");
+        PeanutV4.Deposit memory d = peanut.getDeposit(idx);
+        assertEq(d.amount, 200, "deposit amount should be inflation-invariant (amount * multiplier)");
+
+        // Recipient (not sender) claims using the link's private key.
+        bytes32 digest = MessageHashUtilsLite.toEthSignedMessageHash(
+            keccak256(
+                abi.encodePacked(
+                    peanut.PEANUT_SALT(),
+                    block.chainid,
+                    address(peanut),
+                    idx,
+                    recipient,
+                    peanut.ANYONE_WITHDRAWAL_MODE()
+                )
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(depositPrivKey, digest);
+        bytes memory sig = abi.encodePacked(r, s, v);
+        peanut.withdrawDeposit(idx, recipient, sig);
+
+        // The fix: recipient gets 100, sender stays at 0.
+        // If the bug were still present, sender would have 100 and recipient 0.
+        assertEq(eco.balanceOf(recipient), 100, "recipient must receive the L2ECO tokens");
+        assertEq(eco.balanceOf(sender), 0, "sender must NOT receive the L2ECO tokens back");
+        assertEq(eco.balanceOf(address(peanut)), 0, "vault should be drained");
+    }
+
+    function test_T5_L2ECOSenderReclaimStillGoesToSender() public {
+        // Counterpart sanity: _withdrawDepositSender (sender-initiated reclaim path)
+        // is correctly routed to senderAddress — we shouldn't have over-corrected.
+        uint256 senderPk = uint256(keccak256("l2eco-reclaim-sender"));
+        address sender = vm.addr(senderPk);
+        address pubKey20 = vm.addr(uint256(keccak256("l2eco-reclaim-key")));
+
+        L2ECOMock eco = new L2ECOMock(1);
+        eco.mint(sender, 50);
+
+        vm.prank(sender);
+        eco.approve(address(peanut), 50);
+        vm.prank(sender);
+        uint256 idx = peanut.makeDeposit(address(eco), 4, 50, 0, pubKey20);
+
+        assertEq(eco.balanceOf(sender), 0);
+
+        vm.prank(sender);
+        peanut.withdrawDepositSender(idx);
+
+        assertEq(eco.balanceOf(sender), 50, "sender reclaim should return the tokens");
+        assertEq(eco.balanceOf(address(peanut)), 0);
     }
 }
 
