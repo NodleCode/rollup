@@ -9,9 +9,20 @@ Sponsors gas in **two modes**, both funded from one ETH pool and bounded by the 
 | Mode | Caller | Auth | What gets sponsored |
 |---|---|---|---|
 | **A — User approval** | regular user | EIP-712 grant signed off-chain by `operatorSigner` (single-use nonce, deadline) + selector + spender checks | `token.approve(envelopeVault, ...)` / `token.setApprovalForAll(envelopeVault, true)` for ERC-20 / 721 / 1155 — the user-side step in Path C |
-| **B — Operator direct call** | operator EOA on the `isOperator` allowlist | target must be on the `isAllowedTarget` allowlist; no grant required | Anything the operator wants to call on an allowlisted target — typically `vault.makeCustomDeposit`, `vault.withdrawDeposit`, etc. |
+| **B — Operator direct call** | operator EOA on the `isOperator` allowlist | target must be on the `isAllowedTarget` allowlist; no grant required | Anything the operator wants to call on an allowlisted target — typically `vault.makeCustomDepositFrom(user, ...)` (operator submits, user funds via prior approval), `vault.withdrawDeposit`, etc. |
 
 Mode B is the "single point we top up" pattern: instead of funding the operator's hot wallet directly, fund the paymaster and let the operator submit txs gaslessly. Bounded daily spend (QuotaControl), bounded per-tx spend (`maxEthPerTx`), and rotation just means flipping `isOperator` on a new EOA — no balance migration.
+
+### Combined Mode A + Mode B flow (canonical Path C)
+
+```
+1. Operator backend signs an EIP-712 EnvelopeApprovalGrant for the user
+2. User submits:    token.approve(vault, amount)      ← Mode A sponsors gas
+3. Operator submits: vault.makeCustomDepositFrom(user, ..., onBehalfOf: user, ...)
+                                                       ← Mode B sponsors gas
+```
+
+The user signs the EIP-712 grant once and sends one tx (the `approve`); the operator handles the deposit on their behalf. Both txs are gasless from the user's perspective. `makeCustomDepositFrom` was added on the vault specifically to let Mode B pull the user's tokens via the standard ERC-20 allowance — see `src/envelope/doc/EnvelopeVault.md#operator-orchestrated-deposits`.
 
 ## Deployment scope
 
@@ -19,7 +30,7 @@ Mode B is the "single point we top up" pattern: instead of funding the operator'
 - **No token allowlist** — the operator's grant is the only auth surface. Defense-in-depth comes from a hard per-tx ETH cap and a global daily quota.
 - **Operator-driven UX** — the user never sees the EIP-712 grant; only the operator's backend does.
 
-Deployed on ZkSync Sepolia at [`0x842fe6fC8358c5eeBf5b7dA4E8546DB3d8ADA268`](https://sepolia.explorer.zksync.io/address/0x842fe6fC8358c5eeBf5b7dA4E8546DB3d8ADA268#contract).
+Deployed on ZkSync Sepolia at [`0xbA6a646B316f27fF5b2CE4B504da49Ebe400d5AD`](https://sepolia.explorer.zksync.io/address/0xbA6a646B316f27fF5b2CE4B504da49Ebe400d5AD#contract).
 
 ## Inheritance
 
@@ -279,7 +290,7 @@ import { Wallet } from "zksync-ethers";
 import { ethers } from "ethers";
 import { randomBytes, hexlify } from "ethers";
 
-const PAYMASTER = "0x842fe6fC8358c5eeBf5b7dA4E8546DB3d8ADA268";
+const PAYMASTER = "0xbA6a646B316f27fF5b2CE4B504da49Ebe400d5AD";
 const CHAIN_ID  = 300;
 const operatorWallet = new Wallet(process.env.OPERATOR_PK!);
 

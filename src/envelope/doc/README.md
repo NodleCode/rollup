@@ -45,9 +45,9 @@ The GPL is "viral" only across `import` boundaries; non-importing files in the s
 
 | | Address |
 |---|---|
-| `EnvelopeVault` | [`0x37dbCC12784727AdE2A78AFbcb686b0eb915574f`](https://sepolia.explorer.zksync.io/address/0x37dbCC12784727AdE2A78AFbcb686b0eb915574f#contract) |
+| `EnvelopeVault` | [`0xed414522b1Fbe08EEfd156f912a57CF345A55735`](https://sepolia.explorer.zksync.io/address/0xed414522b1Fbe08EEfd156f912a57CF345A55735#contract) |
 | `EnvelopeBatcher` | [`0xe8c0aEC0F90f99968B2bf517ECa2BBd41A4926c1`](https://sepolia.explorer.zksync.io/address/0xe8c0aEC0F90f99968B2bf517ECa2BBd41A4926c1#contract) |
-| `EnvelopeApprovalPaymaster` | [`0x842fe6fC8358c5eeBf5b7dA4E8546DB3d8ADA268`](https://sepolia.explorer.zksync.io/address/0x842fe6fC8358c5eeBf5b7dA4E8546DB3d8ADA268#contract) |
+| `EnvelopeApprovalPaymaster` | [`0xbA6a646B316f27fF5b2CE4B504da49Ebe400d5AD`](https://sepolia.explorer.zksync.io/address/0xbA6a646B316f27fF5b2CE4B504da49Ebe400d5AD#contract) |
 
 ## Three deposit paths
 
@@ -57,7 +57,7 @@ The vault itself supports three ways a sender can fund a link:
 |---|---|---|---|
 | **A** — ETH | `msg.value` directly | n/a | no |
 | **B** — EIP-2612 / EIP-3009 token | `makeDepositWithAuthorization` (EIP-3009) | embedded in signature | no |
-| **C** — anything else (ERC-20 w/o permit, ERC-721, ERC-1155) | `makeCustomDeposit` after user calls `token.approve` / `setApprovalForAll` | separate approval tx | **yes** — see [EnvelopeApprovalPaymaster](./EnvelopeApprovalPaymaster.md) |
+| **C** — anything else (ERC-20 w/o permit, ERC-721, ERC-1155) | `makeCustomDepositFrom(user, ...)` (operator-submitted) after user calls `token.approve` / `setApprovalForAll` | separate approval tx | **yes** — both legs are sponsored by [EnvelopeApprovalPaymaster](./EnvelopeApprovalPaymaster.md) (Mode A for the approve, Mode B for the deposit) |
 
 ## Deploy
 
@@ -72,8 +72,8 @@ Both are Hardhat-zksync scripts. See each spec for env vars.
 
 | Suite | Tests |
 |---|---|
-| Envelope core (`test/envelope/`) | **90** (56 vendored + 11 hardening + 23 edge cases) |
+| Envelope core (`test/envelope/`) | **103** (56 vendored + 11 hardening + 23 edge cases + 13 `makeCustomDepositFrom`) |
 | `EnvelopeApprovalPaymaster` (`test/paymasters/EnvelopeApprovalPaymaster.t.sol`) | **27** (19 Mode A + 7 Mode B + 1 EIP-1271 contract signer) |
 | Other paymasters (unchanged) | 102 |
 | Rest of repo | 747 |
-| **Total** | **966** |
+| **Total** | **979** |

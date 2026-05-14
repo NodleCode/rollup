@@ -69,7 +69,8 @@ All deposit functions are `payable` (ETH path uses `msg.value`) and `nonReentran
 | `makeMFADeposit(...)` | Same shape, but `withMFA=true` |
 | `makeSelflessDeposit(..., onBehalfOf)` | Deposit credited to `onBehalfOf` (reclaim rights go to them, not msg.sender) — used by batcher |
 | `makeSelflessMFADeposit(..., onBehalfOf)` | Selfless + MFA |
-| `makeCustomDeposit(token, contractType, amount, tokenId, pubKey20, onBehalfOf, withMFA, recipient, reclaimableAfter, isGasless3009, args3009)` | All knobs exposed — the canonical entry point |
+| `makeCustomDeposit(token, contractType, amount, tokenId, pubKey20, onBehalfOf, withMFA, recipient, reclaimableAfter, isGasless3009, args3009)` | All knobs exposed — the canonical entry point. Pulls funds from `msg.sender`. |
+| `makeCustomDepositFrom(from, token, contractType, amount, tokenId, pubKey20, onBehalfOf, withMFA, recipient, reclaimableAfter)` | **Operator-orchestrated**: pulls funds from `from` (who must have approved the vault), credits `onBehalfOf` as the senderAddress. ETH not supported (no allowance for native). Added 2026-05-14 to support paymaster Mode B + arbitrary ERC-20s. |
 | `makeDepositWithAuthorization(token, from, amount, pubKey20, nonce, validAfter, validBefore, v, r, s)` | EIP-3009 path for USDC-style tokens — no pre-approval needed |
 
 The minimalistic deposit functions (`makeDeposit`, `makeMFADeposit`, `makeSelflessDeposit`, `makeSelflessMFADeposit`) are marked `@deprecated` upstream but kept for ABI compatibility; new integrations should call `makeCustomDeposit`.
@@ -109,6 +110,22 @@ All withdraws set `claimed = true` BEFORE the asset transfer (CEI). `nonReentran
 | 4 | L2ECO (rebasing) | `SafeERC20.safeTransferFrom`; stored amount multiplied by `linearInflationMultiplier()` for inflation-invariance | inverse: `amount / linearInflationMultiplier()`, then `SafeERC20.safeTransfer` |
 
 For ERC-20, the depositor must approve the vault first (Path C). The `EnvelopeApprovalPaymaster` exists to sponsor that approval tx.
+
+## Operator-orchestrated deposits
+
+`makeCustomDepositFrom` lets a third party (e.g. an operator EOA backing a paymaster Mode B flow) submit the deposit transaction while the funds come from a different wallet — typically the end user.
+
+```
+1. User submits:    token.approve(vault, amount)                    ← gasless via paymaster Mode A
+2. Operator submits: vault.makeCustomDepositFrom(
+                       _from:       user,        // tokens come from here
+                       _onBehalfOf: user,        // credited as senderAddress (so user can reclaim)
+                       ...)                                          ← gasless via paymaster Mode B
+```
+
+The vault calls `transferFrom(_from, vault, amount)`. Authorization rests on the standard ERC-20 / ERC-721 / ERC-1155 allowance — granting allowance to the vault is, by ERC-20 convention, consent for any caller to invoke `transferFrom` up to that allowance. This is the same trust model already in use across the ecosystem (Uniswap routers, etc.) so it adds no new threat surface beyond what the user assumes when they call `approve`.
+
+ETH (`contractType == 0`) is intentionally rejected: native ETH has no allowance model, so there is no way for an operator to pull ETH from a third party. ETH deposits must use `makeCustomDeposit` directly from the funder.
 
 ## Receiver hooks (S1 hardening)
 
@@ -163,12 +180,15 @@ Note that `getAllDeposits` / `getAllDepositsForAddress` scale linearly with arra
 | ZkSync | Explicit `override(IERC165)` on `supportsInterface` |
 | Modern | Named imports throughout |
 | Modern | Pragma pinned to `0.8.26` |
+| Feature | `makeCustomDepositFrom(_from, ...)` — operator-orchestrated deposits pulled from a third-party allowance (added 2026-05-14) |
 
 ## Test coverage
 
 | Suite | File |
 |---|---|
 | Vendored upstream tests | `test/envelope/EnvelopeVault.t.sol`, `Deposit.t.sol`, `SigWithdraw.t.sol`, `SenderWithdraw.t.sol`, `MFA.t.sol`, `RecipientBound.t.sol`, `Integration.t.sol`, `EnvelopeGasless.t.sol` |
-| Hardening (S1–S4 + T1–T4) | `test/envelope/EnvelopeHardening.t.sol` |
+| Hardening (S1–S4 + T1–T4 + T5) | `test/envelope/EnvelopeHardening.t.sol` |
+| Edge cases | `test/envelope/EnvelopeEdgeCases.t.sol` |
+| `makeCustomDepositFrom` | `test/envelope/MakeCustomDepositFrom.t.sol` |
 
-71 tests pass.
+103 tests pass.
