@@ -12,26 +12,29 @@ import {BasePaymaster, BOOTLOADER_FORMAL_ADDRESS} from "./BasePaymaster.sol";
 import {QuotaControl} from "../QuotaControl.sol";
 
 /// @title  Envelope Approval Paymaster
-/// @notice Sponsors gas for a *narrow* set of operations: ERC-20 / ERC-721 `approve(envelope, ...)`
-///         and ERC-721 / ERC-1155 `setApprovalForAll(envelope, ...)` — the txs needed to grant
-///         the Envelope vault access to a user's tokens before the operator submits
-///         `makeCustomDeposit`.
-/// @dev    Authorization is fully operator-driven: each sponsored tx must carry a fresh
-///         EIP-712 grant signed by `operatorSigner`. No per-token allowlist — the strict
-///         operator-grant gate + per-tx ETH cap + global daily quota together bound the
-///         worst-case drain even under operator-key compromise.
-///         Validation gates:
-///           - tx.from holds an unexpired single-use EIP-712 grant signed by operatorSigner
-///           - inner selector is approve(address,uint256) or setApprovalForAll(address,bool)
-///           - the spender/operator argument == envelopeVault
-///           - requiredETH (= gasLimit * maxFeePerGas) ≤ maxEthPerTx
-///           - daily wei quota hasn't been exhausted (QuotaControl)
-///         Overrides `validateAndPayForPaymasterTransaction` directly (instead of the
+/// @notice Sponsors gas in two modes — both share one ETH pool and one daily QuotaControl.
+///
+///         Mode A — User approval: caller is a regular user. Path-C support: the user's tx
+///         is a token `approve(envelope, ...)` or `setApprovalForAll(envelope, true)` and
+///         must carry a fresh EIP-712 grant signed by `operatorSigner` (single-use nonce,
+///         deadline). Defends against arbitrary spend with: per-token-irrelevant + selector
+///         + spender + grant.
+///
+///         Mode B — Operator direct call: caller is on the operator allowlist (set by admin)
+///         and the target (`tx.to`) is on the allowed-targets allowlist. No grant / selector /
+///         spender check: the operator's EOA identity is the auth (the operator is a trusted
+///         persistent identity, not an ephemeral grant holder). Used so the operator can call
+///         the envelope vault (`makeCustomDeposit`, `withdrawDeposit`, etc.) without holding
+///         ETH itself — the paymaster's pool funds those ops.
+///
+///         Both modes apply the same per-tx ETH cap (`maxEthPerTx`) and contribute to the
+///         same `QuotaControl` daily quota.
+/// @dev    Overrides `validateAndPayForPaymasterTransaction` directly (instead of the
 ///         `_validateAndPayGeneralFlow` hook) because validation requires the full
 ///         `Transaction` calldata — the hook signature hides `transaction.data` and
 ///         `transaction.paymasterInput`.
-///         Storage writes in validation (nonce, quota counters) are permitted by EraVM
-///         paymaster-validation rules.
+///         Storage writes in validation (nonce, quota counters, mode-tracking) are permitted
+///         by EraVM paymaster-validation rules.
 contract EnvelopeApprovalPaymaster is BasePaymaster, QuotaControl {
     bytes4 internal constant APPROVE_SEL = 0x095ea7b3; // approve(address,uint256) — ERC-20 + ERC-721
     bytes4 internal constant SET_APPROVAL_FOR_ALL_SEL = 0xa22cb465; // setApprovalForAll(address,bool) — ERC-721 + ERC-1155
@@ -49,9 +52,16 @@ contract EnvelopeApprovalPaymaster is BasePaymaster, QuotaControl {
 
     address public operatorSigner;
     mapping(bytes32 => bool) public isNonceUsed;
+    /// @notice Mode B — EOAs allowed to call any function on an allowlisted target.
+    mapping(address => bool) public isOperator;
+    /// @notice Mode B — contracts an operator EOA may call gaslessly.
+    mapping(address => bool) public isAllowedTarget;
 
     event OperatorSignerUpdated(address indexed previousSigner, address indexed newSigner);
     event ApprovalSponsored(address indexed user, address indexed token, bytes32 indexed nonce, uint256 gasPaid);
+    event OperatorCallSponsored(address indexed operator, address indexed target, uint256 gasPaid);
+    event OperatorSet(address indexed operator, bool allowed);
+    event AllowedTargetSet(address indexed target, bool allowed);
 
     error WrongFlow();
     error GrantExpired();
@@ -59,6 +69,7 @@ contract EnvelopeApprovalPaymaster is BasePaymaster, QuotaControl {
     error InvalidGrantSignature();
     error UnsupportedSelector();
     error SpenderNotEnvelope();
+    error TargetNotAllowed();
     error PerTxLimitExceeded();
     error InsufficientPaymasterBalance();
     error ZeroAddress();
@@ -106,16 +117,24 @@ contract EnvelopeApprovalPaymaster is BasePaymaster, QuotaControl {
         _mustBeBootloader();
         _requireGeneralFlow(transaction.paymasterInput);
 
-        address user = address(uint160(transaction.from));
-        bytes32 nonce = _verifyAndConsumeGrant(user, transaction.paymasterInput);
-
-        _requireApprovalCallToEnvelope(transaction.data);
-
+        address from = address(uint160(transaction.from));
+        address to = address(uint160(transaction.to));
         uint256 requiredETH = transaction.gasLimit * transaction.maxFeePerGas;
         if (requiredETH > maxEthPerTx) revert PerTxLimitExceeded();
-        _payBootloader(requiredETH);
 
-        emit ApprovalSponsored(user, address(uint160(transaction.to)), nonce, requiredETH);
+        if (isOperator[from]) {
+            // Mode B — operator EOA calls an allowlisted target.
+            if (!isAllowedTarget[to]) revert TargetNotAllowed();
+            _payBootloader(requiredETH);
+            emit OperatorCallSponsored(from, to, requiredETH);
+        } else {
+            // Mode A — user-side approval gated by an operator EIP-712 grant.
+            bytes32 nonce = _verifyAndConsumeGrant(from, transaction.paymasterInput);
+            _requireApprovalCallToEnvelope(transaction.data);
+            _payBootloader(requiredETH);
+            emit ApprovalSponsored(from, to, nonce, requiredETH);
+        }
+
         magic = PAYMASTER_VALIDATION_SUCCESS_MAGIC;
     }
 
@@ -195,5 +214,21 @@ contract EnvelopeApprovalPaymaster is BasePaymaster, QuotaControl {
         if (newSigner == address(0)) revert ZeroAddress();
         emit OperatorSignerUpdated(operatorSigner, newSigner);
         operatorSigner = newSigner;
+    }
+
+    /// @notice Add or remove a Mode-B operator EOA. Operators can call any function on
+    /// an allowlisted target with paymaster-funded gas; no EIP-712 grant required.
+    function setOperator(address operator, bool allowed) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (operator == address(0)) revert ZeroAddress();
+        isOperator[operator] = allowed;
+        emit OperatorSet(operator, allowed);
+    }
+
+    /// @notice Add or remove a Mode-B target contract. Operator EOAs can call any function
+    /// on these targets with paymaster-funded gas.
+    function setAllowedTarget(address target, bool allowed) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (target == address(0)) revert ZeroAddress();
+        isAllowedTarget[target] = allowed;
+        emit AllowedTargetSet(target, allowed);
     }
 }

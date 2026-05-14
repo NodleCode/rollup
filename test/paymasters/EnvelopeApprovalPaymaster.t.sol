@@ -417,6 +417,147 @@ contract EnvelopeApprovalPaymasterTest is Test {
         paymaster.withdraw(address(0x77), 1);
     }
 
+    // ── Mode B — Operator direct call ──────────────────────────────────────
+    // Operators (EOA whitelist) can call any function on allowlisted targets,
+    // no EIP-712 grant required. Same per-tx cap and quota as Mode A.
+
+    address constant OPERATOR_EOA = address(0xCAFEBABE);
+    address constant ALLOWED_VAULT = address(0xBEEFCAFE);
+
+    function _modeBPaymasterInput() internal pure returns (bytes memory) {
+        // Mode B doesn't decode the inner bytes, but the flow selector (general) is
+        // still required. Build a paymasterInput with the selector and an empty inner.
+        return abi.encodeWithSelector(IPaymasterFlow.general.selector, bytes(""));
+    }
+
+    function _operatorTx(address from, address to, uint256 gasLimit, uint256 gasPrice)
+        internal
+        view
+        returns (Transaction memory)
+    {
+        return Transaction({
+            txType: 0x71,
+            from: uint256(uint160(from)),
+            to: uint256(uint160(to)),
+            gasLimit: gasLimit,
+            gasPerPubdataByteLimit: 50000,
+            maxFeePerGas: gasPrice,
+            maxPriorityFeePerGas: 0,
+            paymaster: uint256(uint160(address(paymaster))),
+            nonce: 0,
+            value: 0,
+            reserved: [uint256(0), 0, 0, 0],
+            data: hex"deadbeef", // arbitrary payload — Mode B doesn't inspect
+            signature: hex"",
+            factoryDeps: new bytes32[](0),
+            paymasterInput: _modeBPaymasterInput(),
+            reservedDynamic: hex""
+        });
+    }
+
+    function test_modeB_operatorCanCallAllowedTarget() public {
+        vm.prank(admin);
+        paymaster.setOperator(OPERATOR_EOA, true);
+        vm.prank(admin);
+        paymaster.setAllowedTarget(ALLOWED_VAULT, true);
+
+        uint256 balBefore = address(paymaster).balance;
+        uint256 bootBefore = BOOTLOADER.balance;
+        vm.prank(BOOTLOADER);
+        paymaster.validateAndPayForPaymasterTransaction(
+            bytes32(0), bytes32(0), _operatorTx(OPERATOR_EOA, ALLOWED_VAULT, 200_000, 1 gwei)
+        );
+
+        uint256 expected = 200_000 * 1 gwei;
+        assertEq(address(paymaster).balance, balBefore - expected, "paymaster paid wrong amount");
+        assertEq(BOOTLOADER.balance, bootBefore + expected, "bootloader didn't receive");
+        assertEq(paymaster.claimed(), expected, "quota counter not bumped in mode B");
+    }
+
+    function test_modeB_revertsOnTargetNotAllowed() public {
+        vm.prank(admin);
+        paymaster.setOperator(OPERATOR_EOA, true);
+        // No setAllowedTarget — target is not on the allowlist.
+
+        vm.prank(BOOTLOADER);
+        vm.expectRevert(EnvelopeApprovalPaymaster.TargetNotAllowed.selector);
+        paymaster.validateAndPayForPaymasterTransaction(
+            bytes32(0), bytes32(0), _operatorTx(OPERATOR_EOA, ALLOWED_VAULT, 100_000, 1 gwei)
+        );
+    }
+
+    function test_modeB_nonOperatorFallsThroughToModeA() public {
+        // Caller is NOT on the operator allowlist → falls through to Mode A grant flow.
+        // Without a valid grant, Mode A reverts (the empty inner can't be decoded).
+        vm.prank(admin);
+        paymaster.setAllowedTarget(ALLOWED_VAULT, true);
+
+        vm.prank(BOOTLOADER);
+        vm.expectRevert(); // grant decode fails on the bytes("") inner
+        paymaster.validateAndPayForPaymasterTransaction(
+            bytes32(0), bytes32(0), _operatorTx(user, ALLOWED_VAULT, 100_000, 1 gwei)
+        );
+    }
+
+    function test_modeB_operatorRespectsPerTxCap() public {
+        vm.prank(admin);
+        paymaster.setOperator(OPERATOR_EOA, true);
+        vm.prank(admin);
+        paymaster.setAllowedTarget(ALLOWED_VAULT, true);
+
+        // gasLimit * gasPrice > MAX_ETH_PER_TX
+        uint256 gasPrice = 1 gwei;
+        uint256 gasLimit = (MAX_ETH_PER_TX / gasPrice) + 1;
+
+        vm.prank(BOOTLOADER);
+        vm.expectRevert(EnvelopeApprovalPaymaster.PerTxLimitExceeded.selector);
+        paymaster.validateAndPayForPaymasterTransaction(
+            bytes32(0), bytes32(0), _operatorTx(OPERATOR_EOA, ALLOWED_VAULT, gasLimit, gasPrice)
+        );
+    }
+
+    function test_modeB_operatorContributesToSameQuotaAsModeA() public {
+        // One Mode-A tx + one Mode-B tx burn into the same QuotaControl counter.
+        vm.prank(admin);
+        paymaster.setOperator(OPERATOR_EOA, true);
+        vm.prank(admin);
+        paymaster.setAllowedTarget(ALLOWED_VAULT, true);
+
+        // Mode A: user submits a sponsored approve.
+        bytes32 nonce = keccak256("shared-quota-A");
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory sig = _signGrant(deadline, nonce, user, operatorPk);
+        bytes memory pmInput = _buildPaymasterInput(deadline, nonce, sig);
+        _validate(_txTo(sponsoredToken, _approveCall(envelope, 1), pmInput, 100_000, 1 gwei));
+        uint256 afterModeA = paymaster.claimed();
+
+        // Mode B: operator calls allowed target.
+        vm.prank(BOOTLOADER);
+        paymaster.validateAndPayForPaymasterTransaction(
+            bytes32(0), bytes32(0), _operatorTx(OPERATOR_EOA, ALLOWED_VAULT, 200_000, 1 gwei)
+        );
+
+        assertEq(paymaster.claimed(), afterModeA + 200_000 * 1 gwei, "modes share QuotaControl");
+    }
+
+    function test_modeB_adminCanRevokeOperator() public {
+        vm.prank(admin);
+        paymaster.setOperator(OPERATOR_EOA, true);
+        assertTrue(paymaster.isOperator(OPERATOR_EOA));
+
+        vm.prank(admin);
+        paymaster.setOperator(OPERATOR_EOA, false);
+        assertFalse(paymaster.isOperator(OPERATOR_EOA));
+    }
+
+    function test_modeB_nonAdminCannotManageOperators() public {
+        vm.expectRevert();
+        paymaster.setOperator(OPERATOR_EOA, true);
+
+        vm.expectRevert();
+        paymaster.setAllowedTarget(ALLOWED_VAULT, true);
+    }
+
     // ── EIP-1271 contract signer support ───────────────────────────────────
     // The paymaster verifies grants via SignatureChecker.isValidSignatureNow so a
     // smart-contract account (e.g. a multisig) can sign as operator.

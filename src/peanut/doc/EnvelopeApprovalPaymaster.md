@@ -4,15 +4,14 @@
 
 ## Purpose
 
-Sponsors gas for the user-side **approval txs** needed before a Peanut deposit can be made on a token that doesn't support EIP-2612 / EIP-3009. Specifically:
+Sponsors gas in **two modes**, both funded from one ETH pool and bounded by the same per-tx cap + daily QuotaControl:
 
-| Standard | Sponsored call |
-|---|---|
-| ERC-20 (no permit) | `token.approve(envelope, amount)` |
-| ERC-721 | `token.approve(envelope, tokenId)` |
-| ERC-1155 | `token.setApprovalForAll(envelope, true)` |
+| Mode | Caller | Auth | What gets sponsored |
+|---|---|---|---|
+| **A — User approval** | regular user | EIP-712 grant signed off-chain by `operatorSigner` (single-use nonce, deadline) + selector + spender checks | `token.approve(envelopeVault, ...)` / `token.setApprovalForAll(envelopeVault, true)` for ERC-20 / 721 / 1155 — the user-side step in Path C |
+| **B — Operator direct call** | operator EOA on the `isOperator` allowlist | target must be on the `isAllowedTarget` allowlist; no grant required | Anything the operator wants to call on an allowlisted target — typically `peanut.makeCustomDeposit`, `peanut.withdrawDeposit`, etc. |
 
-The user pays 0 ETH. The operator's backend gates **every** sponsored tx by issuing an EIP-712 grant signed off-chain. The paymaster verifies the grant on-chain before paying the bootloader.
+Mode B is the "single point we top up" pattern: instead of funding the operator's hot wallet directly, fund the paymaster and let the operator submit txs gaslessly. Bounded daily spend (QuotaControl), bounded per-tx spend (`maxEthPerTx`), and rotation just means flipping `isOperator` on a new EOA — no balance migration.
 
 ## Deployment scope
 
@@ -118,7 +117,22 @@ const paymasterParams = utils.getPaymasterParams(PAYMASTER, {
 
 The user does NOT sign this grant — they just sign the outer ZkSync tx as usual. The grant proves to the paymaster that the **operator** authorized this tx.
 
-## `validateAndPayForPaymasterTransaction` — the 5 gates
+## `validateAndPayForPaymasterTransaction` — gates per mode
+
+The function branches on `isOperator[tx.from]`:
+
+```text
+if isOperator[tx.from]:
+    Mode B
+        - isAllowedTarget[tx.to]                    [TargetNotAllowed]
+        - requiredETH ≤ maxEthPerTx                 [PerTxLimitExceeded]
+        - paymaster.balance ≥ requiredETH            [InsufficientPaymasterBalance]
+        - claimed + requiredETH ≤ quota              [QuotaControl.QuotaExceeded]
+else:
+    Mode A — gates listed below
+```
+
+### Mode A (user-side approval) gates
 
 ```text
 A. msg.sender == BOOTLOADER_FORMAL_ADDRESS                 [AccessRestrictedToBootloader]
@@ -149,13 +163,28 @@ The validation is split into four helper functions (`_requireGeneralFlow`, `_ver
 ## Admin functions
 
 ```solidity
+// Mode A — rotate the EIP-712 grant signer
 function setOperatorSigner(address newSigner) external onlyRole(DEFAULT_ADMIN_ROLE);
-function setQuota(uint256 newQuota) external onlyRole(DEFAULT_ADMIN_ROLE);  // inherited
-function setPeriod(uint256 newPeriod) external onlyRole(DEFAULT_ADMIN_ROLE); // inherited
-function withdraw(address to, uint256 amount) external onlyRole(WITHDRAWER_ROLE); // inherited
+
+// Mode B — manage the operator EOA allowlist
+function setOperator(address operator, bool allowed) external onlyRole(DEFAULT_ADMIN_ROLE);
+
+// Mode B — manage the target-contract allowlist
+function setAllowedTarget(address target, bool allowed) external onlyRole(DEFAULT_ADMIN_ROLE);
+
+// Inherited from QuotaControl
+function setQuota(uint256 newQuota) external onlyRole(DEFAULT_ADMIN_ROLE);
+function setPeriod(uint256 newPeriod) external onlyRole(DEFAULT_ADMIN_ROLE);
+
+// Inherited from BasePaymaster
+function withdraw(address to, uint256 amount) external onlyRole(WITHDRAWER_ROLE);
 ```
 
-`setOperatorSigner(0)` reverts with `ZeroAddress` — the paymaster cannot be silently disabled.
+`setOperatorSigner(0)`, `setOperator(0, ...)`, and `setAllowedTarget(0, ...)` all revert with `ZeroAddress` — no silent disable.
+
+### Operational seeding (post-deploy)
+
+Mode B is dormant at deploy. To enable: admin calls `setAllowedTarget(envelopeVault, true)` and `setOperator(operatorEOA, true)`. Multiple operators / targets are allowed.
 
 ## Events / Errors
 
