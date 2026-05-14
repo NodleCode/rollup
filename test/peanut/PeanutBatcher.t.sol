@@ -10,16 +10,16 @@ import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
-    PeanutBatcherV4 public batcher;
-    PeanutV4 public peanutV4;
+    EnvelopeBatcher public batcher;
+    EnvelopeVault public peanutV4;
     ERC20Mock public testToken;
     ERC721Mock public testToken721;
     ERC1155Mock public testToken1155;
     address public PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
 
     function setUp() public {
-        batcher = new PeanutBatcherV4();
-        peanutV4 = new PeanutV4(address(0), address(0));
+        batcher = new EnvelopeBatcher();
+        peanutV4 = new EnvelopeVault(address(0), address(0));
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();
@@ -90,7 +90,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
             pubKeys20[i] = PUBKEY20;
             // mint a token to the caller
             testToken1155.mint(address(this), 1, 100, "");
-            // approve the PeanutV4 contract to spend the tokens
+            // approve the EnvelopeVault contract to spend the tokens
             testToken1155.setApprovalForAll(address(batcher), true);
         }
         // make the batch deposit
@@ -100,7 +100,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         assertEq(depositIndexes.length, numDeposits);
     }
 
-    // Test failure case where PeanutV4 contract is not approved to spend ERC20 tokens
+    // Test failure case where EnvelopeVault contract is not approved to spend ERC20 tokens
     function test_RevertWhen_BatchERC20DepositNotApproved() public {
         uint64 amount = 100;
         uint64 numDeposits = 10;
@@ -114,7 +114,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         batcher.batchMakeDeposit(address(peanutV4), address(testToken), 1, amount, 0, pubKeys20);
     }
 
-    // Test failure case where PeanutV4 contract is not approved to spend ERC721 tokens
+    // Test failure case where EnvelopeVault contract is not approved to spend ERC721 tokens
     function test_RevertWhen_BatchERC721DepositNotApproved() public {
         uint64 numDeposits = 10;
         address[] memory pubKeys20 = new address[](numDeposits);
@@ -128,7 +128,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         batcher.batchMakeDeposit(address(peanutV4), address(testToken721), 2, 1, numDeposits, pubKeys20);
     }
 
-    // Test failure case where PeanutV4 contract is not approved to spend ERC1155 tokens
+    // Test failure case where EnvelopeVault contract is not approved to spend ERC1155 tokens
     function test_RevertWhen_BatchERC1155DepositNotApproved() public {
         uint64 numDeposits = 10;
         address[] memory pubKeys20 = new address[](numDeposits);
@@ -186,7 +186,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         );
 
         for(uint256 i = 0; i < amounts.length; i++) {
-            PeanutV4.Deposit memory deposit = peanutV4.getDeposit(depositIndices[i]);
+            EnvelopeVault.Deposit memory deposit = peanutV4.getDeposit(depositIndices[i]);
             assert(deposit.amount == amounts[i]);  // main assertion
 
             // a few sanity checks
@@ -217,7 +217,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         );
 
         for(uint256 i = 0; i < amounts.length; i++) {
-            PeanutV4.Deposit memory deposit = peanutV4.getDeposit(depositIndices[i]);
+            EnvelopeVault.Deposit memory deposit = peanutV4.getDeposit(depositIndices[i]);
             assert(deposit.amount == amounts[i]);  // main assertion
 
             // a few sanity checks

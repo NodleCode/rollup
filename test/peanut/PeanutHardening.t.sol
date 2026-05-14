@@ -9,7 +9,7 @@ pragma solidity 0.8.26;
 //   T5 — _withdrawDeposit L2ECO branch sends to recipient, not sender (upstream bug fix)
 
 import {Test} from "forge-std/Test.sol";
-import {PeanutV4} from "../../src/peanut/V4/PeanutV4.4.sol";
+import {EnvelopeVault} from "../../src/peanut/V4/PeanutV4.4.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";
@@ -18,7 +18,7 @@ import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Hol
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
 contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
-    PeanutV4 public peanut;
+    EnvelopeVault public peanut;
     ERC721Mock public erc721;
     ERC1155Mock public erc1155;
 
@@ -26,7 +26,7 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
     address constant PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
 
     function setUp() public {
-        peanut = new PeanutV4(address(0), address(0));
+        peanut = new EnvelopeVault(address(0), address(0));
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
     }
@@ -34,7 +34,7 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
     receive() external payable {}
 
     // ── T1 ─────────────────────────────────────────────────────────────────
-    // Direct safeTransferFrom into PeanutV4 must revert (S1). Previously the
+    // Direct safeTransferFrom into EnvelopeVault must revert (S1). Previously the
     // receiver hooks fell off the end and returned bytes4(0); some token
     // implementations would treat that as accepted, leaving tokens stuck.
 
@@ -62,14 +62,14 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
     }
 
     // ── T2 ─────────────────────────────────────────────────────────────────
-    // MFA_AUTHORIZER is now per-deploy. Prove a freshly-deployed PeanutV4
+    // MFA_AUTHORIZER is now per-deploy. Prove a freshly-deployed EnvelopeVault
     // accepts MFA signatures from a *test* signer rather than the upstream key.
 
     function test_T2_customMfaAuthorizerAcceptsItsSignature() public {
         uint256 mfaPrivKey = uint256(keccak256("nodle.peanut.mfa-test-signer"));
         address mfaSigner = vm.addr(mfaPrivKey);
 
-        PeanutV4 nodlePeanut = new PeanutV4(address(0), mfaSigner);
+        EnvelopeVault nodlePeanut = new EnvelopeVault(address(0), mfaSigner);
         assertEq(nodlePeanut.MFA_AUTHORIZER(), mfaSigner, "constructor arg ignored");
 
         // make an MFA-gated deposit, then craft both signatures with our test keys.
@@ -185,7 +185,7 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
         // Sanity: vault holds the raw tokens, deposit stores the scaled amount.
         assertEq(eco.balanceOf(address(peanut)), 100, "vault should hold raw tokens");
         assertEq(eco.balanceOf(sender), 0, "sender's tokens should be in the vault");
-        PeanutV4.Deposit memory d = peanut.getDeposit(idx);
+        EnvelopeVault.Deposit memory d = peanut.getDeposit(idx);
         assertEq(d.amount, 200, "deposit amount should be inflation-invariant (amount * multiplier)");
 
         // Recipient (not sender) claims using the link's private key.

@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /// @dev Minimal L2ECO-shaped mock — standard ERC20 plus a configurable
-/// `linearInflationMultiplier()` so the test can exercise PeanutV4's
+/// `linearInflationMultiplier()` so the test can exercise EnvelopeVault's
 /// `contractType == 4` rebasing-token paths.
 contract L2ECOMock is ERC20 {
     uint256 private _multiplier;

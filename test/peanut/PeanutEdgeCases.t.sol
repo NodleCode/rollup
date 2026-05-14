@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.26;
 
-// Edge-case coverage for PeanutV4 / PeanutBatcherV4 — gates the vendored happy-path
+// Edge-case coverage for EnvelopeVault / EnvelopeBatcher — gates the vendored happy-path
 // tests don't exercise directly. Names follow the repo's test_RevertWhen_* / test_*
 // convention. Each test is single-purpose; comments explain the *why*, not the *what*.
 
 import {Test} from "forge-std/Test.sol";
-import {PeanutV4} from "../../src/peanut/V4/PeanutV4.4.sol";
-import {PeanutBatcherV4} from "../../src/peanut/V4/PeanutBatcherV4.4.sol";
+import {EnvelopeVault} from "../../src/peanut/V4/PeanutV4.4.sol";
+import {EnvelopeBatcher} from "../../src/peanut/V4/PeanutBatcherV4.4.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";
@@ -17,16 +17,16 @@ import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Hol
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
 /// @dev Reentrancy probe: tries to call back into `peanut.withdrawDeposit` from inside
-/// `safeTransfer`. Guarded by PeanutV4's `nonReentrant` modifier, so the inner call
+/// `safeTransfer`. Guarded by EnvelopeVault's `nonReentrant` modifier, so the inner call
 /// reverts and the outer flow surfaces the inner revert reason ("REENTRANCY").
 contract ReentrantToken is ERC20Mock {
-    PeanutV4 public peanut;
+    EnvelopeVault public peanut;
     uint256 public targetIdx;
     bytes public targetSig;
     address public attacker;
     bool public attempted;
 
-    function arm(PeanutV4 p, uint256 idx, bytes calldata sig, address atk) external {
+    function arm(EnvelopeVault p, uint256 idx, bytes calldata sig, address atk) external {
         peanut = p;
         targetIdx = idx;
         targetSig = sig;
@@ -49,8 +49,8 @@ contract ReentrantToken is ERC20Mock {
 }
 
 contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
-    PeanutV4 public peanut;
-    PeanutBatcherV4 public batcher;
+    EnvelopeVault public peanut;
+    EnvelopeBatcher public batcher;
     ERC20Mock public erc20;
     ERC721Mock public erc721;
     ERC1155Mock public erc1155;
@@ -64,8 +64,8 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
     function setUp() public {
         LINK_PUBKEY20 = vm.addr(LINK_PRIV);
-        peanut = new PeanutV4(address(0), address(0));
-        batcher = new PeanutBatcherV4();
+        peanut = new EnvelopeVault(address(0), address(0));
+        batcher = new EnvelopeBatcher();
         erc20 = new ERC20Mock();
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
@@ -96,7 +96,7 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         return peanut.makeDeposit{value: amount}(address(0), 0, amount, 0, LINK_PUBKEY20);
     }
 
-    // ── PeanutV4 deposit input validation ──────────────────────────────────
+    // ── EnvelopeVault deposit input validation ──────────────────────────────────
 
     function test_RevertWhen_DepositInvalidContractType() public {
         // _pullTokensViaApproval rejects contractType >= 5.
@@ -120,14 +120,14 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
     function test_RevertWhen_DepositEcoTokenViaPlainErc20() public {
         // Deploying with _ecoAddress = testToken forces contractType==4 for that token.
-        PeanutV4 ecoVault = new PeanutV4(address(erc20), address(0));
+        EnvelopeVault ecoVault = new EnvelopeVault(address(erc20), address(0));
         erc20.mint(address(this), 100);
         erc20.approve(address(ecoVault), 100);
         vm.expectRevert("ECO DEPOSITS MUST USE _contractType 4");
         ecoVault.makeDeposit(address(erc20), 1, 100, 0, LINK_PUBKEY20);
     }
 
-    // ── PeanutV4 withdraw input validation ─────────────────────────────────
+    // ── EnvelopeVault withdraw input validation ─────────────────────────────────
 
     function test_RevertWhen_WithdrawIndexOutOfBounds() public {
         bytes memory sig = _signWithdrawal(99, ALICE, LINK_PRIV);
@@ -218,17 +218,17 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         peanut.withdrawDeposit(idx, ALICE, sig);
     }
 
-    // ── PeanutV4 views ─────────────────────────────────────────────────────
+    // ── EnvelopeVault views ─────────────────────────────────────────────────────
 
     function test_GetAllDepositsForAddressFiltersBySender() public {
         _depositEth(1);
         _depositEth(1);
         // Same sender (address(this)) made both deposits.
-        PeanutV4.Deposit[] memory mine = peanut.getAllDepositsForAddress(address(this));
+        EnvelopeVault.Deposit[] memory mine = peanut.getAllDepositsForAddress(address(this));
         assertEq(mine.length, 2);
 
         // Different sender → empty.
-        PeanutV4.Deposit[] memory aliceDeposits = peanut.getAllDepositsForAddress(ALICE);
+        EnvelopeVault.Deposit[] memory aliceDeposits = peanut.getAllDepositsForAddress(ALICE);
         assertEq(aliceDeposits.length, 0);
     }
 
@@ -240,7 +240,7 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         assertEq(peanut.getDepositCount(), 3);
     }
 
-    // ── PeanutV4 reentrancy ────────────────────────────────────────────────
+    // ── EnvelopeVault reentrancy ────────────────────────────────────────────────
 
     function test_NonReentrantBlocksReentryFromMaliciousToken() public {
         ReentrantToken evil = new ReentrantToken();
@@ -261,7 +261,7 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         assertTrue(evil.attempted(), "reentrancy attempt should have run");
     }
 
-    // ── PeanutBatcherV4 input validation ───────────────────────────────────
+    // ── EnvelopeBatcher input validation ───────────────────────────────────
 
     function test_RevertWhen_BatchEthAmountMismatch() public {
         address[] memory pubKeys = new address[](3);

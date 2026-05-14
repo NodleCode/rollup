@@ -4,8 +4,8 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import "../../src/peanut/V4/PeanutV4.4.sol";
 
-contract PeanutV4MFATest is Test {
-    PeanutV4 public peanutV4;
+contract EnvelopeVaultMFATest is Test {
+    EnvelopeVault public peanutV4;
 
     // a dummy private/public keypair to test withdrawals
     address public constant SAMPLE_ADDRESS = address(0x8fd379246834eac74B8419FfdA202CF8051F7A03);
@@ -16,7 +16,7 @@ contract PeanutV4MFATest is Test {
     address public constant LEGACY_MFA_AUTHORIZER = 0x3B14D43Bf521EF7FD9600533bEB73B6e9178DE7C;
 
     function setUp() public {
-        peanutV4 = new PeanutV4(address(0), LEGACY_MFA_AUTHORIZER);
+        peanutV4 = new EnvelopeVault(address(0), LEGACY_MFA_AUTHORIZER);
     }
 
     function testMFADeposit() public {

@@ -21,7 +21,7 @@ dotenv.config({ path: ".env-test" });
  *   - PEANUT_MFA_AUTHORIZER: Address authorized to sign MFA withdraw approvals.
  *                            Defaults to 0x0 (MFA disabled — withdrawMFADeposit reverts).
  *                            Set to your backend signer for production MFA.
- *   - PEANUT_DEPLOY_BATCHER: "true"|"false". Default "true". Deploys PeanutBatcherV4.
+ *   - PEANUT_DEPLOY_BATCHER: "true"|"false". Default "true". Deploys EnvelopeBatcher.
  *
  * Usage:
  *   yarn hardhat deploy-zksync \
@@ -49,29 +49,29 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   console.log("");
 
   // 1. Vault — required.
-  const peanut = await deployContract(deployer, "PeanutV4", [ecoToken, mfaAuthorizer]);
+  const peanut = await deployContract(deployer, "EnvelopeVault", [ecoToken, mfaAuthorizer]);
   const peanutAddr = await peanut.getAddress();
 
   // 2. Batcher — optional.
   let batcherAddr: string | undefined;
   if (deployBatcher) {
-    const batcher = await deployContract(deployer, "PeanutBatcherV4", []);
+    const batcher = await deployContract(deployer, "EnvelopeBatcher", []);
     batcherAddr = await batcher.getAddress();
   }
 
   console.log("");
   console.log("=== Deployment Complete ===");
-  console.log("PeanutV4:        ", peanutAddr);
-  if (batcherAddr) console.log("PeanutBatcherV4: ", batcherAddr);
+  console.log("EnvelopeVault:        ", peanutAddr);
+  if (batcherAddr) console.log("EnvelopeBatcher: ", batcherAddr);
   console.log("");
 
   // Verification
   console.log("=== Verifying Contracts ===");
   try {
-    console.log("Verifying PeanutV4...");
+    console.log("Verifying EnvelopeVault...");
     await hre.run("verify:verify", {
       address: peanutAddr,
-      contract: "src/peanut/V4/PeanutV4.4.sol:PeanutV4",
+      contract: "src/peanut/V4/PeanutV4.4.sol:EnvelopeVault",
       constructorArguments: [ecoToken, mfaAuthorizer],
     });
   } catch (e: any) {
@@ -80,10 +80,10 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
 
   if (batcherAddr) {
     try {
-      console.log("Verifying PeanutBatcherV4...");
+      console.log("Verifying EnvelopeBatcher...");
       await hre.run("verify:verify", {
         address: batcherAddr,
-        contract: "src/peanut/V4/PeanutBatcherV4.4.sol:PeanutBatcherV4",
+        contract: "src/peanut/V4/PeanutBatcherV4.4.sol:EnvelopeBatcher",
         constructorArguments: [],
       });
     } catch (e: any) {

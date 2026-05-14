@@ -6,8 +6,8 @@ import "../../src/peanut/V4/PeanutV4.4.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/SampleSCW.sol";
 
-contract PeanutV4GaslessTest is Test {
-    PeanutV4 public peanutV4;
+contract EnvelopeVaultGaslessTest is Test {
+    EnvelopeVault public peanutV4;
     ERC20Mock public testToken;
 
     address public constant PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
@@ -27,7 +27,7 @@ contract PeanutV4GaslessTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        peanutV4 = new PeanutV4(address(0), address(0));
+        peanutV4 = new EnvelopeVault(address(0), address(0));
     }
 
     function testMakeDepositERC20WithAuthorization() public {
@@ -94,7 +94,7 @@ contract PeanutV4GaslessTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(privateKey), digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        PeanutV4.GaslessReclaim memory reclaimRequest = PeanutV4.GaslessReclaim(depositIndex);
+        EnvelopeVault.GaslessReclaim memory reclaimRequest = EnvelopeVault.GaslessReclaim(depositIndex);
 
         if (bytes(expectRevert).length > 0) {
             vm.expectRevert(bytes(expectRevert));
@@ -140,7 +140,7 @@ contract PeanutV4GaslessTest is Test {
 
         bytes32 digest = _calculateDigest(depositIndex);
 
-        PeanutV4.GaslessReclaim memory reclaimRequest = PeanutV4.GaslessReclaim(depositIndex);
+        EnvelopeVault.GaslessReclaim memory reclaimRequest = EnvelopeVault.GaslessReclaim(depositIndex);
 
         // Submit a wrong signature
         vm.expectRevert("INVALID SIGNATURE");

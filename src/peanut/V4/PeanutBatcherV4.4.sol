@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Modified by Nodle (2026-05-12) — see src/peanut/doc/PeanutBatcherV4.md ("Vendoring
+// Modified by Nodle (2026-05-12) — see src/peanut/doc/EnvelopeBatcher.md ("Vendoring
 // patches") and the git history of this file for the full patch set. The upstream source
 // is peanutprotocol/peanut-contracts@main; the full GNU GPL v3 license text is bundled
 // at src/peanut/V4/LICENSE-GPL.
@@ -12,15 +12,15 @@ import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Recei
 import {IERC1155Receiver} from "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {PeanutV4} from "./PeanutV4.4.sol";
+import {EnvelopeVault} from "./PeanutV4.4.sol";
 
 /// @title  Peanut Batcher V4.4
 /// @notice Stateless helper that pulls tokens from msg.sender then forwards N deposits
-///         to a target PeanutV4 vault.
-/// @dev    Holds no persistent state — the PeanutV4 reference is taken per call so the
+///         to a target EnvelopeVault vault.
+/// @dev    Holds no persistent state — the EnvelopeVault reference is taken per call so the
 ///         contract can fan out to multiple vaults and so EraVM doesn't charge pubdata
 ///         for storage writes on the hot path.
-contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
+contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
     using SafeERC20 for IERC20;
 
     function _setAllowanceIfZero(address tokenAddress, address spender) internal {
@@ -77,7 +77,7 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         uint256 _tokenId,
         address[] calldata _pubKeys20
     ) external payable returns (uint256[] memory) {
-        PeanutV4 peanut = PeanutV4(_peanutAddress);
+        EnvelopeVault peanut = EnvelopeVault(_peanutAddress);
         uint256 totalAmount = _amount * _pubKeys20.length;
         uint256 etherAmount;
 
@@ -114,7 +114,7 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         uint256 _tokenId,
         address[] calldata _pubKeys20
     ) external payable {
-        PeanutV4 peanut = PeanutV4(_peanutAddress);
+        EnvelopeVault peanut = EnvelopeVault(_peanutAddress);
         // For ETH (contractType == 0), the batcher only receives msg.value once; forwarding
         // {value: msg.value} per loop iteration would revert on iteration 2 with insufficient
         // balance. Either require msg.value == _amount * N and forward _amount per call, or
@@ -150,7 +150,7 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
                 && _withMFAs.length == _pubKeys20.length,
             "PARAMETERS LENGTH MISMATCH"
         );
-        PeanutV4 peanut = PeanutV4(_peanutAddress);
+        EnvelopeVault peanut = EnvelopeVault(_peanutAddress);
 
         uint256[] memory depositIndexes = new uint256[](_amounts.length);
         for (uint256 i = 0; i < _amounts.length; i++) {
@@ -193,7 +193,7 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         address _pubKey20
     ) external payable returns (uint256[] memory) {
         require(_contractType == 0 || _contractType == 1, "ONLY ETH AND ERC20 RAFFLES ARE SUPPORTED");
-        PeanutV4 peanut = PeanutV4(_peanutAddress);
+        EnvelopeVault peanut = EnvelopeVault(_peanutAddress);
 
         if (_contractType == 1) {
             _setAllowanceIfZero(_tokenAddress, _peanutAddress);
@@ -225,7 +225,7 @@ contract PeanutBatcherV4 is IERC721Receiver, IERC1155Receiver {
         address _pubKey20
     ) external payable returns (uint256[] memory) {
         require(_contractType == 0 || _contractType == 1, "ONLY ETH AND ERC20 RAFFLES ARE SUPPORTED");
-        PeanutV4 peanut = PeanutV4(_peanutAddress);
+        EnvelopeVault peanut = EnvelopeVault(_peanutAddress);
 
         if (_contractType == 1) {
             _setAllowanceIfZero(_tokenAddress, _peanutAddress);

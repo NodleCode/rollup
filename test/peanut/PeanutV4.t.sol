@@ -7,8 +7,8 @@ import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
 
-contract PeanutV4Test is Test {
-    PeanutV4 public peanutV4;
+contract EnvelopeVaultTest is Test {
+    EnvelopeVault public peanutV4;
     ERC20Mock public testToken;
     ERC721Mock public testToken721;
     ERC1155Mock public testToken1155;
@@ -30,14 +30,14 @@ contract PeanutV4Test is Test {
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();
-        peanutV4 = new PeanutV4(address(0), address(0));
+        peanutV4 = new EnvelopeVault(address(0), address(0));
 
         // Mint tokens for test accounts
         testToken.mint(address(this), 1000);
         testToken721.mint(address(this), 1);
         // testToken1155.mint(address(this), 1, 1000, "");
 
-        // Approve PeanutV4 to spend tokens
+        // Approve EnvelopeVault to spend tokens
         testToken.approve(address(peanutV4), 1000);
         testToken721.setApprovalForAll(address(peanutV4), true);
         // testToken1155.setApprovalForAll(address(peanutV4), true);
@@ -75,7 +75,7 @@ contract PeanutV4Test is Test {
     // makeDeposit function must revert.
     function testECOMaliciousDeposit() public {
         // pretend that testToken is ECO
-        PeanutV4 peanutV4ECO = new PeanutV4(address(testToken), address(0));
+        EnvelopeVault peanutV4ECO = new EnvelopeVault(address(testToken), address(0));
 
         // approve tokens to be spent by the new peanut instance
         testToken.approve(address(peanutV4), 1000);

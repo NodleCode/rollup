@@ -1,4 +1,4 @@
-# PeanutBatcherV4 — N-deposits-in-one-tx helper
+# EnvelopeBatcher — N-deposits-in-one-tx helper
 
 `src/peanut/V4/PeanutBatcherV4.4.sol`
 
@@ -6,7 +6,7 @@
 
 A stateless helper that lets a single tx create N peanut deposits at once. The batcher pulls tokens from `msg.sender` once, then loops calling the vault's `makeSelflessDeposit` / `makeCustomDeposit` / `makeSelflessMFADeposit` for each pubKey. Common use case: airdrops or per-recipient claim links.
 
-Stateless by design — the `PeanutV4` reference is taken from the call argument each invocation, so the same batcher contract can fan out to multiple vault deployments. Also avoids EraVM pubdata cost on every batch call (`PeanutV4 public peanut` storage var was dropped during hardening).
+Stateless by design — the `EnvelopeVault` reference is taken from the call argument each invocation, so the same batcher contract can fan out to multiple vault deployments. Also avoids EraVM pubdata cost on every batch call (`EnvelopeVault public peanut` storage var was dropped during hardening).
 
 ## Constructor
 
@@ -64,18 +64,18 @@ Same self-only policy as the vault — direct ERC-721 / ERC-1155 transfers to th
 
 ## Storage
 
-None. (`PeanutV4 public peanut` was removed during hardening — see ZkSync notes.)
+None. (`EnvelopeVault public peanut` was removed during hardening — see ZkSync notes.)
 
 ## Events / errors
 
-None of its own. Inner deposits emit `PeanutV4.DepositEvent`.
+None of its own. Inner deposits emit `EnvelopeVault.DepositEvent`.
 
 ## Vendoring patches
 
 | | Patch |
 |---|---|
 | OZ v5 | `safeApprove` → `forceApprove` |
-| ZkSync (Z2) | Dropped `PeanutV4 public peanut` storage var; uses local per call |
+| ZkSync (Z2) | Dropped `EnvelopeVault public peanut` storage var; uses local per call |
 | ZkSync (Z1) | Explicit `override(IERC165)` on `supportsInterface` |
 | Hardening (S1) | Receivers revert on non-self operator |
 | Modern | Named imports |

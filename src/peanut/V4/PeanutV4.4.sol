@@ -49,7 +49,7 @@ import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/Signa
 import {IL2ECO} from "../util/IL2ECO.sol";
 import {IEIP3009} from "../util/IEIP3009.sol";
 
-contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
+contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     struct Deposit {
@@ -117,7 +117,7 @@ contract PeanutV4 is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         ecoAddress = _ecoAddress;
         MFA_AUTHORIZER = _mfaAuthorizer;
         DOMAIN_SEPARATOR = hash(
-            EIP712Domain({name: "Peanut", version: "4.4", chainId: block.chainid, verifyingContract: address(this)})
+            EIP712Domain({name: "Envelope", version: "4.4", chainId: block.chainid, verifyingContract: address(this)})
         );
     }
 

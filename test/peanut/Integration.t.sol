@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 //////////////////////////////
-// A few integration tests for the PeanutV4 contract
+// A few integration tests for the EnvelopeVault contract
 //////////////////////////////
 
 import "forge-std/Test.sol";
@@ -13,8 +13,8 @@ import "./mocks/ERC1155Mock.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
-contract PeanutV4IntegrationTest is Test, ERC1155Holder, ERC721Holder {
-    PeanutV4 public peanutV4;
+contract EnvelopeVaultIntegrationTest is Test, ERC1155Holder, ERC721Holder {
+    EnvelopeVault public peanutV4;
     ERC20Mock public testToken;
     ERC721Mock public testToken721;
     ERC1155Mock public testToken1155;
@@ -25,7 +25,7 @@ contract PeanutV4IntegrationTest is Test, ERC1155Holder, ERC721Holder {
 
     function setUp() public {
         console.log("Setting up test");
-        peanutV4 = new PeanutV4(address(0), address(0));
+        peanutV4 = new EnvelopeVault(address(0), address(0));
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();

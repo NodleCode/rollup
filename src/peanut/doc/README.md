@@ -9,16 +9,16 @@ sponsors the user-side approval txs so the UX is gasless from the holder's POV.
 
 | Contract | Source | Spec |
 |---|---|---|
-| `PeanutV4` (vault) | `src/peanut/V4/PeanutV4.4.sol` | [PeanutV4.md](./PeanutV4.md) |
-| `PeanutBatcherV4` (batched deposits) | `src/peanut/V4/PeanutBatcherV4.4.sol` | [PeanutBatcherV4.md](./PeanutBatcherV4.md) |
+| `EnvelopeVault` (vault) | `src/peanut/V4/PeanutV4.4.sol` | [PeanutV4.md](./PeanutV4.md) |
+| `EnvelopeBatcher` (batched deposits) | `src/peanut/V4/PeanutBatcherV4.4.sol` | [PeanutBatcherV4.md](./PeanutBatcherV4.md) |
 | `EnvelopeApprovalPaymaster` (Path-C gas sponsor + operator gas pool) | `src/paymasters/EnvelopeApprovalPaymaster.sol` | [EnvelopeApprovalPaymaster.md](./EnvelopeApprovalPaymaster.md) |
 
 Interfaces (vendored, unmodified):
 
 | Interface | Source | Used by |
 |---|---|---|
-| `IEIP3009` | `src/peanut/util/IEIP3009.sol` | `PeanutV4` for gasless USDC-style deposits |
-| `IL2ECO` | `src/peanut/util/IL2ECO.sol` | `PeanutV4` for rebasing-ERC20 deposits (`contractType==4`) |
+| `IEIP3009` | `src/peanut/util/IEIP3009.sol` | `EnvelopeVault` for gasless USDC-style deposits |
+| `IL2ECO` | `src/peanut/util/IL2ECO.sol` | `EnvelopeVault` for rebasing-ERC20 deposits (`contractType==4`) |
 
 ## License notice
 
@@ -37,16 +37,17 @@ The GPL is "viral" only across `import` boundaries; non-importing files in the s
 
 ## Naming convention
 
-- **Peanut** — the vendored open-source primitive (`peanutprotocol/peanut-contracts@main`). The vault and batcher keep upstream names so audits + diffs against upstream stay easy.
-- **Envelope** — Nodle's product wrapper on top. The paymaster is named for this layer (operates against the Peanut vault, sponsored on Nodle's terms).
+- **Source files** keep the upstream `Peanut*` names (e.g. `PeanutV4.4.sol`) so diffs against `peanutprotocol/peanut-contracts@main` stay grep-friendly. The audit lineage is preserved by file path + the `// Modified by Nodle` notice + the bundled `LICENSE-GPL`.
+- **Contract symbols** (the names visible on the explorer / in the SDK / in the EIP-712 domain) use the **Envelope** brand: `EnvelopeVault`, `EnvelopeBatcher`, `EnvelopeApprovalPaymaster`. This avoids any trademark confusion with Squirrel Labs' "Peanut Protocol" brand.
+- **On-chain hashed constants** (e.g. `PEANUT_SALT`) keep upstream values — changing them would change every signature digest and break compatibility. Those values are internal and never user-visible.
 
 ## Deployed on ZkSync Sepolia (chain 300)
 
 | | Address |
 |---|---|
-| `PeanutV4` | [`0xC241FE8Af12Cf35Eb346eA8eC3AECFCF6F6c2C44`](https://sepolia.explorer.zksync.io/address/0xC241FE8Af12Cf35Eb346eA8eC3AECFCF6F6c2C44#contract) |
-| `PeanutBatcherV4` | [`0x1676cD8B90e2E4388C032ae5Eb4BA50166Bb3426`](https://sepolia.explorer.zksync.io/address/0x1676cD8B90e2E4388C032ae5Eb4BA50166Bb3426#contract) |
-| `EnvelopeApprovalPaymaster` | [`0x80EA078d599Bc63BB921Cf96CC6861731446e268`](https://sepolia.explorer.zksync.io/address/0x80EA078d599Bc63BB921Cf96CC6861731446e268#contract) |
+| `EnvelopeVault` | [`0x32D02E54EaE5F8Bba75129e9306e0b8b70f05f6a`](https://sepolia.explorer.zksync.io/address/0x32D02E54EaE5F8Bba75129e9306e0b8b70f05f6a#contract) |
+| `EnvelopeBatcher` | [`0x5DAe00DDFA1F96Aaf75d21F49B6FF5C756174816`](https://sepolia.explorer.zksync.io/address/0x5DAe00DDFA1F96Aaf75d21F49B6FF5C756174816#contract) |
+| `EnvelopeApprovalPaymaster` | [`0xc160C8F6faC916De00B55aA0a630eBdce43CD532`](https://sepolia.explorer.zksync.io/address/0xc160C8F6faC916De00B55aA0a630eBdce43CD532#contract) |
 
 ## Three deposit paths
 

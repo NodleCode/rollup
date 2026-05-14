@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 contract TestSigWithdrawEther is Test {
-    PeanutV4 public peanutV4;
+    EnvelopeVault public peanutV4;
 
     // sample inputs
     address _pubkey20 = 0x8fd379246834eac74B8419FfdA202CF8051F7A03;
@@ -24,7 +24,7 @@ contract TestSigWithdrawEther is Test {
 
     function setUp() public {
         console.log("Setting up test");
-        peanutV4 = new PeanutV4(address(0), address(0));
+        peanutV4 = new EnvelopeVault(address(0), address(0));
     }
 
     // test sender withdrawal of ETH

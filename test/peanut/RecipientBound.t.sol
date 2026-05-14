@@ -8,7 +8,7 @@ import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
 
 contract RecipientBoundTest is Test {
-    PeanutV4 public peanutV4;
+    EnvelopeVault public peanutV4;
     ERC20Mock public testToken;
     ERC721Mock public testToken721;
     ERC1155Mock public testToken1155;
@@ -22,7 +22,7 @@ contract RecipientBoundTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        peanutV4 = new PeanutV4(address(0), address(0));
+        peanutV4 = new EnvelopeVault(address(0), address(0));
         testToken.mint(address(this), 1000);
         testToken.approve(address(peanutV4), 1000);
     }
