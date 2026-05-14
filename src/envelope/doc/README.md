@@ -45,9 +45,9 @@ The GPL is "viral" only across `import` boundaries; non-importing files in the s
 
 | | Address |
 |---|---|
-| `EnvelopeVault` | [`0x32D02E54EaE5F8Bba75129e9306e0b8b70f05f6a`](https://sepolia.explorer.zksync.io/address/0x32D02E54EaE5F8Bba75129e9306e0b8b70f05f6a#contract) |
-| `EnvelopeBatcher` | [`0x5DAe00DDFA1F96Aaf75d21F49B6FF5C756174816`](https://sepolia.explorer.zksync.io/address/0x5DAe00DDFA1F96Aaf75d21F49B6FF5C756174816#contract) |
-| `EnvelopeApprovalPaymaster` | [`0xc160C8F6faC916De00B55aA0a630eBdce43CD532`](https://sepolia.explorer.zksync.io/address/0xc160C8F6faC916De00B55aA0a630eBdce43CD532#contract) |
+| `EnvelopeVault` | [`0x37dbCC12784727AdE2A78AFbcb686b0eb915574f`](https://sepolia.explorer.zksync.io/address/0x37dbCC12784727AdE2A78AFbcb686b0eb915574f#contract) |
+| `EnvelopeBatcher` | [`0xe8c0aEC0F90f99968B2bf517ECa2BBd41A4926c1`](https://sepolia.explorer.zksync.io/address/0xe8c0aEC0F90f99968B2bf517ECa2BBd41A4926c1#contract) |
+| `EnvelopeApprovalPaymaster` | [`0x842fe6fC8358c5eeBf5b7dA4E8546DB3d8ADA268`](https://sepolia.explorer.zksync.io/address/0x842fe6fC8358c5eeBf5b7dA4E8546DB3d8ADA268#contract) |
 
 ## Three deposit paths
 
