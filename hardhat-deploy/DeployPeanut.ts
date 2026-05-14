@@ -15,13 +15,13 @@ dotenv.config({ path: ".env-test" });
  *   - DEPLOYER_PRIVATE_KEY: Private key for deployment.
  *
  * Optional environment variables:
- *   - PEANUT_ECO_TOKEN:      Address of a rebasing ECO-like ERC20 to gate from
+ *   - ENVELOPE_ECO_TOKEN:      Address of a rebasing ECO-like ERC20 to gate from
  *                            standard contractType==1 deposits. Defaults to 0x0
  *                            (no gating). Leave unset on Nodle.
- *   - PEANUT_MFA_AUTHORIZER: Address authorized to sign MFA withdraw approvals.
+ *   - ENVELOPE_MFA_AUTHORIZER: Address authorized to sign MFA withdraw approvals.
  *                            Defaults to 0x0 (MFA disabled — withdrawMFADeposit reverts).
  *                            Set to your backend signer for production MFA.
- *   - PEANUT_DEPLOY_BATCHER: "true"|"false". Default "true". Deploys EnvelopeBatcher.
+ *   - ENVELOPE_DEPLOY_BATCHER: "true"|"false". Default "true". Deploys EnvelopeBatcher.
  *
  * Usage:
  *   yarn hardhat deploy-zksync \
@@ -31,9 +31,9 @@ dotenv.config({ path: ".env-test" });
 module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const ZERO = "0x0000000000000000000000000000000000000000";
 
-  const ecoToken = process.env.PEANUT_ECO_TOKEN ?? ZERO;
-  const mfaAuthorizer = process.env.PEANUT_MFA_AUTHORIZER ?? ZERO;
-  const deployBatcher = (process.env.PEANUT_DEPLOY_BATCHER ?? "true").toLowerCase() === "true";
+  const ecoToken = process.env.ENVELOPE_ECO_TOKEN ?? ZERO;
+  const mfaAuthorizer = process.env.ENVELOPE_MFA_AUTHORIZER ?? ZERO;
+  const deployBatcher = (process.env.ENVELOPE_DEPLOY_BATCHER ?? "true").toLowerCase() === "true";
 
   const rpcUrl = hre.network.config.url!;
   const provider = new Provider(rpcUrl);
@@ -93,11 +93,11 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
 
   console.log("");
   console.log("=== Add these to .env-test: ===");
-  console.log(`PEANUT_V4=${peanutAddr}`);
-  if (batcherAddr) console.log(`PEANUT_BATCHER=${batcherAddr}`);
+  console.log(`ENVELOPE_VAULT=${peanutAddr}`);
+  if (batcherAddr) console.log(`ENVELOPE_BATCHER=${batcherAddr}`);
 
   if (mfaAuthorizer === ZERO) {
     console.log("");
-    console.log("NOTE: PEANUT_MFA_AUTHORIZER is 0x0 — withdrawMFADeposit will always revert. Set it before allowing MFA-flagged deposits in production.");
+    console.log("NOTE: ENVELOPE_MFA_AUTHORIZER is 0x0 — withdrawMFADeposit will always revert. Set it before allowing MFA-flagged deposits in production.");
   }
 };

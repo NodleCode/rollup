@@ -84,7 +84,7 @@ None of its own. Inner deposits emit `EnvelopeVault.DepositEvent`.
 
 ## Test coverage
 
-`test/peanut/PeanutBatcher.t.sol` — 13 tests:
+`test/peanut/EnvelopeBatcher.t.sol` — 13 tests:
 - happy paths for ETH / ERC-20 / ERC-1155 batches
 - ERC-721 batch reverts as designed (`test_RevertWhen_BatchERC721NotImplemented`)
 - raffle (ETH + ERC-20)

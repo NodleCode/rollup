@@ -19,14 +19,14 @@ dotenv.config({ path: ".env-test" });
  *
  * Required environment variables:
  *   - DEPLOYER_PRIVATE_KEY:   Private key for deployment (also default admin / withdrawer).
- *   - PEANUT_V4:              Address of the deployed Peanut/Envelope vault — the only
+ *   - ENVELOPE_VAULT:              Address of the deployed Peanut/Envelope vault — the only
  *                             allowed spender/operator for sponsored approvals.
  *
  * Optional environment variables (admin / signer):
  *   - ENVELOPE_PAYMASTER_ADMIN:           DEFAULT_ADMIN_ROLE. Defaults to deployer.
  *   - ENVELOPE_PAYMASTER_WITHDRAWER:      WITHDRAWER_ROLE. Defaults to deployer.
  *   - ENVELOPE_PAYMASTER_OPERATOR_SIGNER: EOA whose EIP-712 grant signatures are accepted.
- *                                         Defaults to PEANUT_MFA_AUTHORIZER if set, else deployer.
+ *                                         Defaults to ENVELOPE_MFA_AUTHORIZER if set, else deployer.
  *
  * Optional environment variables (config):
  *   - ENVELOPE_PAYMASTER_MAX_ETH_PER_TX:  Hard ceiling on wei sponsored per single tx.
@@ -37,7 +37,7 @@ dotenv.config({ path: ".env-test" });
  *   - ENVELOPE_PAYMASTER_INITIAL_OPERATORS: Comma-separated EOA list to seed as Mode B operators.
  *                                           Default: empty (Mode B dormant; admin can call setOperator later).
  *   - ENVELOPE_PAYMASTER_INITIAL_TARGETS:   Comma-separated contract list to seed as Mode B allowed targets.
- *                                           Default: PEANUT_V4 (so operator can call the vault directly).
+ *                                           Default: ENVELOPE_VAULT (so operator can call the vault directly).
  *
  * Usage:
  *   yarn hardhat deploy-zksync \
@@ -52,16 +52,16 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const wallet = new Wallet(process.env.DEPLOYER_PRIVATE_KEY!, provider);
   const deployer = new Deployer(hre, wallet);
 
-  const envelopeVault = process.env.PEANUT_V4;
+  const envelopeVault = process.env.ENVELOPE_VAULT;
   if (!envelopeVault || envelopeVault === ZERO) {
-    throw new Error("PEANUT_V4 env var is required (the deployed Envelope/Peanut vault address)");
+    throw new Error("ENVELOPE_VAULT env var is required (the deployed Envelope/Peanut vault address)");
   }
 
   const admin = process.env.ENVELOPE_PAYMASTER_ADMIN ?? wallet.address;
   const withdrawer = process.env.ENVELOPE_PAYMASTER_WITHDRAWER ?? wallet.address;
   const operatorSigner =
     process.env.ENVELOPE_PAYMASTER_OPERATOR_SIGNER ??
-    process.env.PEANUT_MFA_AUTHORIZER ??
+    process.env.ENVELOPE_MFA_AUTHORIZER ??
     wallet.address;
 
   const maxEthPerTx = ethers.toBigInt(

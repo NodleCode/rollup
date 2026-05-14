@@ -303,7 +303,7 @@ async function signGrant(user: string, ttlSec = 300) {
 ## Deploy
 
 ```bash
-# vault address already wired in .env-test as PEANUT_V4
+# vault address already wired in .env-test as ENVELOPE_VAULT
 ENVELOPE_PAYMASTER_FUNDING=2000000000000000     # 0.002 ETH; optional
 yarn hardhat deploy-zksync \
   --script DeployEnvelopePaymaster.ts \

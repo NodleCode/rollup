@@ -9,8 +9,8 @@ sponsors the user-side approval txs so the UX is gasless from the holder's POV.
 
 | Contract | Source | Spec |
 |---|---|---|
-| `EnvelopeVault` (vault) | `src/peanut/V4/PeanutV4.4.sol` | [PeanutV4.md](./PeanutV4.md) |
-| `EnvelopeBatcher` (batched deposits) | `src/peanut/V4/PeanutBatcherV4.4.sol` | [PeanutBatcherV4.md](./PeanutBatcherV4.md) |
+| `EnvelopeVault` (vault) | `src/peanut/V4/PeanutV4.4.sol` | [EnvelopeVault.md](./EnvelopeVault.md) |
+| `EnvelopeBatcher` (batched deposits) | `src/peanut/V4/PeanutBatcherV4.4.sol` | [EnvelopeBatcher.md](./EnvelopeBatcher.md) |
 | `EnvelopeApprovalPaymaster` (Path-C gas sponsor + operator gas pool) | `src/paymasters/EnvelopeApprovalPaymaster.sol` | [EnvelopeApprovalPaymaster.md](./EnvelopeApprovalPaymaster.md) |
 
 Interfaces (vendored, unmodified):
