@@ -13,8 +13,6 @@ sponsors the user-side approval txs so the UX is gasless from the holder's POV.
 | `PeanutBatcherV4` (batched deposits) | `src/peanut/V4/PeanutBatcherV4.4.sol` | [PeanutBatcherV4.md](./PeanutBatcherV4.md) |
 | `EnvelopeApprovalPaymaster` (Path-C gas sponsor + operator gas pool) | `src/paymasters/EnvelopeApprovalPaymaster.sol` | [EnvelopeApprovalPaymaster.md](./EnvelopeApprovalPaymaster.md) |
 
-Upstream's `PeanutV4Router` (cross-chain via Squid) is intentionally not vendored — Nodle's deployment doesn't currently use it. If cross-chain claims become a requirement later, re-vendor the upstream router contract and add it back.
-
 Interfaces (vendored, unmodified):
 
 | Interface | Source | Used by |
