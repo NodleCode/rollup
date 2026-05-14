@@ -20,6 +20,21 @@ Interfaces (vendored, unmodified):
 | `IEIP3009` | `src/peanut/util/IEIP3009.sol` | `PeanutV4` for gasless USDC-style deposits |
 | `IL2ECO` | `src/peanut/util/IL2ECO.sol` | `PeanutV4` for rebasing-ERC20 deposits (`contractType==4`) |
 
+## License notice
+
+This subtree mixes licenses; the repo-root `LICENSE` (Clear BSD) doesn't apply uniformly here.
+
+| Files | License | Notes |
+|---|---|---|
+| `src/peanut/V4/PeanutV4.4.sol`, `PeanutBatcherV4.4.sol` | **GPL-3.0-or-later** | Modified copies of upstream Peanut Protocol V4.4. Full GPL v3 text bundled at `src/peanut/V4/LICENSE-GPL`. Each file carries a top-of-file modification notice per GPL §5(a). |
+| `src/peanut/util/IEIP3009.sol`, `IL2ECO.sol` | **MIT** | Vendored interfaces, unchanged from upstream |
+| `src/paymasters/EnvelopeApprovalPaymaster.sol` | **BSD-3-Clause-Clear** | Our own code; doesn't `import` any GPL source so it isn't a derivative work |
+| `test/peanut/**/*.t.sol` (files that import Peanut sources) | **GPL-3.0-or-later** | Test files that `import` GPL-licensed contracts are derivative works under a strict reading of the GPL; relicensed for compliance |
+| `test/peanut/mocks/**/*.sol` | **MIT / UNLICENSED** | Vendored test mocks, original SPDX retained |
+| All other repo files | unchanged | Whatever they were |
+
+The GPL is "viral" only across `import` boundaries; non-importing files in the same repository remain under their own licenses (per the OSI's "mere aggregation" interpretation).
+
 ## Naming convention
 
 - **Peanut** — the vendored open-source primitive (`peanutprotocol/peanut-contracts@main`). The vault and batcher keep upstream names so audits + diffs against upstream stay easy.

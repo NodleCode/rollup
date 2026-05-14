@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause-Clear
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.26;
 
 // Edge-case coverage for PeanutV4 / PeanutBatcherV4 — gates the vendored happy-path
