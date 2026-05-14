@@ -4,7 +4,7 @@
 // applied at import") and the git history of this file for the full patch set. The
 // upstream source is peanutprotocol/peanut-contracts@main; the full GNU GPL v3 license
 // text is bundled at src/envelope/V4/LICENSE-GPL.
-pragma solidity 0.8.26;
+pragma solidity ^0.8.26;
 
 //////////////////////////////////////////////////////////////////////////////////////
 // @title   Peanut Protocol
