@@ -12,7 +12,7 @@ import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Recei
 import {IERC1155Receiver} from "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {EnvelopeVault} from "./PeanutV4.4.sol";
+import {EnvelopeVault} from "./EnvelopeVault.sol";
 
 /// @title  Peanut Batcher V4.4
 /// @notice Stateless helper that pulls tokens from msg.sender then forwards N deposits

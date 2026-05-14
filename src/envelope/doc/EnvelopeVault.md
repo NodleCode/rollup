@@ -1,6 +1,6 @@
 # EnvelopeVault — link-based asset vault
 
-`src/envelope/V4/PeanutV4.4.sol`
+`src/envelope/V4/EnvelopeVault.sol`
 
 ## Purpose
 

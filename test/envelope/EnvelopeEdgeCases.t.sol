@@ -6,8 +6,8 @@ pragma solidity ^0.8.26;
 // convention. Each test is single-purpose; comments explain the *why*, not the *what*.
 
 import {Test} from "forge-std/Test.sol";
-import {EnvelopeVault} from "../../src/envelope/V4/PeanutV4.4.sol";
-import {EnvelopeBatcher} from "../../src/envelope/V4/PeanutBatcherV4.4.sol";
+import {EnvelopeVault} from "../../src/envelope/V4/EnvelopeVault.sol";
+import {EnvelopeBatcher} from "../../src/envelope/V4/EnvelopeBatcher.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";

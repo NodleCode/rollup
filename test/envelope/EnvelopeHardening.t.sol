@@ -9,7 +9,7 @@ pragma solidity 0.8.26;
 //   T5 — _withdrawDeposit L2ECO branch sends to recipient, not sender (upstream bug fix)
 
 import {Test} from "forge-std/Test.sol";
-import {EnvelopeVault} from "../../src/envelope/V4/PeanutV4.4.sol";
+import {EnvelopeVault} from "../../src/envelope/V4/EnvelopeVault.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";

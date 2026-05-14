@@ -9,8 +9,8 @@ sponsors the user-side approval txs so the UX is gasless from the holder's POV.
 
 | Contract | Source | Spec |
 |---|---|---|
-| `EnvelopeVault` (vault) | `src/envelope/V4/PeanutV4.4.sol` | [EnvelopeVault.md](./EnvelopeVault.md) |
-| `EnvelopeBatcher` (batched deposits) | `src/envelope/V4/PeanutBatcherV4.4.sol` | [EnvelopeBatcher.md](./EnvelopeBatcher.md) |
+| `EnvelopeVault` (vault) | `src/envelope/V4/EnvelopeVault.sol` | [EnvelopeVault.md](./EnvelopeVault.md) |
+| `EnvelopeBatcher` (batched deposits) | `src/envelope/V4/EnvelopeBatcher.sol` | [EnvelopeBatcher.md](./EnvelopeBatcher.md) |
 | `EnvelopeApprovalPaymaster` (Path-C gas sponsor + operator gas pool) | `src/paymasters/EnvelopeApprovalPaymaster.sol` | [EnvelopeApprovalPaymaster.md](./EnvelopeApprovalPaymaster.md) |
 
 Interfaces (vendored, unmodified):
@@ -26,7 +26,7 @@ This subtree mixes licenses; the repo-root `LICENSE` (Clear BSD) doesn't apply u
 
 | Files | License | Notes |
 |---|---|---|
-| `src/envelope/V4/PeanutV4.4.sol`, `PeanutBatcherV4.4.sol` | **GPL-3.0-or-later** | Modified copies of upstream Peanut Protocol V4.4. Full GPL v3 text bundled at `src/envelope/V4/LICENSE-GPL`. Each file carries a top-of-file modification notice per GPL §5(a). |
+| `src/envelope/V4/EnvelopeVault.sol`, `EnvelopeBatcher.sol` | **GPL-3.0-or-later** | Modified copies of upstream Peanut Protocol V4.4. Full GPL v3 text bundled at `src/envelope/V4/LICENSE-GPL`. Each file carries a top-of-file modification notice per GPL §5(a). |
 | `src/envelope/util/IEIP3009.sol`, `IL2ECO.sol` | **MIT** | Vendored interfaces, unchanged from upstream |
 | `src/paymasters/EnvelopeApprovalPaymaster.sol` | **BSD-3-Clause-Clear** | Our own code; doesn't `import` any GPL source so it isn't a derivative work |
 | `test/envelope/**/*.t.sol` (files that import the vault/batcher sources) | **GPL-3.0-or-later** | Test files that `import` GPL-licensed contracts are derivative works under a strict reading of the GPL; relicensed for compliance |
@@ -37,7 +37,7 @@ The GPL is "viral" only across `import` boundaries; non-importing files in the s
 
 ## Naming convention
 
-- **Source files** keep the upstream `Peanut*` names (e.g. `PeanutV4.4.sol`) so diffs against `peanutprotocol/peanut-contracts@main` stay grep-friendly. The audit lineage is preserved by file path + the `// Modified by Nodle` notice + the bundled `LICENSE-GPL`.
+- **Source files** keep the upstream `Peanut*` names (e.g. `EnvelopeVault.sol`) so diffs against `peanutprotocol/peanut-contracts@main` stay grep-friendly. The audit lineage is preserved by file path + the `// Modified by Nodle` notice + the bundled `LICENSE-GPL`.
 - **Contract symbols** (the names visible on the explorer / in the SDK / in the EIP-712 domain) use the **Envelope** brand: `EnvelopeVault`, `EnvelopeBatcher`, `EnvelopeApprovalPaymaster`. This avoids any trademark confusion with upstream Peanut Protocol brand.
 - **On-chain hashed constants** (e.g. `ENVELOPE_SALT`) keep upstream values — changing them would change every signature digest and break compatibility. Those values are internal and never user-visible.
 

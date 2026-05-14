@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-import "../../src/envelope/V4/PeanutV4.4.sol";
+import "../../src/envelope/V4/EnvelopeVault.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/SampleSCW.sol";
 

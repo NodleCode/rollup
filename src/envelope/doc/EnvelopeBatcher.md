@@ -1,6 +1,6 @@
 # EnvelopeBatcher — N-deposits-in-one-tx helper
 
-`src/envelope/V4/PeanutBatcherV4.4.sol`
+`src/envelope/V4/EnvelopeBatcher.sol`
 
 ## Purpose
 
