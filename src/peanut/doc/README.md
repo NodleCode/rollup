@@ -12,7 +12,7 @@ sponsors the user-side approval txs so the UX is gasless from the holder's POV.
 | `PeanutV4` (vault) | `src/peanut/V4/PeanutV4.4.sol` | [PeanutV4.md](./PeanutV4.md) |
 | `PeanutBatcherV4` (batched deposits) | `src/peanut/V4/PeanutBatcherV4.4.sol` | [PeanutBatcherV4.md](./PeanutBatcherV4.md) |
 | `PeanutV4Router` (cross-chain via Squid) | `src/peanut/V4/PeanutRouter.sol` | [PeanutRouter.md](./PeanutRouter.md) |
-| `EnvelopeApprovalPaymaster` (Path-C gas sponsor) | `src/paymasters/EnvelopeApprovalPaymaster.sol` | [EnvelopeApprovalPaymaster.md](./EnvelopeApprovalPaymaster.md) |
+| `EnvelopeApprovalPaymaster` (Path-C gas sponsor + operator gas pool) | `src/paymasters/EnvelopeApprovalPaymaster.sol` | [EnvelopeApprovalPaymaster.md](./EnvelopeApprovalPaymaster.md) |
 
 Interfaces (vendored, unmodified):
 
@@ -58,8 +58,8 @@ Both are Hardhat-zksync scripts. See each spec for env vars.
 
 | Suite | Tests |
 |---|---|
-| Peanut core (`test/peanut/`) | 71 (60 vendored + 11 hardening) |
-| Paymaster (`test/paymasters/EnvelopeApprovalPaymaster.t.sol`) | 19 |
+| Peanut core (`test/peanut/`) | **96** (60 vendored + 13 hardening + 23 edge cases) |
+| `EnvelopeApprovalPaymaster` (`test/paymasters/EnvelopeApprovalPaymaster.t.sol`) | **27** (19 Mode A + 7 Mode B + 1 EIP-1271 contract signer) |
 | Other paymasters (unchanged) | 102 |
 | Rest of repo | 747 |
-| **Total** | **939** |
+| **Total** | **972** |

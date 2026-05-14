@@ -63,8 +63,13 @@ bytes32 public immutable DOMAIN_SEPARATOR;
 address public immutable envelopeVault;
 uint256 public immutable maxEthPerTx;
 
-address public operatorSigner;                 // admin-rotatable
-mapping(bytes32 => bool) public isNonceUsed;   // single-use replay protection
+// Mode A
+address public operatorSigner;                  // admin-rotatable EIP-712 signer
+mapping(bytes32 => bool) public isNonceUsed;    // single-use replay protection
+
+// Mode B
+mapping(address => bool) public isOperator;     // EOAs allowed to call any fn on a target
+mapping(address => bool) public isAllowedTarget; // contracts an operator may call
 ```
 
 Plus inherited:
@@ -141,7 +146,9 @@ C. Grant:
     - paymasterInput length >= 4                           [InvalidPaymasterInput]
     - block.timestamp <= deadline                          [GrantExpired]
     - !isNonceUsed[nonce]                                  [NonceAlreadyUsed]
-    - ECDSA.recover(grantDigest, signature) == operatorSigner  [InvalidGrantSignature]
+    - SignatureChecker.isValidSignatureNow(operatorSigner, grantDigest, signature)
+                                                              [InvalidGrantSignature]
+      (supports both EOA ECDSA sigs and EIP-1271 contract signers)
 D. Inner call:
     - data.length >= 36                                    [UnsupportedSelector]
     - selector ∈ {APPROVE_SEL, SET_APPROVAL_FOR_ALL_SEL}   [UnsupportedSelector]
@@ -189,20 +196,28 @@ Mode B is dormant at deploy. To enable: admin calls `setAllowedTarget(envelopeVa
 ## Events / Errors
 
 ```solidity
+// Mode A
 event OperatorSignerUpdated(address indexed previousSigner, address indexed newSigner);
 event ApprovalSponsored(address indexed user, address indexed token,
                         bytes32 indexed nonce, uint256 gasPaid);
 
+// Mode B
+event OperatorSet(address indexed operator, bool allowed);
+event AllowedTargetSet(address indexed target, bool allowed);
+event OperatorCallSponsored(address indexed operator, address indexed target, uint256 gasPaid);
+
+// Validation reverts
 error WrongFlow();
-error GrantExpired();
-error NonceAlreadyUsed();
-error InvalidGrantSignature();
-error UnsupportedSelector();
-error SpenderNotEnvelope();
-error PerTxLimitExceeded();
-error InsufficientPaymasterBalance();
-error ZeroAddress();
-error Unused();           // _validateAndPayGeneralFlow hook (BasePaymaster requirement; never reached)
+error GrantExpired();                  // Mode A
+error NonceAlreadyUsed();              // Mode A
+error InvalidGrantSignature();         // Mode A
+error UnsupportedSelector();           // Mode A
+error SpenderNotEnvelope();            // Mode A
+error TargetNotAllowed();              // Mode B
+error PerTxLimitExceeded();            // both modes
+error InsufficientPaymasterBalance();  // both modes
+error ZeroAddress();                   // admin functions + constructor
+error Unused();                        // _validateAndPayGeneralFlow hook (never reached)
 ```
 
 Plus inherited:
@@ -219,19 +234,35 @@ error TooLongPeriod();
 
 ## Threat model
 
+### Shared (both modes)
+
 | Attack | Mitigation |
 |---|---|
-| Anyone tries to use the paymaster without operator sign-off | `_verifyAndConsumeGrant` — must hold a valid signature from `operatorSigner` |
+| Drain via one huge tx (e.g. huge `gasLimit`) | `requiredETH > maxEthPerTx` reverts |
+| Drain via many normal-sized txs | `QuotaControl` daily cap (shared across both modes) |
+| Withdraw paymaster ETH without permission | `WITHDRAWER_ROLE` gate on `withdraw` |
+| zkSync `<address>.transfer` issue | All ETH outflow uses `.call{value:}("")` (EraVM-safe) |
+| Bootloader impersonation | `_mustBeBootloader()` (msg.sender == `BOOTLOADER_FORMAL_ADDRESS`) |
+
+### Mode A specific
+
+| Attack | Mitigation |
+|---|---|
+| Anyone tries to use the paymaster without operator sign-off | `_verifyAndConsumeGrant` — must hold a valid signature from `operatorSigner` (via `SignatureChecker`, EOA or EIP-1271) |
 | Replay a stale grant | `nonce` is single-use (`isNonceUsed`); also `deadline` |
 | Use a grant signed for another user | `user` is part of the EIP-712 struct hash; sig won't verify if `tx.from` differs |
 | Sponsor a transfer / mint / arbitrary state-change | Inner selector must be `approve` or `setApprovalForAll` |
 | Approve attacker as spender | Inner first arg must equal `envelopeVault` |
-| Drain via one huge tx (e.g. huge `gasLimit`) | `requiredETH > maxEthPerTx` reverts |
-| Drain via many normal-sized txs | `QuotaControl` daily cap |
 | Operator-signer key compromise | Bounded by `maxEthPerTx` per tx AND quota per day. Admin rotates via `setOperatorSigner` |
-| Withdraw paymaster ETH without permission | `WITHDRAWER_ROLE` gate on `withdraw` |
-| zkSync `<address>.transfer` issue | All ETH outflow uses `.call{value:}("")` (EraVM-safe) |
-| Bootloader impersonation | `_mustBeBootloader()` (msg.sender == `BOOTLOADER_FORMAL_ADDRESS`) |
+
+### Mode B specific
+
+| Attack | Mitigation |
+|---|---|
+| Random EOA tries to use the paymaster directly | `isOperator[tx.from]` check — only allowlisted EOAs enter Mode B; otherwise the call falls through to Mode A and fails on grant decode |
+| Operator EOA calls a malicious contract | `isAllowedTarget[tx.to]` check — admin curates which contracts the operator may call |
+| Operator-EOA key compromise | Same `maxEthPerTx` + quota bounds. Admin revokes via `setOperator(eoa, false)` (one tx, no balance migration) |
+| Single operator becomes a bottleneck or single-point-of-failure | Allowlist multiple operator EOAs; rotate independently |
 
 ## What was deliberately dropped (vs. earlier iterations)
 
@@ -288,8 +319,21 @@ Optional env vars (defaults documented in the script header):
 
 ## Test coverage
 
-`test/paymasters/EnvelopeApprovalPaymaster.t.sol` — 19 tests:
-- **Happy paths**: sponsors `approve`, sponsors `setApprovalForAll`, sponsors approval on ANY token (no allowlist)
+`test/paymasters/EnvelopeApprovalPaymaster.t.sol` — **27 tests**:
+
+**Mode A (user approval) — 19 tests**
+- **Happy paths**: sponsors `approve`, sponsors `setApprovalForAll`, sponsors on any token (no allowlist), accepts EIP-1271 contract signer
 - **Reverts per gate**: not-bootloader, approval-based-flow, expired grant, reused nonce, wrong signer, wrong user in sig, unsupported selector, spender-not-envelope, per-tx limit, insufficient balance, exceeded quota (via dedicated tight-quota paymaster instance)
-- **Period rollover**: claimed counter resets after `period` elapsed
+- **Period rollover**: `claimed` counter resets after `period` elapsed
 - **Admin gates**: rotate operator signer; non-admin can't; withdraw; non-withdrawer can't
+
+**Mode B (operator direct call) — 7 tests**
+- Operator EOA on allowlist + allowlisted target → sponsored
+- `TargetNotAllowed` when target isn't on the allowlist
+- Non-operator caller falls through to Mode A grant flow
+- `PerTxLimitExceeded` applies to Mode B too
+- Mode A and Mode B contribute to the same `QuotaControl` counter
+- Admin can revoke operators (`setOperator(eoa, false)`)
+- Non-admin cannot manage operators or targets
+
+**Mode independence verified**: a Mode B success and a Mode A success drain into the same ETH pool and the same `claimed` counter, asserted in `test_modeB_operatorContributesToSameQuotaAsModeA`.
