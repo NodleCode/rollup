@@ -34,6 +34,10 @@ dotenv.config({ path: ".env-test" });
  *   - ENVELOPE_PAYMASTER_QUOTA:           Wei sponsorable per period. Default: 0.1 ETH.
  *   - ENVELOPE_PAYMASTER_PERIOD:          Period length in seconds. Default: 86400 (1 day).
  *   - ENVELOPE_PAYMASTER_FUNDING:         ETH (wei) to send to paymaster post-deploy. Default: 0.
+ *   - ENVELOPE_PAYMASTER_INITIAL_OPERATORS: Comma-separated EOA list to seed as Mode B operators.
+ *                                           Default: empty (Mode B dormant; admin can call setOperator later).
+ *   - ENVELOPE_PAYMASTER_INITIAL_TARGETS:   Comma-separated contract list to seed as Mode B allowed targets.
+ *                                           Default: PEANUT_V4 (so operator can call the vault directly).
  *
  * Usage:
  *   yarn hardhat deploy-zksync \
@@ -72,6 +76,16 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
     ? ethers.toBigInt(process.env.ENVELOPE_PAYMASTER_FUNDING)
     : 0n;
 
+  const initialOperators = (process.env.ENVELOPE_PAYMASTER_INITIAL_OPERATORS ?? "")
+    .split(",")
+    .map((a) => a.trim())
+    .filter((a) => a.length > 0 && a !== ZERO);
+
+  const initialTargets = (process.env.ENVELOPE_PAYMASTER_INITIAL_TARGETS ?? envelopeVault)
+    .split(",")
+    .map((a) => a.trim())
+    .filter((a) => a.length > 0 && a !== ZERO);
+
   console.log("=== Deploying EnvelopeApprovalPaymaster on ZkSync ===");
   console.log("Network:           ", hre.network.name);
   console.log("Deployer:          ", wallet.address);
@@ -83,6 +97,8 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Quota (wei):       ", quota.toString(), `(${ethers.formatEther(quota)} ETH)`);
   console.log("Period (seconds):  ", period.toString(), `(${Number(period) / 86400} days)`);
   console.log("Funding (wei):     ", funding.toString(), `(${ethers.formatEther(funding)} ETH)`);
+  console.log("Mode B operators:  ", initialOperators.length > 0 ? initialOperators : "(none — seed later)");
+  console.log("Mode B targets:    ", initialTargets);
   console.log("");
 
   const paymaster = await deployContract(deployer, "EnvelopeApprovalPaymaster", [
@@ -101,6 +117,27 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
     const fundTx = await wallet.sendTransaction({ to: paymasterAddr, value: funding });
     await fundTx.wait();
     console.log(`  fund tx: ${fundTx.hash}`);
+  }
+
+  // Seed Mode B (only if deployer is the admin — otherwise admin must do this themselves).
+  if (admin.toLowerCase() === wallet.address.toLowerCase()) {
+    if (initialOperators.length > 0 || initialTargets.length > 0) {
+      console.log("Seeding Mode B (operators + targets)...");
+      for (const op of initialOperators) {
+        const tx = await paymaster.setOperator(op, true);
+        await tx.wait();
+        console.log(`  setOperator(${op}, true) — tx: ${tx.hash}`);
+      }
+      for (const t of initialTargets) {
+        const tx = await paymaster.setAllowedTarget(t, true);
+        await tx.wait();
+        console.log(`  setAllowedTarget(${t}, true) — tx: ${tx.hash}`);
+      }
+    }
+  } else if (initialOperators.length > 0 || initialTargets.length > 0) {
+    console.log(
+      `Skipping Mode B seeding: admin (${admin}) is not the deployer; have the admin call setOperator / setAllowedTarget directly.`,
+    );
   }
 
   console.log("");

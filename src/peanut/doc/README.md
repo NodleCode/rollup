@@ -32,7 +32,7 @@ Interfaces (vendored, unmodified):
 |---|---|
 | `PeanutV4` | [`0xC241FE8Af12Cf35Eb346eA8eC3AECFCF6F6c2C44`](https://sepolia.explorer.zksync.io/address/0xC241FE8Af12Cf35Eb346eA8eC3AECFCF6F6c2C44#contract) |
 | `PeanutBatcherV4` | [`0x1676cD8B90e2E4388C032ae5Eb4BA50166Bb3426`](https://sepolia.explorer.zksync.io/address/0x1676cD8B90e2E4388C032ae5Eb4BA50166Bb3426#contract) |
-| `EnvelopeApprovalPaymaster` | [`0xEE95bFF2240652e0f57aE3fcd57F87d85593c191`](https://sepolia.explorer.zksync.io/address/0xEE95bFF2240652e0f57aE3fcd57F87d85593c191#contract) |
+| `EnvelopeApprovalPaymaster` | [`0x80EA078d599Bc63BB921Cf96CC6861731446e268`](https://sepolia.explorer.zksync.io/address/0x80EA078d599Bc63BB921Cf96CC6861731446e268#contract) |
 | `PeanutV4Router` | not deployed (deploy when cross-chain is needed) |
 
 ## Three deposit paths

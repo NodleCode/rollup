@@ -19,7 +19,7 @@ Mode B is the "single point we top up" pattern: instead of funding the operator'
 - **No token allowlist** — the operator's grant is the only auth surface. Defense-in-depth comes from a hard per-tx ETH cap and a global daily quota.
 - **Operator-driven UX** — the user never sees the EIP-712 grant; only the operator's backend does.
 
-Deployed on ZkSync Sepolia at [`0xEE95bFF2240652e0f57aE3fcd57F87d85593c191`](https://sepolia.explorer.zksync.io/address/0xEE95bFF2240652e0f57aE3fcd57F87d85593c191#contract).
+Deployed on ZkSync Sepolia at [`0x80EA078d599Bc63BB921Cf96CC6861731446e268`](https://sepolia.explorer.zksync.io/address/0x80EA078d599Bc63BB921Cf96CC6861731446e268#contract).
 
 ## Inheritance
 
@@ -279,7 +279,7 @@ import { Wallet } from "zksync-ethers";
 import { ethers } from "ethers";
 import { randomBytes, hexlify } from "ethers";
 
-const PAYMASTER = "0xEE95bFF2240652e0f57aE3fcd57F87d85593c191";
+const PAYMASTER = "0x80EA078d599Bc63BB921Cf96CC6861731446e268";
 const CHAIN_ID  = 300;
 const operatorWallet = new Wallet(process.env.OPERATOR_PK!);
 
