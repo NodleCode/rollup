@@ -16,18 +16,18 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
-/// @dev Reentrancy probe: tries to call back into `peanut.withdrawDeposit` from inside
+/// @dev Reentrancy probe: tries to call back into `vault.withdrawDeposit` from inside
 /// `safeTransfer`. Guarded by EnvelopeVault's `nonReentrant` modifier, so the inner call
 /// reverts and the outer flow surfaces the inner revert reason ("REENTRANCY").
 contract ReentrantToken is ERC20Mock {
-    EnvelopeVault public peanut;
+    EnvelopeVault public vault;
     uint256 public targetIdx;
     bytes public targetSig;
     address public attacker;
     bool public attempted;
 
     function arm(EnvelopeVault p, uint256 idx, bytes calldata sig, address atk) external {
-        peanut = p;
+        vault = p;
         targetIdx = idx;
         targetSig = sig;
         attacker = atk;
@@ -36,10 +36,10 @@ contract ReentrantToken is ERC20Mock {
     function _update(address from, address to, uint256 value) internal override {
         super._update(from, to, value);
         // Reenter once during the outer safeTransfer back to the recipient.
-        if (!attempted && address(peanut) != address(0) && to == attacker) {
+        if (!attempted && address(vault) != address(0) && to == attacker) {
             attempted = true;
             // This call should revert because the outer call holds the reentrancy lock.
-            try peanut.withdrawDeposit(targetIdx, attacker, targetSig) {
+            try vault.withdrawDeposit(targetIdx, attacker, targetSig) {
                 revert("REENTRANCY GUARD MISSING");
             } catch {
                 // expected — guard caught it
@@ -48,8 +48,8 @@ contract ReentrantToken is ERC20Mock {
     }
 }
 
-contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
-    EnvelopeVault public peanut;
+contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
+    EnvelopeVault public vault;
     EnvelopeBatcher public batcher;
     ERC20Mock public erc20;
     ERC721Mock public erc721;
@@ -64,7 +64,7 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
     function setUp() public {
         LINK_PUBKEY20 = vm.addr(LINK_PRIV);
-        peanut = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0), address(0));
         batcher = new EnvelopeBatcher();
         erc20 = new ERC20Mock();
         erc721 = new ERC721Mock();
@@ -79,12 +79,12 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    peanut.PEANUT_SALT(),
+                    vault.ENVELOPE_SALT(),
                     block.chainid,
-                    address(peanut),
+                    address(vault),
                     idx,
                     recipient,
-                    peanut.ANYONE_WITHDRAWAL_MODE()
+                    vault.ANYONE_WITHDRAWAL_MODE()
                 )
             )
         );
@@ -93,7 +93,7 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     }
 
     function _depositEth(uint256 amount) internal returns (uint256) {
-        return peanut.makeDeposit{value: amount}(address(0), 0, amount, 0, LINK_PUBKEY20);
+        return vault.makeDeposit{value: amount}(address(0), 0, amount, 0, LINK_PUBKEY20);
     }
 
     // ── EnvelopeVault deposit input validation ──────────────────────────────────
@@ -101,21 +101,21 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     function test_RevertWhen_DepositInvalidContractType() public {
         // _pullTokensViaApproval rejects contractType >= 5.
         vm.expectRevert("INVALID CONTRACT TYPE");
-        peanut.makeDeposit{value: 0}(address(0), 5, 0, 0, LINK_PUBKEY20);
+        vault.makeDeposit{value: 0}(address(0), 5, 0, 0, LINK_PUBKEY20);
     }
 
     function test_RevertWhen_DepositEthAmountMismatch() public {
         // contractType==0 requires _amount == msg.value.
         vm.expectRevert("WRONG ETH AMOUNT");
-        peanut.makeDeposit{value: 100}(address(0), 0, 50, 0, LINK_PUBKEY20);
+        vault.makeDeposit{value: 100}(address(0), 0, 50, 0, LINK_PUBKEY20);
     }
 
     function test_RevertWhen_DepositErc721AmountNotOne() public {
         // contractType==2 requires _amount == 1.
         erc721.mint(address(this), 1);
-        erc721.approve(address(peanut), 1);
+        erc721.approve(address(vault), 1);
         vm.expectRevert("AMOUNT MUST BE 1 FOR ERC721");
-        peanut.makeDeposit(address(erc721), 2, 2, 1, LINK_PUBKEY20);
+        vault.makeDeposit(address(erc721), 2, 2, 1, LINK_PUBKEY20);
     }
 
     function test_RevertWhen_DepositEcoTokenViaPlainErc20() public {
@@ -132,16 +132,16 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     function test_RevertWhen_WithdrawIndexOutOfBounds() public {
         bytes memory sig = _signWithdrawal(99, ALICE, LINK_PRIV);
         vm.expectRevert("DEPOSIT INDEX DOES NOT EXIST");
-        peanut.withdrawDeposit(99, ALICE, sig);
+        vault.withdrawDeposit(99, ALICE, sig);
     }
 
     function test_RevertWhen_WithdrawTwice() public {
         uint256 idx = _depositEth(1 ether);
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
-        peanut.withdrawDeposit(idx, ALICE, sig);
+        vault.withdrawDeposit(idx, ALICE, sig);
 
         vm.expectRevert("DEPOSIT ALREADY WITHDRAWN");
-        peanut.withdrawDeposit(idx, ALICE, sig);
+        vault.withdrawDeposit(idx, ALICE, sig);
     }
 
     function test_RevertWhen_WithdrawWithWrongSigner() public {
@@ -151,7 +151,7 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bytes memory sig = _signWithdrawal(idx, ALICE, wrongKey);
 
         vm.expectRevert("WRONG SIGNATURE");
-        peanut.withdrawDeposit(idx, ALICE, sig);
+        vault.withdrawDeposit(idx, ALICE, sig);
     }
 
     function test_RevertWhen_WithdrawAsRecipientCallerMismatch() public {
@@ -160,12 +160,12 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    peanut.PEANUT_SALT(),
+                    vault.ENVELOPE_SALT(),
                     block.chainid,
-                    address(peanut),
+                    address(vault),
                     idx,
                     ALICE,
-                    peanut.RECIPIENT_WITHDRAWAL_MODE()
+                    vault.RECIPIENT_WITHDRAWAL_MODE()
                 )
             )
         );
@@ -175,47 +175,47 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         // BOB tries to call on behalf of ALICE — caller must equal the recipient param.
         vm.prank(BOB);
         vm.expectRevert("NOT THE RECIPIENT");
-        peanut.withdrawDepositAsRecipient(idx, ALICE, sig);
+        vault.withdrawDepositAsRecipient(idx, ALICE, sig);
     }
 
     function test_RevertWhen_RecipientBoundClaimedByOtherAddress() public {
         // Address-bound deposit: recipient = ALICE.
-        uint256 idx = peanut.makeCustomDeposit{value: 1 ether}(
+        uint256 idx = vault.makeCustomDeposit{value: 1 ether}(
             address(0), 0, 1 ether, 0, LINK_PUBKEY20, address(this), false, ALICE, 0, false, ""
         );
         // Even with a valid pubKey signature, the contract-stored recipient blocks
         // anyone else from being the named recipient on withdrawal.
         bytes memory sig = _signWithdrawal(idx, BOB, LINK_PRIV);
         vm.expectRevert("WRONG RECIPIENT");
-        peanut.withdrawDeposit(idx, BOB, sig);
+        vault.withdrawDeposit(idx, BOB, sig);
     }
 
     function test_RecipientBoundSenderCannotReclaimBeforeDeadline() public {
         uint40 reclaimAfter = uint40(block.timestamp + 1 days);
-        uint256 idx = peanut.makeCustomDeposit{value: 1 ether}(
+        uint256 idx = vault.makeCustomDeposit{value: 1 ether}(
             address(0), 0, 1 ether, 0, LINK_PUBKEY20, address(this), false, ALICE, reclaimAfter, false, ""
         );
         vm.expectRevert("TOO EARLY TO RECLAIM");
-        peanut.withdrawDepositSender(idx);
+        vault.withdrawDepositSender(idx);
 
         vm.warp(reclaimAfter + 1);
-        peanut.withdrawDepositSender(idx); // succeeds after the deadline
+        vault.withdrawDepositSender(idx); // succeeds after the deadline
     }
 
     function test_RevertWhen_SenderReclaimNotTheSender() public {
         uint256 idx = _depositEth(1 ether);
         vm.prank(ALICE);
         vm.expectRevert("NOT THE SENDER");
-        peanut.withdrawDepositSender(idx);
+        vault.withdrawDepositSender(idx);
     }
 
     function test_RevertWhen_MFADepositWithoutMFASignature() public {
-        // peanut is deployed with MFA_AUTHORIZER == address(0), so MFA-flagged
+        // vault is deployed with MFA_AUTHORIZER == address(0), so MFA-flagged
         // deposits can never be withdrawn via withdrawDeposit (REQUIRES AUTHORIZATION).
-        uint256 idx = peanut.makeMFADeposit{value: 1 ether}(address(0), 0, 1 ether, 0, LINK_PUBKEY20);
+        uint256 idx = vault.makeMFADeposit{value: 1 ether}(address(0), 0, 1 ether, 0, LINK_PUBKEY20);
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
         vm.expectRevert("REQUIRES AUTHORIZATION");
-        peanut.withdrawDeposit(idx, ALICE, sig);
+        vault.withdrawDeposit(idx, ALICE, sig);
     }
 
     // ── EnvelopeVault views ─────────────────────────────────────────────────────
@@ -224,20 +224,20 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         _depositEth(1);
         _depositEth(1);
         // Same sender (address(this)) made both deposits.
-        EnvelopeVault.Deposit[] memory mine = peanut.getAllDepositsForAddress(address(this));
+        EnvelopeVault.Deposit[] memory mine = vault.getAllDepositsForAddress(address(this));
         assertEq(mine.length, 2);
 
         // Different sender → empty.
-        EnvelopeVault.Deposit[] memory aliceDeposits = peanut.getAllDepositsForAddress(ALICE);
+        EnvelopeVault.Deposit[] memory aliceDeposits = vault.getAllDepositsForAddress(ALICE);
         assertEq(aliceDeposits.length, 0);
     }
 
     function test_DepositCountTracksArrayLength() public {
-        assertEq(peanut.getDepositCount(), 0);
+        assertEq(vault.getDepositCount(), 0);
         _depositEth(1);
         _depositEth(1);
         _depositEth(1);
-        assertEq(peanut.getDepositCount(), 3);
+        assertEq(vault.getDepositCount(), 3);
     }
 
     // ── EnvelopeVault reentrancy ────────────────────────────────────────────────
@@ -245,18 +245,18 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     function test_NonReentrantBlocksReentryFromMaliciousToken() public {
         ReentrantToken evil = new ReentrantToken();
         evil.mint(address(this), 100);
-        evil.approve(address(peanut), 100);
+        evil.approve(address(vault), 100);
 
         // Deposit type-1 (ERC-20) so withdraw routes back through the token's transfer.
-        uint256 idx = peanut.makeDeposit(address(evil), 1, 100, 0, LINK_PUBKEY20);
+        uint256 idx = vault.makeDeposit(address(evil), 1, 100, 0, LINK_PUBKEY20);
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
 
         // Arm the token to reenter inside its _update during the outgoing safeTransfer.
-        evil.arm(peanut, idx, sig, ALICE);
+        evil.arm(vault, idx, sig, ALICE);
 
         // Outer withdraw succeeds (inner reentrant attempt caught and swallowed by try/catch);
         // the reentrancy guard ensured the inner call could not double-spend.
-        peanut.withdrawDeposit(idx, ALICE, sig);
+        vault.withdrawDeposit(idx, ALICE, sig);
         assertEq(evil.balanceOf(ALICE), 100);
         assertTrue(evil.attempted(), "reentrancy attempt should have run");
     }
@@ -267,7 +267,7 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         address[] memory pubKeys = new address[](3);
         for (uint256 i = 0; i < 3; i++) pubKeys[i] = LINK_PUBKEY20;
         vm.expectRevert("INVALID TOTAL ETHER SENT");
-        batcher.batchMakeDeposit{value: 1 ether}(address(peanut), address(0), 0, 1 ether, 0, pubKeys);
+        batcher.batchMakeDeposit{value: 1 ether}(address(vault), address(0), 0, 1 ether, 0, pubKeys);
         // expected 3 * 1 ether, sent 1 ether
     }
 
@@ -281,7 +281,7 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bool[] memory mfa = new bool[](3); // wrong length
 
         vm.expectRevert("PARAMETERS LENGTH MISMATCH");
-        batcher.batchMakeDepositArbitrary(address(peanut), tokens, types, amounts, ids, pks, mfa);
+        batcher.batchMakeDepositArbitrary(address(vault), tokens, types, amounts, ids, pks, mfa);
     }
 
     // batchMakeDepositNoReturn — ETH path must require exact total, non-ETH path must reject msg.value.
@@ -293,9 +293,9 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         for (uint256 i = 0; i < 3; i++) pubKeys[i] = LINK_PUBKEY20;
 
         batcher.batchMakeDepositNoReturn{value: 3 ether}(
-            address(peanut), address(0), 0, 1 ether, 0, pubKeys
+            address(vault), address(0), 0, 1 ether, 0, pubKeys
         );
-        assertEq(peanut.getDepositCount(), 3);
+        assertEq(vault.getDepositCount(), 3);
     }
 
     function test_RevertWhen_BatchNoReturnEthAmountMismatch() public {
@@ -303,7 +303,7 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         for (uint256 i = 0; i < 3; i++) pubKeys[i] = LINK_PUBKEY20;
         vm.expectRevert("INVALID TOTAL ETHER SENT");
         batcher.batchMakeDepositNoReturn{value: 1 ether}(
-            address(peanut), address(0), 0, 1 ether, 0, pubKeys
+            address(vault), address(0), 0, 1 ether, 0, pubKeys
         );
     }
 
@@ -315,7 +315,7 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         for (uint256 i = 0; i < 2; i++) pubKeys[i] = LINK_PUBKEY20;
         vm.expectRevert("ETH NOT ACCEPTED FOR NON-ETH DEPOSIT");
         batcher.batchMakeDepositNoReturn{value: 1 wei}(
-            address(peanut), address(erc20), 1, 100, 0, pubKeys
+            address(vault), address(erc20), 1, 100, 0, pubKeys
         );
     }
 
@@ -323,14 +323,14 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = 1;
         vm.expectRevert("ONLY ETH AND ERC20 RAFFLES ARE SUPPORTED");
-        batcher.batchMakeDepositRaffle(address(peanut), address(erc721), 2, amounts, LINK_PUBKEY20);
+        batcher.batchMakeDepositRaffle(address(vault), address(erc721), 2, amounts, LINK_PUBKEY20);
     }
 
     function test_BatchZeroLengthDepositsIsNoop() public {
         address[] memory pubKeys = new address[](0);
-        uint256[] memory ids = batcher.batchMakeDeposit(address(peanut), address(0), 0, 0, 0, pubKeys);
+        uint256[] memory ids = batcher.batchMakeDeposit(address(vault), address(0), 0, 0, 0, pubKeys);
         assertEq(ids.length, 0);
-        assertEq(peanut.getDepositCount(), 0);
+        assertEq(vault.getDepositCount(), 0);
     }
 
     // ── L2ECO inflation-invariant accounting ───────────────────────────────
@@ -342,8 +342,8 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         // rebasing token's supply at deposit time.
         L2ECOMock eco = new L2ECOMock(2);
         eco.mint(address(this), 100);
-        eco.approve(address(peanut), 100);
-        uint256 idx = peanut.makeDeposit(address(eco), 4, 100, 0, LINK_PUBKEY20);
+        eco.approve(address(vault), 100);
+        uint256 idx = vault.makeDeposit(address(eco), 4, 100, 0, LINK_PUBKEY20);
 
         // Multiplier increases from 2 → 4 (token supply doubled). The vault holds 100
         // raw tokens but the "share" is recorded as 200 (= 100 * 2). At multiplier 4
@@ -351,11 +351,11 @@ contract PeanutEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         // also reducing the vault's token balance to match (mock doesn't auto-rebase).
         eco.setMultiplier(4);
         // Burn half the vault's balance to mirror what a real rebase would do to it.
-        vm.prank(address(peanut));
+        vm.prank(address(vault));
         eco.transfer(address(0xdead), 50);
 
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
-        peanut.withdrawDeposit(idx, ALICE, sig);
+        vault.withdrawDeposit(idx, ALICE, sig);
 
         assertEq(eco.balanceOf(ALICE), 50);
     }

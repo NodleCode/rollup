@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "../../src/envelope/V4/PeanutV4.4.sol";
 
 contract EnvelopeVaultMFATest is Test {
-    EnvelopeVault public peanutV4;
+    EnvelopeVault public vault;
 
     // a dummy private/public keypair to test withdrawals
     address public constant SAMPLE_ADDRESS = address(0x8fd379246834eac74B8419FfdA202CF8051F7A03);
@@ -16,11 +16,11 @@ contract EnvelopeVaultMFATest is Test {
     address public constant LEGACY_MFA_AUTHORIZER = 0x3B14D43Bf521EF7FD9600533bEB73B6e9178DE7C;
 
     function setUp() public {
-        peanutV4 = new EnvelopeVault(address(0), LEGACY_MFA_AUTHORIZER);
+        vault = new EnvelopeVault(address(0), LEGACY_MFA_AUTHORIZER);
     }
 
     function testMFADeposit() public {
-      uint256 depositIndex = peanutV4.makeSelflessMFADeposit{value: 1}(
+      uint256 depositIndex = vault.makeSelflessMFADeposit{value: 1}(
         0x0000000000000000000000000000000000000000,
         0,
         1,
@@ -31,12 +31,12 @@ contract EnvelopeVaultMFATest is Test {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    peanutV4.PEANUT_SALT(),
+                    vault.ENVELOPE_SALT(),
                     block.chainid,
-                    address(peanutV4),
+                    address(vault),
                     depositIndex,
                     address(this), // recipient
-                    peanutV4.ANYONE_WITHDRAWAL_MODE()
+                    vault.ANYONE_WITHDRAWAL_MODE()
                 )
             )
         );
@@ -45,15 +45,15 @@ contract EnvelopeVaultMFATest is Test {
 
         // Withdrawing without authorization, so should fail
         vm.expectRevert("REQUIRES AUTHORIZATION");
-        peanutV4.withdrawDeposit(depositIndex, address(this), signature);
+        vault.withdrawDeposit(depositIndex, address(this), signature);
 
         // Withdrawing with incorrect authorization signature
         vm.expectRevert("WRONG MFA SIGNATURE");
-        peanutV4.withdrawMFADeposit(depositIndex, address(this), signature, signature);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, signature);
 
         // Authorization is correct! Withdrawal has to be successful!
         bytes memory authorization = hex"41caae599d693a31ea45aab95c8d166e9709cb450f1c76a2b06306ee61cb28b37ed0cad0d47d055580ce204ac9973b671a0970d02f9ee6572a9234f3130707321c";
-        peanutV4.withdrawMFADeposit(depositIndex, address(this), signature, authorization);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, authorization);
     }
 
     receive () payable external {}

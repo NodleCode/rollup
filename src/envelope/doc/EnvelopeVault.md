@@ -54,7 +54,7 @@ bytes32 public DOMAIN_SEPARATOR; // set at construction; not immutable for clari
 
 | Name | Value | Purpose |
 |---|---|---|
-| `PEANUT_SALT` | `keccak256("Konrad makes tokens go woosh tadam")` | Domain-tags every link signature; prevents the same signature being reused on a different Peanut deployment |
+| `ENVELOPE_SALT` | `keccak256("Konrad makes tokens go woosh tadam")` | Domain-tags every link signature; prevents the same signature being reused on a different Envelope deployment |
 | `ANYONE_WITHDRAWAL_MODE` | `bytes32(0)` | Default mode — anyone holding the private key can withdraw on behalf of an arbitrary recipient |
 | `RECIPIENT_WITHDRAWAL_MODE` | `keccak256("only recipient")` | Used for `withdrawDepositAsRecipient` — only the recipient address signs |
 | `GASLESS_RECLAIM_TYPEHASH` | `keccak256("GaslessReclaim(uint256 depositIndex)")` | EIP-712 type for sender's gasless reclaim |
@@ -88,8 +88,8 @@ so the dual-zero footgun is impossible.
 
 | Function | Caller | Auth |
 |---|---|---|
-| `withdrawDeposit(index, recipient, signature)` | anyone | `signature` (recovers to `pubKey20`) signed over `keccak256(PEANUT_SALT, chainid, address(this), index, recipient, ANYONE_WITHDRAWAL_MODE)` |
-| `withdrawMFADeposit(index, recipient, signature, MFASignature)` | anyone | Both above signature AND a signature from `MFA_AUTHORIZER` over `keccak256(PEANUT_SALT, chainid, address(this), index, recipient)` |
+| `withdrawDeposit(index, recipient, signature)` | anyone | `signature` (recovers to `pubKey20`) signed over `keccak256(ENVELOPE_SALT, chainid, address(this), index, recipient, ANYONE_WITHDRAWAL_MODE)` |
+| `withdrawMFADeposit(index, recipient, signature, MFASignature)` | anyone | Both above signature AND a signature from `MFA_AUTHORIZER` over `keccak256(ENVELOPE_SALT, chainid, address(this), index, recipient)` |
 | `withdrawDepositAsRecipient(index, recipient, signature)` | `recipient` only (msg.sender) | `signature` signed with `RECIPIENT_WITHDRAWAL_MODE` instead of `ANYONE_WITHDRAWAL_MODE` |
 | `withdrawDepositSender(index)` | original sender | none beyond `msg.sender == _deposit.senderAddress`; for recipient-bound deposits also requires `block.timestamp > reclaimableAfter` |
 | `withdrawDepositSenderGasless(reclaim, signer, signature)` | anyone | EIP-712 signature from `signer` (must equal `senderAddress`) over `GaslessReclaim(depositIndex)` |

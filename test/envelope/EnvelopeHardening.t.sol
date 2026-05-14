@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.26;
 
-// Hardening tests added during the OZ-v5 / ZkSync-aligned refactor of Peanut V4.4.
+// Hardening tests added during the OZ-v5 / ZkSync-aligned refactor of the vendored vault.
 // Each test maps back to a finding in the audit:
 //   T1 — direct ERC721 / ERC1155 transfers must revert (fix for S1 receivers footgun)
 //   T2 — MFA_AUTHORIZER is now a per-deploy constructor arg (fix for S3 hardcoded key)
@@ -17,8 +17,8 @@ import {L2ECOMock} from "./mocks/L2ECOMock.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
-contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
-    EnvelopeVault public peanut;
+contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
+    EnvelopeVault public vault;
     ERC721Mock public erc721;
     ERC1155Mock public erc1155;
 
@@ -26,7 +26,7 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
     address constant PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
 
     function setUp() public {
-        peanut = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0), address(0));
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
     }
@@ -41,13 +41,13 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
     function test_T1_directERC721TransferReverts() public {
         erc721.mint(address(this), 42);
         vm.expectRevert("DIRECT TRANSFERS NOT ALLOWED");
-        erc721.safeTransferFrom(address(this), address(peanut), 42);
+        erc721.safeTransferFrom(address(this), address(vault), 42);
     }
 
     function test_T1_directERC1155TransferReverts() public {
         erc1155.mint(address(this), 7, 1, "");
         vm.expectRevert("DIRECT TRANSFERS NOT ALLOWED");
-        erc1155.safeTransferFrom(address(this), address(peanut), 7, 1, "");
+        erc1155.safeTransferFrom(address(this), address(vault), 7, 1, "");
     }
 
     function test_T1_directERC1155BatchTransferReverts() public {
@@ -58,7 +58,7 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
         erc1155.mint(address(this), 1, 1, "");
         erc1155.mint(address(this), 2, 1, "");
         vm.expectRevert("DIRECT TRANSFERS NOT ALLOWED");
-        erc1155.safeBatchTransferFrom(address(this), address(peanut), ids, amounts, "");
+        erc1155.safeBatchTransferFrom(address(this), address(vault), ids, amounts, "");
     }
 
     // ── T2 ─────────────────────────────────────────────────────────────────
@@ -66,17 +66,17 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
     // accepts MFA signatures from a *test* signer rather than the upstream key.
 
     function test_T2_customMfaAuthorizerAcceptsItsSignature() public {
-        uint256 mfaPrivKey = uint256(keccak256("nodle.peanut.mfa-test-signer"));
+        uint256 mfaPrivKey = uint256(keccak256("nodle.vault.mfa-test-signer"));
         address mfaSigner = vm.addr(mfaPrivKey);
 
-        EnvelopeVault nodlePeanut = new EnvelopeVault(address(0), mfaSigner);
-        assertEq(nodlePeanut.MFA_AUTHORIZER(), mfaSigner, "constructor arg ignored");
+        EnvelopeVault nodleVault = new EnvelopeVault(address(0), mfaSigner);
+        assertEq(nodleVault.MFA_AUTHORIZER(), mfaSigner, "constructor arg ignored");
 
         // make an MFA-gated deposit, then craft both signatures with our test keys.
-        uint256 depositPrivKey = uint256(keccak256("nodle.peanut.deposit-key"));
+        uint256 depositPrivKey = uint256(keccak256("nodle.vault.deposit-key"));
         address depositSigner = vm.addr(depositPrivKey);
 
-        uint256 idx = nodlePeanut.makeSelflessMFADeposit{value: 1 wei}(
+        uint256 idx = nodleVault.makeSelflessMFADeposit{value: 1 wei}(
             address(0), 0, 1, 0, depositSigner, address(this)
         );
 
@@ -84,12 +84,12 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
         bytes32 wdHash = MessageHashUtilsLite.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    nodlePeanut.PEANUT_SALT(),
+                    nodleVault.ENVELOPE_SALT(),
                     block.chainid,
-                    address(nodlePeanut),
+                    address(nodleVault),
                     idx,
                     address(this),
-                    nodlePeanut.ANYONE_WITHDRAWAL_MODE()
+                    nodleVault.ANYONE_WITHDRAWAL_MODE()
                 )
             )
         );
@@ -100,9 +100,9 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
         bytes32 mfaHash = MessageHashUtilsLite.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    nodlePeanut.PEANUT_SALT(),
+                    nodleVault.ENVELOPE_SALT(),
                     block.chainid,
-                    address(nodlePeanut),
+                    address(nodleVault),
                     idx,
                     address(this)
                 )
@@ -111,15 +111,15 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
         (uint8 mv, bytes32 mr, bytes32 ms) = vm.sign(mfaPrivKey, mfaHash);
         bytes memory mfaSig = abi.encodePacked(mr, ms, mv);
 
-        nodlePeanut.withdrawMFADeposit(idx, address(this), wdSig, mfaSig);
+        nodleVault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig);
     }
 
     function test_T2_zeroMfaAuthorizerRejectsAllMfaWithdrawals() public {
-        // peanut deployed with mfaAuthorizer = address(0). Any MFA withdrawal must fail.
+        // vault deployed with mfaAuthorizer = address(0). Any MFA withdrawal must fail.
         uint256 depositPrivKey = uint256(keccak256("dep"));
         address depositSigner = vm.addr(depositPrivKey);
 
-        uint256 idx = peanut.makeSelflessMFADeposit{value: 1 wei}(
+        uint256 idx = vault.makeSelflessMFADeposit{value: 1 wei}(
             address(0), 0, 1, 0, depositSigner, address(this)
         );
 
@@ -127,7 +127,7 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
         bytes memory wdSig = hex"00";
         bytes memory mfaSig = hex"00";
         vm.expectRevert();
-        peanut.withdrawMFADeposit(idx, address(this), wdSig, mfaSig);
+        vault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig);
     }
 
     // ── T4 ─────────────────────────────────────────────────────────────────
@@ -136,23 +136,23 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
 
     function test_T4_dualZeroDepositRejected() public {
         vm.expectRevert("DEPOSIT MUST HAVE AUTH");
-        peanut.makeDeposit{value: 1 wei}(address(0), 0, 1, 0, address(0));
+        vault.makeDeposit{value: 1 wei}(address(0), 0, 1, 0, address(0));
     }
 
     function test_T4_dualZeroCustomDepositRejected() public {
         vm.expectRevert("DEPOSIT MUST HAVE AUTH");
-        peanut.makeCustomDeposit{value: 1 wei}(
+        vault.makeCustomDeposit{value: 1 wei}(
             address(0), 0, 1, 0, address(0), address(this), false, address(0), uint40(0), false, ""
         );
     }
 
     function test_T4_pubKeyOnlyAccepted() public {
-        uint256 idx = peanut.makeDeposit{value: 1 wei}(address(0), 0, 1, 0, PUBKEY20);
+        uint256 idx = vault.makeDeposit{value: 1 wei}(address(0), 0, 1, 0, PUBKEY20);
         assertEq(idx, 0);
     }
 
     function test_T4_recipientOnlyAccepted() public {
-        uint256 idx = peanut.makeCustomDeposit{value: 1 wei}(
+        uint256 idx = vault.makeCustomDeposit{value: 1 wei}(
             address(0), 0, 1, 0, address(0), address(this), false, ALICE, uint40(0), false, ""
         );
         assertEq(idx, 0);
@@ -177,39 +177,39 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
         eco.mint(sender, 100);
 
         vm.prank(sender);
-        eco.approve(address(peanut), 100);
+        eco.approve(address(vault), 100);
 
         vm.prank(sender);
-        uint256 idx = peanut.makeDeposit(address(eco), 4, 100, 0, pubKey20);
+        uint256 idx = vault.makeDeposit(address(eco), 4, 100, 0, pubKey20);
 
         // Sanity: vault holds the raw tokens, deposit stores the scaled amount.
-        assertEq(eco.balanceOf(address(peanut)), 100, "vault should hold raw tokens");
+        assertEq(eco.balanceOf(address(vault)), 100, "vault should hold raw tokens");
         assertEq(eco.balanceOf(sender), 0, "sender's tokens should be in the vault");
-        EnvelopeVault.Deposit memory d = peanut.getDeposit(idx);
+        EnvelopeVault.Deposit memory d = vault.getDeposit(idx);
         assertEq(d.amount, 200, "deposit amount should be inflation-invariant (amount * multiplier)");
 
         // Recipient (not sender) claims using the link's private key.
         bytes32 digest = MessageHashUtilsLite.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    peanut.PEANUT_SALT(),
+                    vault.ENVELOPE_SALT(),
                     block.chainid,
-                    address(peanut),
+                    address(vault),
                     idx,
                     recipient,
-                    peanut.ANYONE_WITHDRAWAL_MODE()
+                    vault.ANYONE_WITHDRAWAL_MODE()
                 )
             )
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(depositPrivKey, digest);
         bytes memory sig = abi.encodePacked(r, s, v);
-        peanut.withdrawDeposit(idx, recipient, sig);
+        vault.withdrawDeposit(idx, recipient, sig);
 
         // The fix: recipient gets 100, sender stays at 0.
         // If the bug were still present, sender would have 100 and recipient 0.
         assertEq(eco.balanceOf(recipient), 100, "recipient must receive the L2ECO tokens");
         assertEq(eco.balanceOf(sender), 0, "sender must NOT receive the L2ECO tokens back");
-        assertEq(eco.balanceOf(address(peanut)), 0, "vault should be drained");
+        assertEq(eco.balanceOf(address(vault)), 0, "vault should be drained");
     }
 
     function test_T5_L2ECOSenderReclaimStillGoesToSender() public {
@@ -223,17 +223,17 @@ contract PeanutHardeningTest is Test, ERC721Holder, ERC1155Holder {
         eco.mint(sender, 50);
 
         vm.prank(sender);
-        eco.approve(address(peanut), 50);
+        eco.approve(address(vault), 50);
         vm.prank(sender);
-        uint256 idx = peanut.makeDeposit(address(eco), 4, 50, 0, pubKey20);
+        uint256 idx = vault.makeDeposit(address(eco), 4, 50, 0, pubKey20);
 
         assertEq(eco.balanceOf(sender), 0);
 
         vm.prank(sender);
-        peanut.withdrawDepositSender(idx);
+        vault.withdrawDepositSender(idx);
 
         assertEq(eco.balanceOf(sender), 50, "sender reclaim should return the tokens");
-        assertEq(eco.balanceOf(address(peanut)), 0);
+        assertEq(eco.balanceOf(address(vault)), 0);
     }
 }
 

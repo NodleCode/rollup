@@ -14,7 +14,7 @@ import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
-    EnvelopeVault public peanutV4;
+    EnvelopeVault public vault;
     ERC20Mock public testToken;
     ERC721Mock public testToken721;
     ERC1155Mock public testToken1155;
@@ -25,7 +25,7 @@ contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
 
     function setUp() public {
         console.log("Setting up test");
-        peanutV4 = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0), address(0));
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();
@@ -38,7 +38,7 @@ contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
     // check invariants
     function testDepositEther(uint64 amount, address randomAddress) public {
         vm.assume(amount > 0);
-        peanutV4.makeDeposit{value: amount}(randomAddress, 0, amount, 0, PUBKEY20);
+        vault.makeDeposit{value: amount}(randomAddress, 0, amount, 0, PUBKEY20);
     }
 
     function testDepositERC20(uint64 amount) public {
@@ -46,11 +46,11 @@ contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
         // mint tokens to the contract
         testToken.mint(address(this), amount);
         // approve the contract to spend the tokens
-        testToken.approve(address(peanutV4), amount);
+        testToken.approve(address(vault), amount);
         // console log allowance and amount
-        console.log("Allowance: ", testToken.allowance(address(this), address(peanutV4)));
+        console.log("Allowance: ", testToken.allowance(address(this), address(vault)));
         console.log("Amount: ", amount);
-        peanutV4.makeDeposit(address(testToken), 1, amount, 0, PUBKEY20);
+        vault.makeDeposit(address(testToken), 1, amount, 0, PUBKEY20);
     }
 
     // Test for ERC721 Token
@@ -58,8 +58,8 @@ contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
         // mint a token to the contract
         testToken721.mint(address(this), tokenId);
         // approve the contract to spend the tokens
-        testToken721.approve(address(peanutV4), tokenId);
-        peanutV4.makeDeposit(address(testToken721), 2, 1, tokenId, PUBKEY20);
+        testToken721.approve(address(vault), tokenId);
+        vault.makeDeposit(address(testToken721), 2, 1, tokenId, PUBKEY20);
     }
 
     // Test for ERC1155 Token
@@ -68,7 +68,7 @@ contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
         // mint tokens to the contract
         testToken1155.mint(address(this), tokenId, amount, "");
         // approve the contract to spend the tokens
-        testToken1155.setApprovalForAll(address(peanutV4), true);
-        peanutV4.makeDeposit(address(testToken1155), 3, amount, tokenId, PUBKEY20);
+        testToken1155.setApprovalForAll(address(vault), true);
+        vault.makeDeposit(address(testToken1155), 3, amount, tokenId, PUBKEY20);
     }
 }

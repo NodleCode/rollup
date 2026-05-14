@@ -7,7 +7,7 @@ import "./mocks/ERC20Mock.sol";
 import "./mocks/SampleSCW.sol";
 
 contract EnvelopeVaultGaslessTest is Test {
-    EnvelopeVault public peanutV4;
+    EnvelopeVault public vault;
     ERC20Mock public testToken;
 
     address public constant PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
@@ -27,7 +27,7 @@ contract EnvelopeVaultGaslessTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        peanutV4 = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0), address(0));
     }
 
     function testMakeDepositERC20WithAuthorization() public {
@@ -39,8 +39,8 @@ contract EnvelopeVaultGaslessTest is Test {
 
         bytes memory typeHashAndData = abi.encode(
             RECEIVE_WITH_AUTHORIZATION_TYPEHASH,
-            SAMPLE_ADDRESS, // the spender & peanut depositor address
-            address(peanutV4), // receiver of the tokens
+            SAMPLE_ADDRESS, // the spender & vault depositor address
+            address(vault), // receiver of the tokens
             amount,
             block.timestamp - 1, // validUntil
             block.timestamp + 1, // validBefore
@@ -51,7 +51,7 @@ contract EnvelopeVaultGaslessTest is Test {
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(SAMPLE_PRIVKEY), digest);
 
-        uint256 depositIndex = peanutV4.makeDepositWithAuthorization(
+        uint256 depositIndex = vault.makeDepositWithAuthorization(
             address(testToken),
             SAMPLE_ADDRESS, // who makes the deposit
             amount,
@@ -65,7 +65,7 @@ contract EnvelopeVaultGaslessTest is Test {
         );
 
         assertEq(depositIndex, 0, "Deposit failed");
-        assertEq(peanutV4.getDepositCount(), 1, "Deposit count mismatch");
+        assertEq(vault.getDepositCount(), 1, "Deposit count mismatch");
     }
 
     function _makeDeposit(address depositor) internal returns (uint256 depositIndex) {
@@ -73,15 +73,15 @@ contract EnvelopeVaultGaslessTest is Test {
         testToken.mint(depositor, 1000);
         uint256 amount = 100;
         vm.prank(depositor);
-        testToken.approve(address(peanutV4), amount);
+        testToken.approve(address(vault), amount);
         vm.prank(depositor);
-        depositIndex = peanutV4.makeDeposit(address(testToken), 1, amount, 0, PUBKEY20);
+        depositIndex = vault.makeDeposit(address(testToken), 1, amount, 0, PUBKEY20);
     }
 
     function _calculateDigest(uint256 depositIndex) internal view returns (bytes32 digest) {
-        bytes32 hashedReclaimRequest = keccak256(abi.encode(peanutV4.GASLESS_RECLAIM_TYPEHASH(), depositIndex));
+        bytes32 hashedReclaimRequest = keccak256(abi.encode(vault.GASLESS_RECLAIM_TYPEHASH(), depositIndex));
         // Prepare data for the withdrawal
-        digest = keccak256(abi.encodePacked("\x19\x01", peanutV4.DOMAIN_SEPARATOR(), hashedReclaimRequest));
+        digest = keccak256(abi.encodePacked("\x19\x01", vault.DOMAIN_SEPARATOR(), hashedReclaimRequest));
     }
 
     function _withdrawDepositSenderGaslessEOA(
@@ -100,7 +100,7 @@ contract EnvelopeVaultGaslessTest is Test {
             vm.expectRevert(bytes(expectRevert));
         }
 
-        peanutV4.withdrawDepositSenderGasless(reclaimRequest, depositorAddress, signature);
+        vault.withdrawDepositSenderGasless(reclaimRequest, depositorAddress, signature);
     }
 
     function testWithdrawDepositSenderGaslessEOA() public {
@@ -144,7 +144,7 @@ contract EnvelopeVaultGaslessTest is Test {
 
         // Submit a wrong signature
         vm.expectRevert("INVALID SIGNATURE");
-        peanutV4.withdrawDepositSenderGasless(
+        vault.withdrawDepositSenderGasless(
             reclaimRequest, address(scwallet), bytes("LOL THIS IS DEFINITELY NOT THE SIGNATURE")
         );
 
@@ -152,7 +152,7 @@ contract EnvelopeVaultGaslessTest is Test {
         _withdrawDepositSenderGaslessEOA(depositIndex, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, "NOT THE SENDER");
 
         // Withdraw!
-        peanutV4.withdrawDepositSenderGasless(
+        vault.withdrawDepositSenderGasless(
             reclaimRequest,
             address(scwallet),
             // In our sample SCW the digest will be the right signature
@@ -172,8 +172,8 @@ contract EnvelopeVaultGaslessTest is Test {
 
         bytes memory typeHashAndData = abi.encode(
             RECEIVE_WITH_AUTHORIZATION_TYPEHASH,
-            SAMPLE_ADDRESS, // the spender & peanut depositor address
-            address(peanutV4), // receiver of the tokens
+            SAMPLE_ADDRESS, // the spender & vault depositor address
+            address(vault), // receiver of the tokens
             amount,
             block.timestamp - 1, // validUntil
             block.timestamp + 1, // validBefore
@@ -194,7 +194,7 @@ contract EnvelopeVaultGaslessTest is Test {
             s
         );
 
-        uint256 depositIndex = peanutV4.makeCustomDeposit(
+        uint256 depositIndex = vault.makeCustomDeposit(
             address(testToken),
             1, // contract type - erc 20
             amount,
@@ -209,6 +209,6 @@ contract EnvelopeVaultGaslessTest is Test {
         );
 
         assertEq(depositIndex, 0, "Deposit failed");
-        assertEq(peanutV4.getDepositCount(), 1, "Deposit count mismatch");
+        assertEq(vault.getDepositCount(), 1, "Deposit count mismatch");
     }
 }

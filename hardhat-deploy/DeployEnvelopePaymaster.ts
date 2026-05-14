@@ -19,7 +19,7 @@ dotenv.config({ path: ".env-test" });
  *
  * Required environment variables:
  *   - DEPLOYER_PRIVATE_KEY:   Private key for deployment (also default admin / withdrawer).
- *   - ENVELOPE_VAULT:              Address of the deployed Peanut/Envelope vault — the only
+ *   - ENVELOPE_VAULT:              Address of the deployed Envelope vault — the only
  *                             allowed spender/operator for sponsored approvals.
  *
  * Optional environment variables (admin / signer):
@@ -54,7 +54,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
 
   const envelopeVault = process.env.ENVELOPE_VAULT;
   if (!envelopeVault || envelopeVault === ZERO) {
-    throw new Error("ENVELOPE_VAULT env var is required (the deployed Envelope/Peanut vault address)");
+    throw new Error("ENVELOPE_VAULT env var is required (the deployed Envelope vault address)");
   }
 
   const admin = process.env.ENVELOPE_PAYMASTER_ADMIN ?? wallet.address;

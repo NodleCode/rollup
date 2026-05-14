@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 contract TestSigWithdrawEther is Test {
-    EnvelopeVault public peanutV4;
+    EnvelopeVault public vault;
 
     // sample inputs
     address _pubkey20 = 0x8fd379246834eac74B8419FfdA202CF8051F7A03;
@@ -24,35 +24,35 @@ contract TestSigWithdrawEther is Test {
 
     function setUp() public {
         console.log("Setting up test");
-        peanutV4 = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0), address(0));
     }
 
     // test sender withdrawal of ETH
     function testSigWithdrawEther(uint64 amount) public {
         vm.assume(amount > 0);
-        uint256 depositIdx = peanutV4.makeDeposit{value: amount}(address(0), 0, amount, 0, _pubkey20);
+        uint256 depositIdx = vault.makeDeposit{value: amount}(address(0), 0, amount, 0, _pubkey20);
 
         // Can't use withdrawDepositAsRecipient
         vm.expectRevert("NOT THE RECIPIENT");
-        peanutV4.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureAnybody);
+        vault.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureAnybody);
 
         // Anybody can withdraw
-        peanutV4.withdrawDeposit(depositIdx, _recipientAddress, signatureAnybody);
+        vault.withdrawDeposit(depositIdx, _recipientAddress, signatureAnybody);
     }
 
     function testWithdrawDepositAsRecipient(uint64 amount) public {
         vm.assume(amount > 0);
-        uint256 depositIdx = peanutV4.makeDeposit{value: amount}(address(0), 0, amount, 0, _pubkey20);
+        uint256 depositIdx = vault.makeDeposit{value: amount}(address(0), 0, amount, 0, _pubkey20);
 
         // Can't use pure withdrawDeposit
         vm.expectRevert("WRONG SIGNATURE");
-        peanutV4.withdrawDeposit(depositIdx, _recipientAddress, signatureRecipient);
+        vault.withdrawDeposit(depositIdx, _recipientAddress, signatureRecipient);
         
         // Only the recipient is able to withdraw via withdrawDepositAsRecipient
         vm.expectRevert("NOT THE RECIPIENT");
-        peanutV4.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureRecipient);
+        vault.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureRecipient);
 
         vm.prank(_recipientAddress);  // Withdraw!
-        peanutV4.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureRecipient);
+        vault.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureRecipient);
     }
 }

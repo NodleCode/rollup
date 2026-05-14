@@ -2,7 +2,7 @@
 //
 // Modified by Nodle (2026-05-12) — see src/envelope/doc/EnvelopeBatcher.md ("Vendoring
 // patches") and the git history of this file for the full patch set. The upstream source
-// is peanutprotocol/peanut-contracts@main; the full GNU GPL v3 license text is bundled
+// is peanutprotocol/vault-contracts@main; the full GNU GPL v3 license text is bundled
 // at src/envelope/V4/LICENSE-GPL.
 pragma solidity 0.8.26;
 
@@ -70,14 +70,14 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
     }
 
     function batchMakeDeposit(
-        address _peanutAddress,
+        address _vaultAddress,
         address _tokenAddress,
         uint8 _contractType,
         uint256 _amount,
         uint256 _tokenId,
         address[] calldata _pubKeys20
     ) external payable returns (uint256[] memory) {
-        EnvelopeVault peanut = EnvelopeVault(_peanutAddress);
+        EnvelopeVault vault = EnvelopeVault(_vaultAddress);
         uint256 totalAmount = _amount * _pubKeys20.length;
         uint256 etherAmount;
 
@@ -86,17 +86,17 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
             etherAmount = _amount;
         } else if (_contractType == 1) {
             IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), totalAmount);
-            _setAllowanceIfZero(_tokenAddress, address(peanut));
+            _setAllowanceIfZero(_tokenAddress, address(vault));
         } else if (_contractType == 2) {
             revert("ERC721 batch not implemented");
         } else if (_contractType == 3) {
             IERC1155(_tokenAddress).safeTransferFrom(msg.sender, address(this), _tokenId, totalAmount, "");
-            IERC1155(_tokenAddress).setApprovalForAll(address(peanut), true);
+            IERC1155(_tokenAddress).setApprovalForAll(address(vault), true);
         }
 
         uint256[] memory depositIndexes = new uint256[](_pubKeys20.length);
         for (uint256 i = 0; i < _pubKeys20.length; i++) {
-            depositIndexes[i] = peanut.makeSelflessDeposit{value: etherAmount}(
+            depositIndexes[i] = vault.makeSelflessDeposit{value: etherAmount}(
                 _tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender
             );
         }
@@ -107,14 +107,14 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
     /// @dev Assumes all deposits are the same; uses msg.value as etherAmount per call
     ///      (only meaningful when called with a single deposit, or when sending only ETH dust).
     function batchMakeDepositNoReturn(
-        address _peanutAddress,
+        address _vaultAddress,
         address _tokenAddress,
         uint8 _contractType,
         uint256 _amount,
         uint256 _tokenId,
         address[] calldata _pubKeys20
     ) external payable {
-        EnvelopeVault peanut = EnvelopeVault(_peanutAddress);
+        EnvelopeVault vault = EnvelopeVault(_vaultAddress);
         // For ETH (contractType == 0), the batcher only receives msg.value once; forwarding
         // {value: msg.value} per loop iteration would revert on iteration 2 with insufficient
         // balance. Either require msg.value == _amount * N and forward _amount per call, or
@@ -129,14 +129,14 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
         }
 
         for (uint256 i = 0; i < _pubKeys20.length; i++) {
-            peanut.makeSelflessDeposit{value: etherPerCall}(
+            vault.makeSelflessDeposit{value: etherPerCall}(
                 _tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender
             );
         }
     }
 
     function batchMakeDepositArbitrary(
-        address _peanutAddress,
+        address _vaultAddress,
         address[] memory _tokenAddresses,
         uint8[] memory _contractTypes,
         uint256[] memory _amounts,
@@ -150,7 +150,7 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
                 && _withMFAs.length == _pubKeys20.length,
             "PARAMETERS LENGTH MISMATCH"
         );
-        EnvelopeVault peanut = EnvelopeVault(_peanutAddress);
+        EnvelopeVault vault = EnvelopeVault(_vaultAddress);
 
         uint256[] memory depositIndexes = new uint256[](_amounts.length);
         for (uint256 i = 0; i < _amounts.length; i++) {
@@ -160,15 +160,15 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
                 etherAmount = _amounts[i];
             } else if (_contractTypes[i] == 1) {
                 IERC20(_tokenAddresses[i]).safeTransferFrom(msg.sender, address(this), _amounts[i]);
-                _setAllowanceIfZero(_tokenAddresses[i], _peanutAddress);
+                _setAllowanceIfZero(_tokenAddresses[i], _vaultAddress);
             } else if (_contractTypes[i] == 2) {
                 revert("ERC721 batch not implemented");
             } else if (_contractTypes[i] == 3) {
                 IERC1155(_tokenAddresses[i]).safeTransferFrom(msg.sender, address(this), _tokenIds[i], _amounts[i], "");
-                IERC1155(_tokenAddresses[i]).setApprovalForAll(_peanutAddress, true);
+                IERC1155(_tokenAddresses[i]).setApprovalForAll(_vaultAddress, true);
             }
 
-            depositIndexes[i] = peanut.makeCustomDeposit{value: etherAmount}(
+            depositIndexes[i] = vault.makeCustomDeposit{value: etherAmount}(
                 _tokenAddresses[i],
                 _contractTypes[i],
                 _amounts[i],
@@ -186,17 +186,17 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
     }
 
     function batchMakeDepositRaffle(
-        address _peanutAddress,
+        address _vaultAddress,
         address _tokenAddress,
         uint8 _contractType,
         uint256[] calldata _amounts,
         address _pubKey20
     ) external payable returns (uint256[] memory) {
         require(_contractType == 0 || _contractType == 1, "ONLY ETH AND ERC20 RAFFLES ARE SUPPORTED");
-        EnvelopeVault peanut = EnvelopeVault(_peanutAddress);
+        EnvelopeVault vault = EnvelopeVault(_vaultAddress);
 
         if (_contractType == 1) {
-            _setAllowanceIfZero(_tokenAddress, _peanutAddress);
+            _setAllowanceIfZero(_tokenAddress, _vaultAddress);
             uint256 totalAmount;
             for (uint256 i = 0; i < _amounts.length; i++) {
                 totalAmount += _amounts[i];
@@ -210,7 +210,7 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
             if (_contractType == 0) {
                 etherAmount = _amounts[i];
             }
-            depositIndexes[i] = peanut.makeSelflessDeposit{value: etherAmount}(
+            depositIndexes[i] = vault.makeSelflessDeposit{value: etherAmount}(
                 _tokenAddress, _contractType, _amounts[i], 0, _pubKey20, msg.sender
             );
         }
@@ -218,17 +218,17 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
     }
 
     function batchMakeDepositRaffleMFA(
-        address _peanutAddress,
+        address _vaultAddress,
         address _tokenAddress,
         uint8 _contractType,
         uint256[] calldata _amounts,
         address _pubKey20
     ) external payable returns (uint256[] memory) {
         require(_contractType == 0 || _contractType == 1, "ONLY ETH AND ERC20 RAFFLES ARE SUPPORTED");
-        EnvelopeVault peanut = EnvelopeVault(_peanutAddress);
+        EnvelopeVault vault = EnvelopeVault(_vaultAddress);
 
         if (_contractType == 1) {
-            _setAllowanceIfZero(_tokenAddress, _peanutAddress);
+            _setAllowanceIfZero(_tokenAddress, _vaultAddress);
             uint256 totalAmount;
             for (uint256 i = 0; i < _amounts.length; i++) {
                 totalAmount += _amounts[i];
@@ -242,7 +242,7 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
             if (_contractType == 0) {
                 etherAmount = _amounts[i];
             }
-            depositIndexes[i] = peanut.makeSelflessMFADeposit{value: etherAmount}(
+            depositIndexes[i] = vault.makeSelflessMFADeposit{value: etherAmount}(
                 _tokenAddress, _contractType, _amounts[i], 0, _pubKey20, msg.sender
             );
         }

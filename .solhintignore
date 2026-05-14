@@ -1,4 +1,4 @@
-# Vendored Peanut Protocol V4.4 sources — kept close to upstream
+# Vendored Envelope (Peanut V4.4) sources — kept close to upstream
 # (peanutprotocol/peanut-contracts@main) for diff parity. Upstream uses
 # require-string style; converting to custom errors would diverge
 # significantly without any security/correctness benefit.

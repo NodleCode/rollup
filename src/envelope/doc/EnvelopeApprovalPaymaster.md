@@ -9,7 +9,7 @@ Sponsors gas in **two modes**, both funded from one ETH pool and bounded by the 
 | Mode | Caller | Auth | What gets sponsored |
 |---|---|---|---|
 | **A — User approval** | regular user | EIP-712 grant signed off-chain by `operatorSigner` (single-use nonce, deadline) + selector + spender checks | `token.approve(envelopeVault, ...)` / `token.setApprovalForAll(envelopeVault, true)` for ERC-20 / 721 / 1155 — the user-side step in Path C |
-| **B — Operator direct call** | operator EOA on the `isOperator` allowlist | target must be on the `isAllowedTarget` allowlist; no grant required | Anything the operator wants to call on an allowlisted target — typically `peanut.makeCustomDeposit`, `peanut.withdrawDeposit`, etc. |
+| **B — Operator direct call** | operator EOA on the `isOperator` allowlist | target must be on the `isAllowedTarget` allowlist; no grant required | Anything the operator wants to call on an allowlisted target — typically `vault.makeCustomDeposit`, `vault.withdrawDeposit`, etc. |
 
 Mode B is the "single point we top up" pattern: instead of funding the operator's hot wallet directly, fund the paymaster and let the operator submit txs gaslessly. Bounded daily spend (QuotaControl), bounded per-tx spend (`maxEthPerTx`), and rotation just means flipping `isOperator` on a new EOA — no balance migration.
 

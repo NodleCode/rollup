@@ -9,7 +9,7 @@ import { deployContract } from "./utils";
 dotenv.config({ path: ".env-test" });
 
 /**
- * Deploys the Peanut Protocol suite on ZkSync Era.
+ * Deploys the Envelope (vendored Peanut V4.4) suite on ZkSync Era.
  *
  * Required environment variables:
  *   - DEPLOYER_PRIVATE_KEY: Private key for deployment.
@@ -25,7 +25,7 @@ dotenv.config({ path: ".env-test" });
  *
  * Usage:
  *   yarn hardhat deploy-zksync \
- *     --script DeployPeanut.ts \
+ *     --script DeployEnvelope.ts \
  *     --network zkSyncSepoliaTestnet
  */
 module.exports = async function (hre: HardhatRuntimeEnvironment) {
@@ -40,7 +40,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const wallet = new Wallet(process.env.DEPLOYER_PRIVATE_KEY!, provider);
   const deployer = new Deployer(hre, wallet);
 
-  console.log("=== Deploying Peanut Protocol on ZkSync ===");
+  console.log("=== Deploying Envelope on ZkSync ===");
   console.log("Network:        ", hre.network.name);
   console.log("Deployer:       ", wallet.address);
   console.log("ECO Token:      ", ecoToken);
@@ -49,8 +49,8 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   console.log("");
 
   // 1. Vault — required.
-  const peanut = await deployContract(deployer, "EnvelopeVault", [ecoToken, mfaAuthorizer]);
-  const peanutAddr = await peanut.getAddress();
+  const vault = await deployContract(deployer, "EnvelopeVault", [ecoToken, mfaAuthorizer]);
+  const vaultAddr = await vault.getAddress();
 
   // 2. Batcher — optional.
   let batcherAddr: string | undefined;
@@ -61,7 +61,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
 
   console.log("");
   console.log("=== Deployment Complete ===");
-  console.log("EnvelopeVault:        ", peanutAddr);
+  console.log("EnvelopeVault:        ", vaultAddr);
   if (batcherAddr) console.log("EnvelopeBatcher: ", batcherAddr);
   console.log("");
 
@@ -70,7 +70,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   try {
     console.log("Verifying EnvelopeVault...");
     await hre.run("verify:verify", {
-      address: peanutAddr,
+      address: vaultAddr,
       contract: "src/envelope/V4/PeanutV4.4.sol:EnvelopeVault",
       constructorArguments: [ecoToken, mfaAuthorizer],
     });
@@ -93,7 +93,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
 
   console.log("");
   console.log("=== Add these to .env-test: ===");
-  console.log(`ENVELOPE_VAULT=${peanutAddr}`);
+  console.log(`ENVELOPE_VAULT=${vaultAddr}`);
   if (batcherAddr) console.log(`ENVELOPE_BATCHER=${batcherAddr}`);
 
   if (mfaAuthorizer === ZERO) {

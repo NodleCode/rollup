@@ -1,4 +1,4 @@
-# Envelope (Peanut) contracts
+# Envelope contracts
 
 The Envelope flow on Nodle is built on top of the vendored **Peanut Protocol V4.4**
 contracts. Operators issue link-based asset transfers (ETH / ERC-20 / ERC-721 /
@@ -29,7 +29,7 @@ This subtree mixes licenses; the repo-root `LICENSE` (Clear BSD) doesn't apply u
 | `src/envelope/V4/PeanutV4.4.sol`, `PeanutBatcherV4.4.sol` | **GPL-3.0-or-later** | Modified copies of upstream Peanut Protocol V4.4. Full GPL v3 text bundled at `src/envelope/V4/LICENSE-GPL`. Each file carries a top-of-file modification notice per GPL §5(a). |
 | `src/envelope/util/IEIP3009.sol`, `IL2ECO.sol` | **MIT** | Vendored interfaces, unchanged from upstream |
 | `src/paymasters/EnvelopeApprovalPaymaster.sol` | **BSD-3-Clause-Clear** | Our own code; doesn't `import` any GPL source so it isn't a derivative work |
-| `test/envelope/**/*.t.sol` (files that import Peanut sources) | **GPL-3.0-or-later** | Test files that `import` GPL-licensed contracts are derivative works under a strict reading of the GPL; relicensed for compliance |
+| `test/envelope/**/*.t.sol` (files that import the vault/batcher sources) | **GPL-3.0-or-later** | Test files that `import` GPL-licensed contracts are derivative works under a strict reading of the GPL; relicensed for compliance |
 | `test/envelope/mocks/**/*.sol` | **MIT / UNLICENSED** | Vendored test mocks, original SPDX retained |
 | All other repo files | unchanged | Whatever they were |
 
@@ -38,8 +38,8 @@ The GPL is "viral" only across `import` boundaries; non-importing files in the s
 ## Naming convention
 
 - **Source files** keep the upstream `Peanut*` names (e.g. `PeanutV4.4.sol`) so diffs against `peanutprotocol/peanut-contracts@main` stay grep-friendly. The audit lineage is preserved by file path + the `// Modified by Nodle` notice + the bundled `LICENSE-GPL`.
-- **Contract symbols** (the names visible on the explorer / in the SDK / in the EIP-712 domain) use the **Envelope** brand: `EnvelopeVault`, `EnvelopeBatcher`, `EnvelopeApprovalPaymaster`. This avoids any trademark confusion with Squirrel Labs' "Peanut Protocol" brand.
-- **On-chain hashed constants** (e.g. `PEANUT_SALT`) keep upstream values — changing them would change every signature digest and break compatibility. Those values are internal and never user-visible.
+- **Contract symbols** (the names visible on the explorer / in the SDK / in the EIP-712 domain) use the **Envelope** brand: `EnvelopeVault`, `EnvelopeBatcher`, `EnvelopeApprovalPaymaster`. This avoids any trademark confusion with upstream Peanut Protocol brand.
+- **On-chain hashed constants** (e.g. `ENVELOPE_SALT`) keep upstream values — changing them would change every signature digest and break compatibility. Those values are internal and never user-visible.
 
 ## Deployed on ZkSync Sepolia (chain 300)
 
@@ -63,7 +63,7 @@ The vault itself supports three ways a sender can fund a link:
 
 | Script | Purpose |
 |---|---|
-| `hardhat-deploy/DeployPeanut.ts` | vault + batcher |
+| `hardhat-deploy/DeployEnvelope.ts` | vault + batcher |
 | `hardhat-deploy/DeployEnvelopePaymaster.ts` | paymaster |
 
 Both are Hardhat-zksync scripts. See each spec for env vars.
@@ -72,7 +72,7 @@ Both are Hardhat-zksync scripts. See each spec for env vars.
 
 | Suite | Tests |
 |---|---|
-| Peanut core (`test/envelope/`) | **90** (56 vendored + 11 hardening + 23 edge cases) |
+| Envelope core (`test/envelope/`) | **90** (56 vendored + 11 hardening + 23 edge cases) |
 | `EnvelopeApprovalPaymaster` (`test/paymasters/EnvelopeApprovalPaymaster.t.sol`) | **27** (19 Mode A + 7 Mode B + 1 EIP-1271 contract signer) |
 | Other paymasters (unchanged) | 102 |
 | Rest of repo | 747 |

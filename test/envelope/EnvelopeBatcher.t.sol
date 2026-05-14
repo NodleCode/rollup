@@ -9,9 +9,9 @@ import "./mocks/ERC1155Mock.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
-contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
+contract EnvelopeBatcherTest is Test, ERC1155Holder, ERC721Holder {
     EnvelopeBatcher public batcher;
-    EnvelopeVault public peanutV4;
+    EnvelopeVault public vault;
     ERC20Mock public testToken;
     ERC721Mock public testToken721;
     ERC1155Mock public testToken1155;
@@ -19,7 +19,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
 
     function setUp() public {
         batcher = new EnvelopeBatcher();
-        peanutV4 = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0), address(0));
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();
@@ -40,7 +40,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         uint256 totalAmount = amount * numDeposits;
         // make the batch deposit
         uint256[] memory depositIndexes =
-            batcher.batchMakeDeposit{value: totalAmount}(address(peanutV4), address(0), 0, amount, 0, pubKeys20);
+            batcher.batchMakeDeposit{value: totalAmount}(address(vault), address(0), 0, amount, 0, pubKeys20);
         // check that the correct number of deposits were made
         assertEq(depositIndexes.length, numDeposits);
     }
@@ -59,7 +59,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
 
         // make the batch deposit
         uint256[] memory depositIndexes =
-            batcher.batchMakeDeposit(address(peanutV4), address(testToken), 1, amount, 0, pubKeys20);
+            batcher.batchMakeDeposit(address(vault), address(testToken), 1, amount, 0, pubKeys20);
         // check that the correct number of deposits were made
         assertEq(depositIndexes.length, numDeposits);
     }
@@ -78,7 +78,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
             testToken721.approve(address(batcher), tokenId);
         }
         vm.expectRevert("ERC721 batch not implemented");
-        batcher.batchMakeDeposit(address(peanutV4), address(testToken721), 2, 1, 1, pubKeys20);
+        batcher.batchMakeDeposit(address(vault), address(testToken721), 2, 1, 1, pubKeys20);
     }
 
     // Test making a batch deposit of ERC1155 tokens
@@ -95,7 +95,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         }
         // make the batch deposit
         uint256[] memory depositIndexes =
-            batcher.batchMakeDeposit(address(peanutV4), address(testToken1155), 3, 1, 1, pubKeys20);
+            batcher.batchMakeDeposit(address(vault), address(testToken1155), 3, 1, 1, pubKeys20);
         // check that the correct number of deposits were made
         assertEq(depositIndexes.length, numDeposits);
     }
@@ -111,7 +111,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         testToken.mint(address(this), amount * numDeposits);
         // Do NOT approve the batcher to spend the tokens
         vm.expectRevert();
-        batcher.batchMakeDeposit(address(peanutV4), address(testToken), 1, amount, 0, pubKeys20);
+        batcher.batchMakeDeposit(address(vault), address(testToken), 1, amount, 0, pubKeys20);
     }
 
     // Test failure case where EnvelopeVault contract is not approved to spend ERC721 tokens
@@ -125,7 +125,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
             // Do NOT approve the batcher to spend the tokens
         }
         vm.expectRevert();
-        batcher.batchMakeDeposit(address(peanutV4), address(testToken721), 2, 1, numDeposits, pubKeys20);
+        batcher.batchMakeDeposit(address(vault), address(testToken721), 2, 1, numDeposits, pubKeys20);
     }
 
     // Test failure case where EnvelopeVault contract is not approved to spend ERC1155 tokens
@@ -139,7 +139,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
             // Do NOT approve the batcher to transfer the tokens
         }
         vm.expectRevert();
-        batcher.batchMakeDeposit(address(peanutV4), address(testToken1155), 3, 1, numDeposits, pubKeys20);
+        batcher.batchMakeDeposit(address(vault), address(testToken1155), 3, 1, numDeposits, pubKeys20);
     }
 
     // Test making multiple batch deposits of ERC20 tokens in a row
@@ -162,7 +162,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
 
             // Make the batch deposit
             uint256[] memory depositIndexes =
-                batcher.batchMakeDeposit(address(peanutV4), address(testToken), 1, amount, 0, pubKeys20);
+                batcher.batchMakeDeposit(address(vault), address(testToken), 1, amount, 0, pubKeys20);
 
             // Check that the correct number of deposits were made
             assertEq(depositIndexes.length, numDeposits);
@@ -178,7 +178,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         amounts[3] = 40;
         
         uint256[] memory depositIndices = batcher.batchMakeDepositRaffle{value: 100}(
-            address(peanutV4),
+            address(vault),
             address(testToken),
             0,
             amounts,
@@ -186,7 +186,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         );
 
         for(uint256 i = 0; i < amounts.length; i++) {
-            EnvelopeVault.Deposit memory deposit = peanutV4.getDeposit(depositIndices[i]);
+            EnvelopeVault.Deposit memory deposit = vault.getDeposit(depositIndices[i]);
             assert(deposit.amount == amounts[i]);  // main assertion
 
             // a few sanity checks
@@ -209,7 +209,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         testToken.approve(address(batcher), 100);
         
         uint256[] memory depositIndices = batcher.batchMakeDepositRaffle(
-            address(peanutV4),
+            address(vault),
             address(testToken),
             1,
             amounts,
@@ -217,7 +217,7 @@ contract PeanutBatcherTest is Test, ERC1155Holder, ERC721Holder {
         );
 
         for(uint256 i = 0; i < amounts.length; i++) {
-            EnvelopeVault.Deposit memory deposit = peanutV4.getDeposit(depositIndices[i]);
+            EnvelopeVault.Deposit memory deposit = vault.getDeposit(depositIndices[i]);
             assert(deposit.amount == amounts[i]);  // main assertion
 
             // a few sanity checks
