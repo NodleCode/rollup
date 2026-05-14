@@ -9,16 +9,16 @@ sponsors the user-side approval txs so the UX is gasless from the holder's POV.
 
 | Contract | Source | Spec |
 |---|---|---|
-| `EnvelopeVault` (vault) | `src/peanut/V4/PeanutV4.4.sol` | [EnvelopeVault.md](./EnvelopeVault.md) |
-| `EnvelopeBatcher` (batched deposits) | `src/peanut/V4/PeanutBatcherV4.4.sol` | [EnvelopeBatcher.md](./EnvelopeBatcher.md) |
+| `EnvelopeVault` (vault) | `src/envelope/V4/PeanutV4.4.sol` | [EnvelopeVault.md](./EnvelopeVault.md) |
+| `EnvelopeBatcher` (batched deposits) | `src/envelope/V4/PeanutBatcherV4.4.sol` | [EnvelopeBatcher.md](./EnvelopeBatcher.md) |
 | `EnvelopeApprovalPaymaster` (Path-C gas sponsor + operator gas pool) | `src/paymasters/EnvelopeApprovalPaymaster.sol` | [EnvelopeApprovalPaymaster.md](./EnvelopeApprovalPaymaster.md) |
 
 Interfaces (vendored, unmodified):
 
 | Interface | Source | Used by |
 |---|---|---|
-| `IEIP3009` | `src/peanut/util/IEIP3009.sol` | `EnvelopeVault` for gasless USDC-style deposits |
-| `IL2ECO` | `src/peanut/util/IL2ECO.sol` | `EnvelopeVault` for rebasing-ERC20 deposits (`contractType==4`) |
+| `IEIP3009` | `src/envelope/util/IEIP3009.sol` | `EnvelopeVault` for gasless USDC-style deposits |
+| `IL2ECO` | `src/envelope/util/IL2ECO.sol` | `EnvelopeVault` for rebasing-ERC20 deposits (`contractType==4`) |
 
 ## License notice
 
@@ -26,11 +26,11 @@ This subtree mixes licenses; the repo-root `LICENSE` (Clear BSD) doesn't apply u
 
 | Files | License | Notes |
 |---|---|---|
-| `src/peanut/V4/PeanutV4.4.sol`, `PeanutBatcherV4.4.sol` | **GPL-3.0-or-later** | Modified copies of upstream Peanut Protocol V4.4. Full GPL v3 text bundled at `src/peanut/V4/LICENSE-GPL`. Each file carries a top-of-file modification notice per GPL §5(a). |
-| `src/peanut/util/IEIP3009.sol`, `IL2ECO.sol` | **MIT** | Vendored interfaces, unchanged from upstream |
+| `src/envelope/V4/PeanutV4.4.sol`, `PeanutBatcherV4.4.sol` | **GPL-3.0-or-later** | Modified copies of upstream Peanut Protocol V4.4. Full GPL v3 text bundled at `src/envelope/V4/LICENSE-GPL`. Each file carries a top-of-file modification notice per GPL §5(a). |
+| `src/envelope/util/IEIP3009.sol`, `IL2ECO.sol` | **MIT** | Vendored interfaces, unchanged from upstream |
 | `src/paymasters/EnvelopeApprovalPaymaster.sol` | **BSD-3-Clause-Clear** | Our own code; doesn't `import` any GPL source so it isn't a derivative work |
-| `test/peanut/**/*.t.sol` (files that import Peanut sources) | **GPL-3.0-or-later** | Test files that `import` GPL-licensed contracts are derivative works under a strict reading of the GPL; relicensed for compliance |
-| `test/peanut/mocks/**/*.sol` | **MIT / UNLICENSED** | Vendored test mocks, original SPDX retained |
+| `test/envelope/**/*.t.sol` (files that import Peanut sources) | **GPL-3.0-or-later** | Test files that `import` GPL-licensed contracts are derivative works under a strict reading of the GPL; relicensed for compliance |
+| `test/envelope/mocks/**/*.sol` | **MIT / UNLICENSED** | Vendored test mocks, original SPDX retained |
 | All other repo files | unchanged | Whatever they were |
 
 The GPL is "viral" only across `import` boundaries; non-importing files in the same repository remain under their own licenses (per the OSI's "mere aggregation" interpretation).
@@ -72,7 +72,7 @@ Both are Hardhat-zksync scripts. See each spec for env vars.
 
 | Suite | Tests |
 |---|---|
-| Peanut core (`test/peanut/`) | **90** (56 vendored + 11 hardening + 23 edge cases) |
+| Peanut core (`test/envelope/`) | **90** (56 vendored + 11 hardening + 23 edge cases) |
 | `EnvelopeApprovalPaymaster` (`test/paymasters/EnvelopeApprovalPaymaster.t.sol`) | **27** (19 Mode A + 7 Mode B + 1 EIP-1271 contract signer) |
 | Other paymasters (unchanged) | 102 |
 | Rest of repo | 747 |

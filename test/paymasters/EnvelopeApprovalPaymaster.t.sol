@@ -9,7 +9,7 @@ import {BasePaymaster} from "../../src/paymasters/BasePaymaster.sol";
 import {QuotaControl} from "../../src/QuotaControl.sol";
 import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
 import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymasterFlow.sol";
-import {SampleWallet} from "../peanut/mocks/SampleSCW.sol";
+import {SampleWallet} from "../envelope/mocks/SampleSCW.sol";
 
 /// @dev Bootloader address — paymaster validation must be called from this address.
 address constant BOOTLOADER = address(uint160(0x8001));

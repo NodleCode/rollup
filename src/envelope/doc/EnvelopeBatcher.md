@@ -1,6 +1,6 @@
 # EnvelopeBatcher — N-deposits-in-one-tx helper
 
-`src/peanut/V4/PeanutBatcherV4.4.sol`
+`src/envelope/V4/PeanutBatcherV4.4.sol`
 
 ## Purpose
 
@@ -84,7 +84,7 @@ None of its own. Inner deposits emit `EnvelopeVault.DepositEvent`.
 
 ## Test coverage
 
-`test/peanut/EnvelopeBatcher.t.sol` — 13 tests:
+`test/envelope/EnvelopeBatcher.t.sol` — 13 tests:
 - happy paths for ETH / ERC-20 / ERC-1155 batches
 - ERC-721 batch reverts as designed (`test_RevertWhen_BatchERC721NotImplemented`)
 - raffle (ETH + ERC-20)

@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EIP3009Internals} from "./EIP3009Internals.sol";
-import {IEIP3009} from "../../../src/peanut/util/IEIP3009.sol";
+import {IEIP3009} from "../../../src/envelope/util/IEIP3009.sol";
 
 // Basic implementation of EIP3009 for testing purposes ONLY.
 abstract contract EIP3009Implementation is EIP3009Internals, IEIP3009 {

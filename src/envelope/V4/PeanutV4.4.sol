@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Modified by Nodle (2026-05-12) — see src/peanut/doc/PeanutV4.md ("Vendoring patches
+// Modified by Nodle (2026-05-12) — see src/envelope/doc/PeanutV4.md ("Vendoring patches
 // applied at import") and the git history of this file for the full patch set. The
 // upstream source is peanutprotocol/peanut-contracts@main; the full GNU GPL v3 license
-// text is bundled at src/peanut/V4/LICENSE-GPL.
+// text is bundled at src/envelope/V4/LICENSE-GPL.
 pragma solidity 0.8.26;
 
 //////////////////////////////////////////////////////////////////////////////////////

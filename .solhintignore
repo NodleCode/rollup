@@ -5,5 +5,5 @@
 #
 # Our own code (EnvelopeApprovalPaymaster, anything authored in this repo)
 # is NOT in this list and remains lint-clean.
-src/peanut/V4/PeanutV4.4.sol
-src/peanut/V4/PeanutBatcherV4.4.sol
+src/envelope/V4/PeanutV4.4.sol
+src/envelope/V4/PeanutBatcherV4.4.sol

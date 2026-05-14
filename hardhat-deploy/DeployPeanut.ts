@@ -71,7 +71,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
     console.log("Verifying EnvelopeVault...");
     await hre.run("verify:verify", {
       address: peanutAddr,
-      contract: "src/peanut/V4/PeanutV4.4.sol:EnvelopeVault",
+      contract: "src/envelope/V4/PeanutV4.4.sol:EnvelopeVault",
       constructorArguments: [ecoToken, mfaAuthorizer],
     });
   } catch (e: any) {
@@ -83,7 +83,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
       console.log("Verifying EnvelopeBatcher...");
       await hre.run("verify:verify", {
         address: batcherAddr,
-        contract: "src/peanut/V4/PeanutBatcherV4.4.sol:EnvelopeBatcher",
+        contract: "src/envelope/V4/PeanutBatcherV4.4.sol:EnvelopeBatcher",
         constructorArguments: [],
       });
     } catch (e: any) {
