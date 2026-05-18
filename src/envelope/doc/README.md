@@ -42,7 +42,7 @@ The GPL is "viral" only across `import` boundaries; non-importing files in the s
 
 | | Address |
 |---|---|
-| `EnvelopeVault` | [`0xed414522b1Fbe08EEfd156f912a57CF345A55735`](https://sepolia.explorer.zksync.io/address/0xed414522b1Fbe08EEfd156f912a57CF345A55735#contract) |
+| `EnvelopeVault` | [`0x5cf96a5db415801E52a63f216AEE601FAB6B8b11`](https://sepolia.explorer.zksync.io/address/0x5cf96a5db415801E52a63f216AEE601FAB6B8b11#contract) |
 | `EnvelopeBatcher` | [`0xe8c0aEC0F90f99968B2bf517ECa2BBd41A4926c1`](https://sepolia.explorer.zksync.io/address/0xe8c0aEC0F90f99968B2bf517ECa2BBd41A4926c1#contract) |
 
 ## Three deposit paths
