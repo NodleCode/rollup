@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Modified by Nodle (2026-05-12, extended 2026-05-14) — see src/envelope/doc/EnvelopeVault.md
-// ("Vendoring patches applied at import" and "Operator-orchestrated deposits") and the git
-// history of this file for the full patch set. The upstream source is
-// peanutprotocol/peanut-contracts@main; the full GNU GPL v3 license text is bundled at
-// src/envelope/V4/LICENSE-GPL.
+// Modified by Nodle (2026-05-12) — see src/envelope/doc/EnvelopeVault.md ("Vendoring
+// patches applied at import") and the git history of this file for the full patch set.
+// The upstream source is peanutprotocol/peanut-contracts@main; the full GNU GPL v3
+// license text is bundled at src/envelope/V4/LICENSE-GPL.
 pragma solidity ^0.8.26;
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -350,59 +349,6 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         );
     }
 
-    /**
-     * Operator-orchestrated deposit. Pulls tokens from `_from` (who must have approved
-     * the vault) and credits the deposit to `_onBehalfOf` as the senderAddress. Used so
-     * an operator can submit the deposit tx (e.g. via a paymaster) without holding the
-     * user's tokens.
-     *
-     * Native ETH (contractType 0) is intentionally not supported: ETH has no allowance
-     * model, so an operator cannot pull ETH from a third party. For ETH deposits, the
-     * funder must call `makeCustomDeposit` directly.
-     *
-     * Authorization model: relies on the standard ERC-20/721/1155 allowance — `_from`
-     * granting allowance to the vault is, by ERC-20 convention, consent for any caller
-     * to invoke transferFrom up to the allowance. The same threat model already applies
-     * to every existing transferFrom-based pattern (DEXes, routers, etc.).
-     *
-     * Same parameters as `makeCustomDeposit` minus the EIP-3009 args (3009 already
-     * supports operator-orchestrated pulls via its own signature).
-     */
-    function makeCustomDepositFrom(
-        address _from,
-        address _tokenAddress,
-        uint8 _contractType,
-        uint256 _amount,
-        uint256 _tokenId,
-        address _pubKey20,
-        address _onBehalfOf,
-        bool _withMFA,
-        address _recipient,
-        uint40 _reclaimableAfter
-    ) public nonReentrant returns (uint256) {
-        require(_from != address(0), "FROM MUST BE NONZERO");
-
-        _amount = _pullTokensFromViaApproval(
-            _from,
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId
-        );
-
-        return _storeDeposit(
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId,
-            _pubKey20,
-            _onBehalfOf,
-            _withMFA,
-            _recipient,
-            _reclaimableAfter
-        );
-    }
-
     function _storeDeposit(
         address _tokenAddress,
         uint8 _contractType,
@@ -490,36 +436,6 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
             // for tokens that don't return on success). linearInflationMultiplier() is read via the
             // IL2ECO interface separately.
             IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), _amount);
-            _amount *= IL2ECO(_tokenAddress).linearInflationMultiplier();
-        }
-
-        return _amount;
-    }
-
-    /**
-     * Same as _pullTokensViaApproval but pulls from `_from` instead of msg.sender.
-     * Backs `makeCustomDepositFrom` for operator-orchestrated deposits.
-     * ETH (contractType 0) is rejected: native ETH cannot be transferFrom-pulled.
-     */
-    function _pullTokensFromViaApproval(
-        address _from,
-        address _tokenAddress,
-        uint8 _contractType,
-        uint256 _amount,
-        uint256 _tokenId
-    ) internal returns (uint256) {
-        require(_contractType >= 1 && _contractType < 5, "INVALID CONTRACT TYPE FOR FROM-DEPOSIT");
-
-        if (_contractType == 1) {
-            require(_tokenAddress != ecoAddress, "ECO DEPOSITS MUST USE _contractType 4");
-            IERC20(_tokenAddress).safeTransferFrom(_from, address(this), _amount);
-        } else if (_contractType == 2) {
-            require(_amount == 1, "AMOUNT MUST BE 1 FOR ERC721");
-            IERC721(_tokenAddress).safeTransferFrom(_from, address(this), _tokenId, "Internal transfer");
-        } else if (_contractType == 3) {
-            IERC1155(_tokenAddress).safeTransferFrom(_from, address(this), _tokenId, _amount, "Internal transfer");
-        } else if (_contractType == 4) {
-            IERC20(_tokenAddress).safeTransferFrom(_from, address(this), _amount);
             _amount *= IL2ECO(_tokenAddress).linearInflationMultiplier();
         }
 

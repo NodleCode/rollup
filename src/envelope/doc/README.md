@@ -1,9 +1,8 @@
 # Envelope contracts
 
 The Envelope flow on Nodle is built on top of the vendored **Peanut Protocol V4.4**
-contracts. Operators issue link-based asset transfers (ETH / ERC-20 / ERC-721 /
-ERC-1155) that recipients claim with a per-link private key. A dedicated paymaster
-sponsors the user-side approval txs so the UX is gasless from the holder's POV.
+contracts. Senders deposit assets (ETH / ERC-20 / ERC-721 / ERC-1155) against a
+per-link public key; recipients claim with the matching private key.
 
 ## Layout
 
@@ -11,7 +10,6 @@ sponsors the user-side approval txs so the UX is gasless from the holder's POV.
 |---|---|---|
 | `EnvelopeVault` (vault) | `src/envelope/V4/EnvelopeVault.sol` | [EnvelopeVault.md](./EnvelopeVault.md) |
 | `EnvelopeBatcher` (batched deposits) | `src/envelope/V4/EnvelopeBatcher.sol` | [EnvelopeBatcher.md](./EnvelopeBatcher.md) |
-| `EnvelopeApprovalPaymaster` (Path-C gas sponsor + operator gas pool) | `src/paymasters/EnvelopeApprovalPaymaster.sol` | [EnvelopeApprovalPaymaster.md](./EnvelopeApprovalPaymaster.md) |
 
 Interfaces (vendored, unmodified):
 
@@ -28,7 +26,6 @@ This subtree mixes licenses; the repo-root `LICENSE` (Clear BSD) doesn't apply u
 |---|---|---|
 | `src/envelope/V4/EnvelopeVault.sol`, `EnvelopeBatcher.sol` | **GPL-3.0-or-later** | Modified copies of upstream Peanut Protocol V4.4. Full GPL v3 text bundled at `src/envelope/V4/LICENSE-GPL`. Each file carries a top-of-file modification notice per GPL §5(a). |
 | `src/envelope/util/IEIP3009.sol`, `IL2ECO.sol` | **MIT** | Vendored interfaces, unchanged from upstream |
-| `src/paymasters/EnvelopeApprovalPaymaster.sol` | **BSD-3-Clause-Clear** | Our own code; doesn't `import` any GPL source so it isn't a derivative work |
 | `test/envelope/**/*.t.sol` (files that import the vault/batcher sources) | **GPL-3.0-or-later** | Test files that `import` GPL-licensed contracts are derivative works under a strict reading of the GPL; relicensed for compliance |
 | `test/envelope/mocks/**/*.sol` | **MIT / UNLICENSED** | Vendored test mocks, original SPDX retained |
 | All other repo files | unchanged | Whatever they were |
@@ -37,8 +34,8 @@ The GPL is "viral" only across `import` boundaries; non-importing files in the s
 
 ## Naming convention
 
-- **Source files** keep the upstream `Peanut*` names (e.g. `EnvelopeVault.sol`) so diffs against `peanutprotocol/peanut-contracts@main` stay grep-friendly. The audit lineage is preserved by file path + the `// Modified by Nodle` notice + the bundled `LICENSE-GPL`.
-- **Contract symbols** (the names visible on the explorer / in the SDK / in the EIP-712 domain) use the **Envelope** brand: `EnvelopeVault`, `EnvelopeBatcher`, `EnvelopeApprovalPaymaster`. This avoids any trademark confusion with upstream Peanut Protocol brand.
+- **Source files** carry the Envelope brand (`EnvelopeVault.sol`, `EnvelopeBatcher.sol`); the audit lineage to upstream `peanutprotocol/peanut-contracts@main` is preserved via the `// Modified by Nodle` top-of-file notice, the `// @author Squirrel Labs` attribution, the bundled `LICENSE-GPL`, and the git rename history.
+- **Contract symbols** (the names visible on the explorer / in the SDK / in the EIP-712 domain) use the Envelope brand: `EnvelopeVault`, `EnvelopeBatcher`. This avoids any trademark confusion with upstream Peanut Protocol brand.
 - **On-chain hashed constants** (e.g. `ENVELOPE_SALT`) keep upstream values — changing them would change every signature digest and break compatibility. Those values are internal and never user-visible.
 
 ## Deployed on ZkSync Sepolia (chain 300)
@@ -47,33 +44,32 @@ The GPL is "viral" only across `import` boundaries; non-importing files in the s
 |---|---|
 | `EnvelopeVault` | [`0xed414522b1Fbe08EEfd156f912a57CF345A55735`](https://sepolia.explorer.zksync.io/address/0xed414522b1Fbe08EEfd156f912a57CF345A55735#contract) |
 | `EnvelopeBatcher` | [`0xe8c0aEC0F90f99968B2bf517ECa2BBd41A4926c1`](https://sepolia.explorer.zksync.io/address/0xe8c0aEC0F90f99968B2bf517ECa2BBd41A4926c1#contract) |
-| `EnvelopeApprovalPaymaster` | [`0xbA6a646B316f27fF5b2CE4B504da49Ebe400d5AD`](https://sepolia.explorer.zksync.io/address/0xbA6a646B316f27fF5b2CE4B504da49Ebe400d5AD#contract) |
 
 ## Three deposit paths
 
 The vault itself supports three ways a sender can fund a link:
 
-| Path | Trigger | Approval | Gas sponsor needed |
-|---|---|---|---|
-| **A** — ETH | `msg.value` directly | n/a | no |
-| **B** — EIP-2612 / EIP-3009 token | `makeDepositWithAuthorization` (EIP-3009) | embedded in signature | no |
-| **C** — anything else (ERC-20 w/o permit, ERC-721, ERC-1155) | `makeCustomDepositFrom(user, ...)` (operator-submitted) after user calls `token.approve` / `setApprovalForAll` | separate approval tx | **yes** — both legs are sponsored by [EnvelopeApprovalPaymaster](./EnvelopeApprovalPaymaster.md) (Mode A for the approve, Mode B for the deposit) |
+| Path | Trigger | Approval |
+|---|---|---|
+| **A** — ETH | `msg.value` directly into `makeDeposit` / `makeCustomDeposit` | n/a |
+| **B** — EIP-3009 token (USDC-style) | `makeDepositWithAuthorization` | embedded in signature |
+| **C** — anything else (ERC-20, ERC-721, ERC-1155) | `makeCustomDeposit` after `token.approve` / `setApprovalForAll` | separate approval tx |
+
+User pays for both the approve and the deposit themselves.
 
 ## Deploy
 
 | Script | Purpose |
 |---|---|
 | `hardhat-deploy/DeployEnvelope.ts` | vault + batcher |
-| `hardhat-deploy/DeployEnvelopePaymaster.ts` | paymaster |
 
-Both are Hardhat-zksync scripts. See each spec for env vars.
+Hardhat-zksync script. See the vault spec for env vars.
 
 ## Test coverage
 
 | Suite | Tests |
 |---|---|
-| Envelope core (`test/envelope/`) | **103** (56 vendored + 11 hardening + 23 edge cases + 13 `makeCustomDepositFrom`) |
-| `EnvelopeApprovalPaymaster` (`test/paymasters/EnvelopeApprovalPaymaster.t.sol`) | **27** (19 Mode A + 7 Mode B + 1 EIP-1271 contract signer) |
+| Envelope core (`test/envelope/`) | **90** (56 vendored + 11 hardening + 23 edge cases) |
 | Other paymasters (unchanged) | 102 |
 | Rest of repo | 747 |
-| **Total** | **979** |
+| **Total** | **939** |
