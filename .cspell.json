@@ -122,6 +122,7 @@
     "defi",
     "MAGICVALUE",
     "unhashed",
-    "Hashbinary"
+    "Hashbinary",
+    "funder"
   ]
 }
