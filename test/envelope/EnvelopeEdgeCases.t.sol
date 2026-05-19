@@ -171,7 +171,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     function test_RevertWhen_RecipientBoundClaimedByOtherAddress() public {
         // Address-bound deposit: recipient = ALICE.
         uint256 idx = vault.makeCustomDeposit{value: 1 ether}(
-            address(0), 0, 1 ether, 0, LINK_PUBKEY20, address(this), false, ALICE, 0, false, ""
+            address(0), 0, 1 ether, 0, LINK_PUBKEY20, address(this), false, ALICE, 0
         );
         // Even with a valid pubKey signature, the contract-stored recipient blocks
         // anyone else from being the named recipient on withdrawal.
@@ -183,7 +183,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     function test_RecipientBoundSenderCannotReclaimBeforeDeadline() public {
         uint40 reclaimAfter = uint40(block.timestamp + 1 days);
         uint256 idx = vault.makeCustomDeposit{value: 1 ether}(
-            address(0), 0, 1 ether, 0, LINK_PUBKEY20, address(this), false, ALICE, reclaimAfter, false, ""
+            address(0), 0, 1 ether, 0, LINK_PUBKEY20, address(this), false, ALICE, reclaimAfter
         );
         vm.expectRevert(EnvelopeVault.TooEarlyToReclaim.selector);
         vault.withdrawDepositSender(idx);

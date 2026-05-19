@@ -47,7 +47,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import {IEIP3009} from "../util/IEIP3009.sol";
+import {IPaymaster} from "../util/IPaymaster.sol";
 
 contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ownable2Step {
     using SafeERC20 for IERC20;
@@ -69,8 +69,6 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     error InvalidGaslessReclaimSignature();
     error EthTransferFailed();
     error DirectTransfersNotAllowed();
-    error ContractTypeMustBeOneFor3009();
-    error Wrong3009OnBehalfOf();
     error FeeExceedsDepositAmount();
     error NoFeesToWithdraw();
 
@@ -176,28 +174,24 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         internal
         view
     {
-        // Note: we need to use `encodePacked` here instead of `encode`.
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, hash(reclaim)));
-        // By using SignatureChecker we support both EOAs and smart contract wallets
         bool valid = SignatureChecker.isValidSignatureNow(signer, digest, signature);
         if (!valid) revert InvalidGaslessReclaimSignature();
     }
 
     /**
      * @notice supportsInterface function
-     *     @dev ERC165 interface detection
-     *     @param _interfaceId bytes4 the interface identifier, as specified in ERC-165
-     *     @return bool true if the contract implements the interface specified in _interfaceId
+     * @dev ERC165 interface detection
      */
     function supportsInterface(bytes4 _interfaceId) external pure override(IERC165) returns (bool) {
         return _interfaceId == type(IERC165).interfaceId || _interfaceId == type(IERC721Receiver).interfaceId
             || _interfaceId == type(IERC1155Receiver).interfaceId;
     }
 
-    /*
-     * A minimalistic function to make a deposit.
-     * @deprecated makeCustomDeposit should be used for everything
-     */
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Deposit Functions
+    // ══════════════════════════════════════════════════════════════════════════════
+
     function makeDeposit(
         address _tokenAddress,
         uint8 _contractType,
@@ -205,29 +199,10 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256 _tokenId,
         address _pubKey20
     ) public payable nonReentrant returns (uint256) {
-        _amount = _pullTokensViaApproval(
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId
-        );
-        return _storeDeposit(
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId,
-            _pubKey20,
-            msg.sender, // the sender is the onBehalfOf here
-            false, // no MFA
-            address(0), // no restrictions on the recipient
-            0 // no restrictions on the recipient
-        );
+        _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
+        return _storeDeposit(_tokenAddress, _contractType, _amount, _tokenId, _pubKey20, msg.sender, false, address(0), 0);
     }
 
-    /*
-     * Makes a minimalistic with MFA (requires an external authorisation to withdraw).
-     * @deprecated makeCustomDeposit should be used for everything
-     */
     function makeMFADeposit(
         address _tokenAddress,
         uint8 _contractType,
@@ -235,29 +210,10 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256 _tokenId,
         address _pubKey20
     ) public payable nonReentrant returns (uint256) {
-        _amount = _pullTokensViaApproval(
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId
-        );
-        return _storeDeposit(
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId,
-            _pubKey20,
-            msg.sender, // the sender is the onBehalfOf here
-            true, // with MFA
-            address(0), // no restrictions on the recipient
-            0 // no restrictions on the recipient
-        );
+        _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
+        return _storeDeposit(_tokenAddress, _contractType, _amount, _tokenId, _pubKey20, msg.sender, true, address(0), 0);
     }
 
-    /*
-     * Minimalistic function to make an MFA deposit and delegate ownership of the deposit.
-     * @deprecated makeCustomDeposit should be used for everything
-     */
     function makeSelflessMFADeposit(
         address _tokenAddress,
         uint8 _contractType,
@@ -266,29 +222,10 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         address _pubKey20,
         address _onBehalfOf
     ) public payable nonReentrant returns (uint256) {
-        _amount = _pullTokensViaApproval(
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId
-        );
-        return _storeDeposit(
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId,
-            _pubKey20,
-            _onBehalfOf,
-            true, // with MFA
-            address(0), // no restrictions on the recipient
-            0 // no restrictions on the recipient
-        );
+        _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
+        return _storeDeposit(_tokenAddress, _contractType, _amount, _tokenId, _pubKey20, _onBehalfOf, true, address(0), 0);
     }
 
-    /*
-     * Minimalistic function to make a deposit and delegate ownership.
-     * @deprecated makeCustomDeposit should be used for everything
-     */
     function makeSelflessDeposit(
         address _tokenAddress,
         uint8 _contractType,
@@ -297,41 +234,23 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         address _pubKey20,
         address _onBehalfOf
     ) public payable nonReentrant returns (uint256) {
-        _amount = _pullTokensViaApproval(
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId
-        );
-        return _storeDeposit(
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId,
-            _pubKey20,
-            _onBehalfOf,
-            false, // no MFA
-            address(0), // no restrictions on the recipient
-            0 // no restrictions on the recipient
-        );
+        _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
+        return _storeDeposit(_tokenAddress, _contractType, _amount, _tokenId, _pubKey20, _onBehalfOf, false, address(0), 0);
     }
 
     /**
-     * The big main function that supports ALL possible scenarios of depositing. 
-     * @dev For token deposits, allowance must be set before calling this function
+     * @notice The main function that supports all scenarios of depositing.
      * @param _tokenAddress address of the token being sent. 0x0 for eth
-     * @param _contractType uint8 for the type of contract being sent. 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155
-     * @param _amount uint256 of the amount of tokens being sent (if erc20)
-     * @param _tokenId uint256 of the id of the token being sent if erc721 or erc1155
+     * @param _contractType 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155
+     * @param _amount amount of tokens being sent
+     * @param _tokenId id of the token being sent if erc721 or erc1155
      * @param _pubKey20 last 20 bytes of the public key of the deposit signer
      * @param _onBehalfOf who will be able to reclaim the link if the private key is lost
      * @param _withMFA whether an external authorisation is required for withdrawal
-     * @param _recipient if not 0x00.00, only _recipient will be able to withdraw
-     * @param _reclaimableAfter if _recipient is set, the sender will be able to reclaim only after this timestamp
-     * @param _isGasless3009 if true, the deposit will be made via eip-3009, see makeDepositWithAuthorization function for more info
-     * @param _args3009 all the arguments for an EIP-3009 deposit, used if _isGasless3009 is true. Encoded with abi.encode, this is: address (from), bytes32 (_nonce), uint256 (_validAfter), uint256 (_validBefore), uint8 (_v), bytes32 (_r), bytes32 (_s). Unfortunately we have to encode it this way, because else we get a stack too deep error (EVM supports max 16 variables on the stack). 
+     * @param _recipient if not 0x00, only _recipient will be able to withdraw
+     * @param _reclaimableAfter if _recipient is set, the sender can reclaim only after this timestamp
      * @return uint256 index of the deposit
-    */
+     */
     function makeCustomDeposit(
         address _tokenAddress,
         uint8 _contractType,
@@ -340,287 +259,39 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         address _pubKey20,
         address _onBehalfOf,
         bool _withMFA,
-        // arguments for address-bound deposits
-        address _recipient,
-        uint40 _reclaimableAfter,
-        // arguments for 3009 
-        bool _isGasless3009,
-        bytes calldata _args3009
-    ) public payable nonReentrant returns (uint256) {
-        if (_isGasless3009) {
-            if (_contractType != 1) revert ContractTypeMustBeOneFor3009();
-            _amount = _pullTokensVia3009Encoded(
-                _tokenAddress,
-                _amount,
-                _pubKey20,
-                _onBehalfOf,
-                _args3009
-            );
-        } else {
-            _amount = _pullTokensViaApproval(
-                _tokenAddress,
-                _contractType,
-                _amount,
-                _tokenId
-            );
-        }
-
-        return _storeDeposit(
-            _tokenAddress,
-            _contractType,
-            _amount,
-            _tokenId,
-            _pubKey20,
-            _onBehalfOf,
-            _withMFA,
-            _recipient,
-            _reclaimableAfter
-        );
-    }
-
-    function _storeDeposit(
-        address _tokenAddress,
-        uint8 _contractType,
-        uint256 _amount,
-        uint256 _tokenId,
-        address _pubKey20,
-        address _onBehalfOf,
-        bool _requiresMFA,
         address _recipient,
         uint40 _reclaimableAfter
-    ) internal returns (uint256) {
-        // create deposit
-        deposits.push(
-            Deposit({
-                tokenAddress: _tokenAddress,
-                contractType: _contractType,
-                amount: _amount,
-                tokenId: _tokenId,
-                claimed: false,
-                pubKey20: _pubKey20,
-                senderAddress: _onBehalfOf,
-                timestamp: uint40(block.timestamp),
-                requiresMFA: _requiresMFA,
-                recipient: _recipient,
-                reclaimableAfter: _reclaimableAfter
-            })
-        );
-
-        // emit the deposit event
-        emit DepositEvent(deposits.length - 1, _contractType, _amount, _onBehalfOf);
-
-        // return id of new deposit
-        return deposits.length - 1;
-    }
-
-    /**
-     * Pulls tokens from msg.sender via a standard approval.
-     * @return IMPORTANT: returns the amount that has been actually deposited. MUST be used by the caller.
-     */
-    function _pullTokensViaApproval(
-        address _tokenAddress,
-        uint8 _contractType,
-        uint256 _amount,
-        uint256 _tokenId
-    ) internal returns (uint256) {
-        if (_contractType > 3) revert InvalidContractType();
-
-        if (_contractType == 0) {
-            if (_amount != msg.value) revert WrongEthAmount();
-        } else if (_contractType == 1) {
-            IERC20 token = IERC20(_tokenAddress);
-            token.safeTransferFrom(msg.sender, address(this), _amount);
-        } else if (_contractType == 2) {
-            if (_amount != 1) revert Erc721AmountMustBeOne();
-            IERC721 token = IERC721(_tokenAddress);
-            token.safeTransferFrom(msg.sender, address(this), _tokenId, "Internal transfer");
-        } else if (_contractType == 3) {
-            IERC1155 token = IERC1155(_tokenAddress);
-            token.safeTransferFrom(msg.sender, address(this), _tokenId, _amount, "Internal transfer");
-        }
-
-        return _amount;
-    }
-
-    /**
-     * Pulls the tokens via EIP-3009 according to the encoded data.
-     * Also validates that _onBehalfOf is the unpacked _from.
-     */
-    function _pullTokensVia3009Encoded(
-        address _tokenAddress,
-        uint256 _amount,
-        address _pubKey20,
-        address _onBehalfOf,
-        bytes calldata _encodedArgs
-    ) internal returns (uint256) {
-        address _from;
-        bytes32 _nonce;
-        uint256 _validAfter;
-        uint256 _validBefore;
-        uint8 _v;
-        bytes32 _r;
-        bytes32 _s;
-
-        (_from, _nonce, _validAfter, _validBefore, _v, _r, _s) =
-            abi.decode(_encodedArgs, (address, bytes32, uint256, uint256, uint8, bytes32, bytes32));
-
-        if (_from != _onBehalfOf) revert Wrong3009OnBehalfOf();
-        return _pullTokensVia3009(_tokenAddress, _from, _amount, _pubKey20, _nonce, _validAfter, _validBefore, _v, _r, _s);
-    }
-
-    /**
-     * Performs a EIP-3009 transfer for tokens like USDC.
-     * Reverts if the transfer failed.
-     * Returns the amount of actually deposited tokens.
-     */
-    function _pullTokensVia3009(
-        address _tokenAddress,
-        address _from,
-        uint256 _amount,
-        address _pubKey20,
-        bytes32 _nonce,
-        uint256 _validAfter,
-        uint256 _validBefore,
-        uint8 _v,
-        bytes32 _r,
-        bytes32 _s
-    ) internal returns(uint256) {
-        // Recalculate the nonce.
-        // If we don't include pubKey20 in the nonce, the link will be front-runnable
-        bytes32 nonce = keccak256(abi.encodePacked(_pubKey20, _nonce));
-
-        IEIP3009 token = IEIP3009(_tokenAddress);
-        token.receiveWithAuthorization(
-            _from,
-            address(this), // to
-            _amount,
-            _validAfter,
-            _validBefore,
-            nonce,
-            _v,
-            _r,
-            _s
-        );
-        
-        return _amount;
-    }
-
-    /**
-     * @notice Function to make a deposit with EIP-3009 authorization
-     * @dev No need to pre-approve tokens!
-     * @param _tokenAddress address of the token being sent
-     * @param _from the depositor of the tokens
-     * @param _amount uint256 of the amount of tokens being sent
-     * @param _pubKey20 last 20 bytes of the public key of the deposit signer
-     * @param _nonce a unique value
-     * @param _validAfter deposit is valid only after this timestamp (in seconds)
-     * @param _validBefore deposit is valid only before this timestamp (in seconds)
-     * @param _v v of the signature
-     * @param _r r of the signature
-     * @param _s s of the signature
-     * @return uint256 index of the deposit
-     */
-    function makeDepositWithAuthorization(
-        address _tokenAddress,
-        address _from,
-        uint256 _amount,
-        address _pubKey20,
-        bytes32 _nonce,
-        uint256 _validAfter,
-        uint256 _validBefore,
-        uint8 _v,
-        bytes32 _r,
-        bytes32 _s
-    ) public nonReentrant returns (uint256) {
-        _pullTokensVia3009(
-             _tokenAddress,
-             _from,
-             _amount,
-             _pubKey20,
-             _nonce,
-            _validAfter,
-            _validBefore,
-            _v,
-            _r,
-            _s
-        );
-
+    ) public payable nonReentrant returns (uint256) {
+        _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
         return _storeDeposit(
-            _tokenAddress,
-            1, // contractType is always 1 here (ERC20)
-            _amount,
-            0, // it's always ERC20, so tokenId doesn't matter
-            _pubKey20,
-            _from,
-            false, // no MFA
-            address(0), // no restrictions on the recipient
-            0 // no restrictions on the recipient
+            _tokenAddress, _contractType, _amount, _tokenId,
+            _pubKey20, _onBehalfOf, _withMFA, _recipient, _reclaimableAfter
         );
     }
 
-    /// @notice ERC-721 receiver hook. Accepts tokens transferred *by this contract* (e.g. during
-    /// withdraw); rejects unsolicited direct transfers explicitly so they cannot get stuck.
-    function onERC721Received(address _operator, address, /* _from */ uint256, /* _tokenId */ bytes calldata /* _data */ )
-        external
-        view
-        override
-        returns (bytes4)
-    {
-        if (_operator != address(this)) revert DirectTransfersNotAllowed();
-        return this.onERC721Received.selector;
-    }
-
-    /// @notice ERC-1155 receiver hook. Same self-only policy as onERC721Received.
-    function onERC1155Received(
-        address _operator,
-        address, /* _from */
-        uint256, /* _tokenId */
-        uint256, /* _value */
-        bytes calldata /* _data */
-    ) external view override returns (bytes4) {
-        if (_operator != address(this)) revert DirectTransfersNotAllowed();
-        return this.onERC1155Received.selector;
-    }
-
-    /// @notice ERC-1155 batch receiver hook. Same self-only policy as onERC721Received.
-    function onERC1155BatchReceived(
-        address _operator,
-        address, /* _from */
-        uint256[] calldata, /* _ids */
-        uint256[] calldata, /* _values */
-        bytes calldata /* _data */
-    ) external view override returns (bytes4) {
-        if (_operator != address(this)) revert DirectTransfersNotAllowed();
-        return this.onERC1155BatchReceived.selector;
-    }
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Withdrawal Functions
+    // ══════════════════════════════════════════════════════════════════════════════
 
     /**
-     * @notice Function to withdraw tokens. Can be called by anyone.
-     * @return bool true if successful
+     * @notice Withdraw tokens. Can be called by anyone with a valid signature.
      */
     function withdrawDeposit(
         uint256 _index,
         address _recipientAddress,
         bytes memory _signature
     ) external nonReentrant returns (bool) {
-        return _withdrawDeposit(
-            _index,
-            _recipientAddress,
-            ANYONE_WITHDRAWAL_MODE,
-            _signature,
-            false
-        );
+        return _withdrawDeposit(_index, _recipientAddress, ANYONE_WITHDRAWAL_MODE, _signature, false);
     }
 
     /**
-     * @notice Function to withdraw tokens with MFA. Fees are backend-signed flat amounts
-     *         denominated in the deposit's token.
+     * @notice Withdraw tokens with MFA. Fees are backend-signed flat amounts.
      * @param _index deposit index
      * @param _recipientAddress address to receive the deposit (minus fees)
      * @param _signature withdrawal signature from the deposit's pubKey20
      * @param _MFASignature backend signature authorizing this withdrawal and specifying fees
-     * @param _serviceFee flat fee (in deposit token units) for the MFA service
-     * @param _gasAbsorptionFee flat fee (in deposit token units) to cover gasless claim; 0 if not absorbing
+     * @param _serviceFee flat fee for the MFA service
+     * @param _gasAbsorptionFee flat fee to cover gasless claim; 0 if not absorbing
      */
     function withdrawMFADeposit(
         uint256 _index,
@@ -630,45 +301,57 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256 _serviceFee,
         uint256 _gasAbsorptionFee
     ) external nonReentrant returns (bool) {
-        // Verify the MFA signature (includes fee amounts to prevent tampering)
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    ENVELOPE_SALT,
-                    block.chainid,
-                    address(this),
-                    _index,
-                    _recipientAddress,
-                    _serviceFee,
-                    _gasAbsorptionFee
-                )
-            )
-        );
-        address authorizationSigner = getSigner(digest, _MFASignature);
-        if (authorizationSigner != mfaAuthorizer) revert WrongMfaSignature();
+        _verifyMfaSignature(_index, _recipientAddress, _serviceFee, _gasAbsorptionFee, _MFASignature);
+        _collectFees(_index, _serviceFee, _gasAbsorptionFee);
+        return _withdrawDeposit(_index, _recipientAddress, ANYONE_WITHDRAWAL_MODE, _signature, true);
+    }
 
-        // Deduct fees from deposit amount before withdrawal
+    /**
+     * @notice Sponsored MFA withdrawal. A paymaster submits on behalf of the recipient.
+     *         The gasAbsorptionFee is sent to the treasury instead of accumulating.
+     * @param _index deposit index
+     * @param _recipientAddress address to receive the deposit (minus fees)
+     * @param _signature withdrawal signature from the deposit's pubKey20
+     * @param _MFASignature backend signature authorizing this withdrawal and specifying fees
+     * @param _serviceFee flat fee for the MFA service (accumulated for owner)
+     * @param _gasAbsorptionFee flat fee sent to treasury to reimburse gas
+     * @param _treasury paymaster address that submitted the tx and receives gasAbsorptionFee
+     */
+    function withdrawMFADepositSponsored(
+        uint256 _index,
+        address _recipientAddress,
+        bytes memory _signature,
+        bytes memory _MFASignature,
+        uint256 _serviceFee,
+        uint256 _gasAbsorptionFee,
+        address _treasury
+    ) external nonReentrant returns (bool) {
+        _verifyMfaSignature(_index, _recipientAddress, _serviceFee, _gasAbsorptionFee, _MFASignature);
+
+        // Treasury validates the sponsorship
+        IPaymaster(_treasury).validateSponsoredOperation(msg.sender, _gasAbsorptionFee);
+
+        // Deduct fees: serviceFee → accumulated, gasAbsorptionFee → treasury
         uint256 totalFee = _serviceFee + _gasAbsorptionFee;
         if (totalFee > 0) {
             Deposit storage dep = deposits[_index];
             if (totalFee > dep.amount) revert FeeExceedsDepositAmount();
             dep.amount -= totalFee;
-            accumulatedFees[dep.tokenAddress] += totalFee;
+
+            if (_serviceFee > 0) {
+                accumulatedFees[dep.tokenAddress] += _serviceFee;
+            }
+            if (_gasAbsorptionFee > 0) {
+                _transferFeeToTreasury(dep.tokenAddress, _gasAbsorptionFee, _treasury);
+            }
             emit FeeCollected(_index, dep.tokenAddress, _serviceFee, _gasAbsorptionFee);
         }
 
-        return _withdrawDeposit(
-            _index,
-            _recipientAddress,
-            ANYONE_WITHDRAWAL_MODE,
-            _signature,
-            true
-        );
+        return _withdrawDeposit(_index, _recipientAddress, ANYONE_WITHDRAWAL_MODE, _signature, true);
     }
 
     /**
-     * @notice Function to withdraw tokens. Must be called by the recipient.
-     * @return bool true if successful
+     * @notice Withdraw tokens. Must be called by the recipient.
      */
     function withdrawDepositAsRecipient(
         uint256 _index,
@@ -676,213 +359,100 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         bytes memory _signature
     ) external nonReentrant returns (bool) {
         if (_recipientAddress != msg.sender) revert NotTheRecipient();
-
-        return _withdrawDeposit(
-            _index,
-            _recipientAddress,
-            RECIPIENT_WITHDRAWAL_MODE,
-            _signature,
-            false
-        );
+        return _withdrawDeposit(_index, _recipientAddress, RECIPIENT_WITHDRAWAL_MODE, _signature, false);
     }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Sender Reclaim Functions
+    // ══════════════════════════════════════════════════════════════════════════════
 
     /**
-     * @notice Function to withdraw a deposit. Withdraws the deposit to the recipient address.
-     * @dev _recipientAddressHash is hash("\x19Ethereum Signed Message:\n32" + hash(_recipientAddress))
-     * @dev The signature should be signed with the private key corresponding to the public key stored in the deposit
-     * @dev We don't check the unhashed address for security reasons. It's preferable to sign a hash of the address.
-     * @param _index uint256 index of the deposit
-     * @param _recipientAddress address of the recipient
-     * @param _extraData extra data that has to be signed by the user
-     * @param _signature bytes signature of the recipient address (65 bytes)
-     * @return bool true if successful
+     * @notice Sender reclaims their deposit directly.
      */
-    function _withdrawDeposit(
-        uint256 _index,
-        address _recipientAddress,
-        bytes32 _extraData,
-        bytes memory _signature,
-        bool _authorized
-    ) internal returns (bool) {
-        // check that the deposit exists and that it isn't already withdrawn
-        if (_index >= deposits.length) revert DepositIndexOutOfBounds();
-        Deposit memory _deposit = deposits[_index];
-        if (_deposit.claimed) revert DepositAlreadyClaimed();
-        
-        // check that the signer is the same as the one stored in the deposit.
-        // Signature may be empty for address-bound deposits.
-        address depositSigner;
-        if (_signature.length > 0) {
-            // Compute the hash of the withdrawal message
-            bytes32 _recipientAddressHash = MessageHashUtils.toEthSignedMessageHash(
-                keccak256(
-                    abi.encodePacked(
-                        ENVELOPE_SALT,
-                        block.chainid,
-                        address(this),
-                        _index,
-                        _recipientAddress,
-                        _extraData
-                    )
-                )
-            );
-            depositSigner = getSigner(_recipientAddressHash, _signature);
-        }
-        if (_deposit.requiresMFA && !_authorized) revert RequiresMfaAuthorization();
-        if (_deposit.pubKey20 != address(0) && depositSigner != _deposit.pubKey20) revert WrongSignature();
-        if (_deposit.recipient != address(0) && _recipientAddress != _deposit.recipient) revert WrongRecipient();
-
-        // emit the withdraw event
-        emit WithdrawEvent(_index, _deposit.contractType, _deposit.amount, _recipientAddress);
-
-        // mark as claimed
-        deposits[_index].claimed = true;
-
-        // Deposit request is valid. Withdraw the deposit to the recipient address.
-        if (_deposit.contractType == 0) {
-            /// handle eth deposits
-            (bool success,) = _recipientAddress.call{value: _deposit.amount}("");
-            if (!success) revert EthTransferFailed();
-        } else if (_deposit.contractType == 1) {
-            /// handle erc20 deposits
-            IERC20 token = IERC20(_deposit.tokenAddress);
-            token.safeTransfer(_recipientAddress, _deposit.amount);
-        } else if (_deposit.contractType == 2) {
-            /// handle erc721 deposits
-            IERC721 token = IERC721(_deposit.tokenAddress);
-            token.safeTransferFrom(address(this), _recipientAddress, _deposit.tokenId);
-        } else if (_deposit.contractType == 3) {
-            /// handle erc1155 deposits
-            IERC1155 token = IERC1155(_deposit.tokenAddress);
-            token.safeTransferFrom(address(this), _recipientAddress, _deposit.tokenId, _deposit.amount, "");
-        }
-
-        return true;
-    }
-
-    /**
-     * @notice Function to allow a sender to withdraw their deposit
-     * @param _index uint256 index of the deposit
-     * @param _senderAddress the address of the depositor
-     * @return bool true if successful
-     */
-    function _withdrawDepositSender(uint256 _index, address _senderAddress) internal returns (bool) {
-        // check that the deposit exists
-        if (_index >= deposits.length) revert DepositIndexOutOfBounds();
-        Deposit memory _deposit = deposits[_index];
-        if (_deposit.claimed) revert DepositAlreadyClaimed();
-        // check that the sender is the one who made the deposit
-        if (_deposit.senderAddress != _senderAddress) revert NotTheSender();
-        // check timestamp for address-bound links
-        if (_deposit.recipient != address(0)) {
-            if (block.timestamp <= _deposit.reclaimableAfter) revert TooEarlyToReclaim();
-        }
-
-        // emit the withdraw event
-        emit WithdrawEvent(_index, _deposit.contractType, _deposit.amount, _deposit.senderAddress);
-
-        // Delete the deposit
-        deposits[_index].claimed = true;
-
-        if (_deposit.contractType == 0) {
-            /// handle eth deposits
-            (bool success,) = payable(_deposit.senderAddress).call{value: _deposit.amount}("");
-            if (!success) revert EthTransferFailed();
-        } else if (_deposit.contractType == 1) {
-            /// handle erc20 deposits
-            IERC20 token = IERC20(_deposit.tokenAddress);
-            token.safeTransfer(_deposit.senderAddress, _deposit.amount);
-        } else if (_deposit.contractType == 2) {
-            /// handle erc721 deposits
-            IERC721 token = IERC721(_deposit.tokenAddress);
-            token.safeTransferFrom(address(this), _deposit.senderAddress, _deposit.tokenId);
-        } else if (_deposit.contractType == 3) {
-            /// handle erc1155 deposits
-            IERC1155 token = IERC1155(_deposit.tokenAddress);
-            token.safeTransferFrom(address(this), _deposit.senderAddress, _deposit.tokenId, _deposit.amount, "");
-        }
-
-        return true;
-    }
-
     function withdrawDepositSender(uint256 _index) external nonReentrant returns (bool) {
         return _withdrawDepositSender(_index, msg.sender);
     }
 
-    function withdrawDepositSenderGasless(GaslessReclaim calldata reclaim, address signer, bytes calldata signature)
-        external
-        nonReentrant
-        returns (bool)
+    /**
+     * @notice Sponsored sender reclaim. A paymaster submits on behalf of the sender.
+     *         Sender authorizes via EIP-712 signature. MFA authorizer signs the gas fee.
+     * @param _reclaim EIP-712 signed reclaim request
+     * @param _signer the sender address (must match deposit's senderAddress)
+     * @param _signature EIP-712 signature from the sender authorizing reclaim
+     * @param _MFASignature backend signature specifying the gas absorption fee
+     * @param _gasAbsorptionFee flat fee sent to treasury to reimburse gas
+     * @param _treasury paymaster address that receives gasAbsorptionFee
+     */
+    function withdrawDepositSenderSponsored(
+        GaslessReclaim calldata _reclaim,
+        address _signer,
+        bytes calldata _signature,
+        bytes calldata _MFASignature,
+        uint256 _gasAbsorptionFee,
+        address _treasury
+    ) external nonReentrant returns (bool) {
+        // Verify sender authorized this reclaim
+        verifyGaslessReclaim(_reclaim, _signer, _signature);
+
+        // Verify MFA signature covers the fee for this sponsored reclaim
+        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
+            keccak256(
+                abi.encodePacked(
+                    ENVELOPE_SALT,
+                    block.chainid,
+                    address(this),
+                    _reclaim.depositIndex,
+                    _signer,
+                    _gasAbsorptionFee
+                )
+            )
+        );
+        address authorizationSigner = getSigner(digest, _MFASignature);
+        if (authorizationSigner != mfaAuthorizer) revert WrongMfaSignature();
+
+        // Treasury validates
+        IPaymaster(_treasury).validateSponsoredOperation(msg.sender, _gasAbsorptionFee);
+
+        // Deduct gas fee from deposit and send to treasury
+        if (_gasAbsorptionFee > 0) {
+            Deposit storage dep = deposits[_reclaim.depositIndex];
+            if (_gasAbsorptionFee > dep.amount) revert FeeExceedsDepositAmount();
+            dep.amount -= _gasAbsorptionFee;
+            _transferFeeToTreasury(dep.tokenAddress, _gasAbsorptionFee, _treasury);
+            emit FeeCollected(_reclaim.depositIndex, dep.tokenAddress, 0, _gasAbsorptionFee);
+        }
+
+        return _withdrawDepositSender(_reclaim.depositIndex, _signer);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Token Receiver Hooks
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function onERC721Received(address _operator, address, uint256, bytes calldata)
+        external view override returns (bytes4)
     {
-        verifyGaslessReclaim(reclaim, signer, signature);
-        return _withdrawDepositSender(reclaim.depositIndex, signer);
+        if (_operator != address(this)) revert DirectTransfersNotAllowed();
+        return this.onERC721Received.selector;
     }
 
-    //// Some utility functions ////
-
-    /**
-     * @notice Gets the signer of a messageHash. Used for signature verification.
-     * @dev Uses ECDSA.recover. On Frontend, use secp256k1 to sign the messageHash
-     * @dev also remember to prepend the messageHash with "\x19Ethereum Signed Message:\n32"
-     * @param messageHash bytes32 hash of the message
-     * @param signature bytes signature of the message
-     * @return address of the signer
-     */
-    function getSigner(bytes32 messageHash, bytes memory signature) public pure returns (address) {
-        address signer = ECDSA.recover(messageHash, signature);
-        return signer;
+    function onERC1155Received(address _operator, address, uint256, uint256, bytes calldata)
+        external view override returns (bytes4)
+    {
+        if (_operator != address(this)) revert DirectTransfersNotAllowed();
+        return this.onERC1155Received.selector;
     }
 
-    /**
-     * @notice Simple way to get the total number of deposits
-     * @return uint256 number of deposits
-     */
-    function getDepositCount() external view returns (uint256) {
-        return deposits.length;
+    function onERC1155BatchReceived(address _operator, address, uint256[] calldata, uint256[] calldata, bytes calldata)
+        external view override returns (bytes4)
+    {
+        if (_operator != address(this)) revert DirectTransfersNotAllowed();
+        return this.onERC1155BatchReceived.selector;
     }
 
-    /**
-     * @notice Simple way to get single deposit
-     * @param _index uint256 index of the deposit
-     * @return Deposit struct
-     */
-    function getDeposit(uint256 _index) external view returns (Deposit memory) {
-        return deposits[_index];
-    }
-
-    /**
-     * @notice Get all deposits in contract
-     * @return Deposit[] array of deposits
-     */
-    function getAllDeposits() external view returns (Deposit[] memory) {
-        return deposits;
-    }
-
-    /**
-     * @notice Get all deposits for a given address
-     * @param _address address of the deposits
-     * @return Deposit[] array of deposits
-     */
-    function getAllDepositsForAddress(address _address) external view returns (Deposit[] memory) {
-        uint256 count = 0;
-        for (uint256 i = 0; i < deposits.length; i++) {
-            if (deposits[i].senderAddress == _address) {
-                count++;
-            }
-        }
-
-        Deposit[] memory _deposits = new Deposit[](count);
-
-        count = 0;
-        // Second loop to populate the array
-        for (uint256 i = 0; i < deposits.length; i++) {
-            if (deposits[i].senderAddress == _address) {
-                _deposits[count] = deposits[i];
-                count++;
-            }
-        }
-        return _deposits;
-    }
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Owner Functions
+    // ══════════════════════════════════════════════════════════════════════════════
 
     /**
      * @notice Withdraw accumulated fees for a given token. Only callable by owner.
@@ -903,5 +473,215 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         emit FeesWithdrawn(_tokenAddress, amount);
     }
 
-    // and that's all! Have a nutty day!
+    // ══════════════════════════════════════════════════════════════════════════════
+    // View Functions
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function getSigner(bytes32 messageHash, bytes memory signature) public pure returns (address) {
+        return ECDSA.recover(messageHash, signature);
+    }
+
+    function getDepositCount() external view returns (uint256) {
+        return deposits.length;
+    }
+
+    function getDeposit(uint256 _index) external view returns (Deposit memory) {
+        return deposits[_index];
+    }
+
+    function getAllDeposits() external view returns (Deposit[] memory) {
+        return deposits;
+    }
+
+    function getAllDepositsForAddress(address _address) external view returns (Deposit[] memory) {
+        uint256 count = 0;
+        for (uint256 i = 0; i < deposits.length; i++) {
+            if (deposits[i].senderAddress == _address) {
+                count++;
+            }
+        }
+        Deposit[] memory _deposits = new Deposit[](count);
+        count = 0;
+        for (uint256 i = 0; i < deposits.length; i++) {
+            if (deposits[i].senderAddress == _address) {
+                _deposits[count] = deposits[i];
+                count++;
+            }
+        }
+        return _deposits;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Internal Functions
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function _verifyMfaSignature(
+        uint256 _index,
+        address _recipientAddress,
+        uint256 _serviceFee,
+        uint256 _gasAbsorptionFee,
+        bytes memory _MFASignature
+    ) internal view {
+        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
+            keccak256(
+                abi.encodePacked(
+                    ENVELOPE_SALT,
+                    block.chainid,
+                    address(this),
+                    _index,
+                    _recipientAddress,
+                    _serviceFee,
+                    _gasAbsorptionFee
+                )
+            )
+        );
+        address authorizationSigner = getSigner(digest, _MFASignature);
+        if (authorizationSigner != mfaAuthorizer) revert WrongMfaSignature();
+    }
+
+    function _collectFees(uint256 _index, uint256 _serviceFee, uint256 _gasAbsorptionFee) internal {
+        uint256 totalFee = _serviceFee + _gasAbsorptionFee;
+        if (totalFee > 0) {
+            Deposit storage dep = deposits[_index];
+            if (totalFee > dep.amount) revert FeeExceedsDepositAmount();
+            dep.amount -= totalFee;
+            accumulatedFees[dep.tokenAddress] += totalFee;
+            emit FeeCollected(_index, dep.tokenAddress, _serviceFee, _gasAbsorptionFee);
+        }
+    }
+
+    function _transferFeeToTreasury(address _tokenAddress, uint256 _amount, address _treasury) internal {
+        if (_tokenAddress == address(0)) {
+            (bool success,) = _treasury.call{value: _amount}("");
+            if (!success) revert EthTransferFailed();
+        } else {
+            IERC20(_tokenAddress).safeTransfer(_treasury, _amount);
+        }
+    }
+
+    function _storeDeposit(
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256 _amount,
+        uint256 _tokenId,
+        address _pubKey20,
+        address _onBehalfOf,
+        bool _requiresMFA,
+        address _recipient,
+        uint40 _reclaimableAfter
+    ) internal returns (uint256) {
+        deposits.push(
+            Deposit({
+                tokenAddress: _tokenAddress,
+                contractType: _contractType,
+                amount: _amount,
+                tokenId: _tokenId,
+                claimed: false,
+                pubKey20: _pubKey20,
+                senderAddress: _onBehalfOf,
+                timestamp: uint40(block.timestamp),
+                requiresMFA: _requiresMFA,
+                recipient: _recipient,
+                reclaimableAfter: _reclaimableAfter
+            })
+        );
+        emit DepositEvent(deposits.length - 1, _contractType, _amount, _onBehalfOf);
+        return deposits.length - 1;
+    }
+
+    function _pullTokensViaApproval(
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256 _amount,
+        uint256 _tokenId
+    ) internal returns (uint256) {
+        if (_contractType > 3) revert InvalidContractType();
+
+        if (_contractType == 0) {
+            if (_amount != msg.value) revert WrongEthAmount();
+        } else if (_contractType == 1) {
+            IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), _amount);
+        } else if (_contractType == 2) {
+            if (_amount != 1) revert Erc721AmountMustBeOne();
+            IERC721(_tokenAddress).safeTransferFrom(msg.sender, address(this), _tokenId, "Internal transfer");
+        } else if (_contractType == 3) {
+            IERC1155(_tokenAddress).safeTransferFrom(msg.sender, address(this), _tokenId, _amount, "Internal transfer");
+        }
+
+        return _amount;
+    }
+
+    function _withdrawDeposit(
+        uint256 _index,
+        address _recipientAddress,
+        bytes32 _extraData,
+        bytes memory _signature,
+        bool _authorized
+    ) internal returns (bool) {
+        if (_index >= deposits.length) revert DepositIndexOutOfBounds();
+        Deposit memory _deposit = deposits[_index];
+        if (_deposit.claimed) revert DepositAlreadyClaimed();
+
+        address depositSigner;
+        if (_signature.length > 0) {
+            bytes32 _recipientAddressHash = MessageHashUtils.toEthSignedMessageHash(
+                keccak256(
+                    abi.encodePacked(
+                        ENVELOPE_SALT,
+                        block.chainid,
+                        address(this),
+                        _index,
+                        _recipientAddress,
+                        _extraData
+                    )
+                )
+            );
+            depositSigner = getSigner(_recipientAddressHash, _signature);
+        }
+        if (_deposit.requiresMFA && !_authorized) revert RequiresMfaAuthorization();
+        if (_deposit.pubKey20 != address(0) && depositSigner != _deposit.pubKey20) revert WrongSignature();
+        if (_deposit.recipient != address(0) && _recipientAddress != _deposit.recipient) revert WrongRecipient();
+
+        emit WithdrawEvent(_index, _deposit.contractType, _deposit.amount, _recipientAddress);
+        deposits[_index].claimed = true;
+
+        if (_deposit.contractType == 0) {
+            (bool success,) = _recipientAddress.call{value: _deposit.amount}("");
+            if (!success) revert EthTransferFailed();
+        } else if (_deposit.contractType == 1) {
+            IERC20(_deposit.tokenAddress).safeTransfer(_recipientAddress, _deposit.amount);
+        } else if (_deposit.contractType == 2) {
+            IERC721(_deposit.tokenAddress).safeTransferFrom(address(this), _recipientAddress, _deposit.tokenId);
+        } else if (_deposit.contractType == 3) {
+            IERC1155(_deposit.tokenAddress).safeTransferFrom(address(this), _recipientAddress, _deposit.tokenId, _deposit.amount, "");
+        }
+
+        return true;
+    }
+
+    function _withdrawDepositSender(uint256 _index, address _senderAddress) internal returns (bool) {
+        if (_index >= deposits.length) revert DepositIndexOutOfBounds();
+        Deposit memory _deposit = deposits[_index];
+        if (_deposit.claimed) revert DepositAlreadyClaimed();
+        if (_deposit.senderAddress != _senderAddress) revert NotTheSender();
+        if (_deposit.recipient != address(0)) {
+            if (block.timestamp <= _deposit.reclaimableAfter) revert TooEarlyToReclaim();
+        }
+
+        emit WithdrawEvent(_index, _deposit.contractType, _deposit.amount, _deposit.senderAddress);
+        deposits[_index].claimed = true;
+
+        if (_deposit.contractType == 0) {
+            (bool success,) = payable(_deposit.senderAddress).call{value: _deposit.amount}("");
+            if (!success) revert EthTransferFailed();
+        } else if (_deposit.contractType == 1) {
+            IERC20(_deposit.tokenAddress).safeTransfer(_deposit.senderAddress, _deposit.amount);
+        } else if (_deposit.contractType == 2) {
+            IERC721(_deposit.tokenAddress).safeTransferFrom(address(this), _deposit.senderAddress, _deposit.tokenId);
+        } else if (_deposit.contractType == 3) {
+            IERC1155(_deposit.tokenAddress).safeTransferFrom(address(this), _deposit.senderAddress, _deposit.tokenId, _deposit.amount, "");
+        }
+
+        return true;
+    }
 }

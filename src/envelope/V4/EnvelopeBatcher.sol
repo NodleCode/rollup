@@ -177,9 +177,7 @@ contract EnvelopeBatcher is IERC721Receiver, IERC1155Receiver {
                 msg.sender, // deposit owner
                 _withMFAs[i],
                 address(0), // not recipient-bound
-                uint40(0),
-                false, // not EIP-3009
-                "" // not EIP-3009
+                uint40(0)
             );
         }
         return depositIndexes;

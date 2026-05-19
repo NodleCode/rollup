@@ -37,9 +37,7 @@ contract RecipientBoundTest is Test {
             address(this), // the depositor
             false, // no MFA
             SAMPLE_ADDRESS, // recipient
-            0, // no timelock for reclaiming
-            false, // not a 3009 deposit
-            bytes("") // not a 3009 deposit
+            0 // no timelock for reclaiming
         );
         require(testToken.balanceOf(address(this)) == 0, "TOKEN WAS NOT CHARGED!");
         require(testToken.balanceOf(SAMPLE_ADDRESS) == 0, "SAMPLE_ADDRESS MUST NOT HAVE TOKENS AT START!");
@@ -65,9 +63,7 @@ contract RecipientBoundTest is Test {
             address(this), // the depositor
             false, // no MFA
             SAMPLE_ADDRESS, // recipient
-            uint40(block.timestamp + 10), // the sender will be able to reclaim in 10 seconds
-            false, // not a 3009 deposit
-            bytes("") // not a 3009 deposit
+            uint40(block.timestamp + 10) // the sender will be able to reclaim in 10 seconds
         );
         require(testToken.balanceOf(address(this)) == 0, "TOKEN WAS NOT CHARGED!");
 
