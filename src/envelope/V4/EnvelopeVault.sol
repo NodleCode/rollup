@@ -46,18 +46,39 @@ import {IERC1155Receiver} from "@openzeppelin/contracts/token/ERC1155/IERC1155Re
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
-import {IL2ECO} from "../util/IL2ECO.sol";
 import {IEIP3009} from "../util/IEIP3009.sol";
 
 contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
     using SafeERC20 for IERC20;
+
+    // ── Custom Errors ────────────────────────────────────────────────────────────
+
+    error InvalidContractType();
+    error WrongEthAmount();
+    error Erc721AmountMustBeOne();
+    error DepositIndexOutOfBounds();
+    error DepositAlreadyClaimed();
+    error RequiresMfaAuthorization();
+    error WrongMfaSignature();
+    error WrongSignature();
+    error WrongRecipient();
+    error NotTheRecipient();
+    error NotTheSender();
+    error TooEarlyToReclaim();
+    error InvalidGaslessReclaimSignature();
+    error EthTransferFailed();
+    error DirectTransfersNotAllowed();
+    error ContractTypeMustBeOneFor3009();
+    error Wrong3009OnBehalfOf();
+
+    // ── Data Structures ──────────────────────────────────────────────────────────
 
     struct Deposit {
         address pubKey20; // (20 bytes) last 20 bytes of the hash of the public key for the deposit
         uint256 amount; // (32 bytes) amount of the asset being sent
         ///// tokenAddress, contractType, tokenId, claimed & timestamp are stored in a single 32 byte word
         address tokenAddress; // (20 bytes) address of the asset being sent. 0x0 for eth
-        uint8 contractType; // (1 byte) 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155 4 for ECO-like rebasing erc20
+        uint8 contractType; // (1 byte) 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155
         bool claimed; // (1 byte) has this deposit been claimed
         bool requiresMFA; // (1 byte) is additional auth (MFA) required?
         uint40 timestamp; // ( 5 bytes) timestamp of the deposit
@@ -83,7 +104,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
 
     /// @notice Address authorized to issue MFA signatures gating withdrawMFADeposit calls.
     /// @dev Configurable per deployment. Address(0) disables MFA — withdrawMFADeposit will revert.
-    address public immutable MFA_AUTHORIZER;
+    address public immutable mfaAuthorizer;
 
     struct EIP712Domain {
         string name;
@@ -99,7 +120,6 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
     }
 
     Deposit[] public deposits; // array of deposits
-    address public immutable ecoAddress; // address of the ECO token (set at deploy, never changes)
 
     // events
     event DepositEvent(
@@ -110,12 +130,10 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
     );
     event MessageEvent(string message);
 
-    /// @param _ecoAddress address of the ECO token to gate from regular ERC20 deposits (use address(0) to disable).
     /// @param _mfaAuthorizer address authorized to sign MFA withdraw approvals (use address(0) to disable MFA).
-    constructor(address _ecoAddress, address _mfaAuthorizer) {
+    constructor(address _mfaAuthorizer) {
         emit MessageEvent("Hello World, have a nutty day!");
-        ecoAddress = _ecoAddress;
-        MFA_AUTHORIZER = _mfaAuthorizer;
+        mfaAuthorizer = _mfaAuthorizer;
         DOMAIN_SEPARATOR = hash(
             EIP712Domain({name: "Envelope", version: "4.4", chainId: block.chainid, verifyingContract: address(this)})
         );
@@ -151,7 +169,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, hash(reclaim)));
         // By using SignatureChecker we support both EOAs and smart contract wallets
         bool valid = SignatureChecker.isValidSignatureNow(signer, digest, signature);
-        require(valid, "INVALID SIGNATURE");
+        if (!valid) revert InvalidGaslessReclaimSignature();
     }
 
     /**
@@ -291,7 +309,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
      * The big main function that supports ALL possible scenarios of depositing. 
      * @dev For token deposits, allowance must be set before calling this function
      * @param _tokenAddress address of the token being sent. 0x0 for eth
-     * @param _contractType uint8 for the type of contract being sent. 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155, 4 for ECO-like rebasing erc20
+     * @param _contractType uint8 for the type of contract being sent. 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155
      * @param _amount uint256 of the amount of tokens being sent (if erc20)
      * @param _tokenId uint256 of the id of the token being sent if erc721 or erc1155
      * @param _pubKey20 last 20 bytes of the public key of the deposit signer
@@ -319,7 +337,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         bytes calldata _args3009
     ) public payable nonReentrant returns (uint256) {
         if (_isGasless3009) {
-            require(_contractType == 1, "_contractType HAS TO BE 1 FOR 3009");
+            if (_contractType != 1) revert ContractTypeMustBeOneFor3009();
             _amount = _pullTokensVia3009Encoded(
                 _tokenAddress,
                 _amount,
@@ -360,11 +378,6 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         address _recipient,
         uint40 _reclaimableAfter
     ) internal returns (uint256) {
-        // A deposit must have *some* withdrawal authority: either a pubKey20 whose
-        // private key can sign the withdrawal, or a recipient address that's the only
-        // one who can claim. Both being zero would make the deposit claimable by anyone.
-        require(_pubKey20 != address(0) || _recipient != address(0), "DEPOSIT MUST HAVE AUTH");
-
         // create deposit
         deposits.push(
             Deposit({
@@ -399,52 +412,28 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         uint256 _amount,
         uint256 _tokenId
     ) internal returns (uint256) {
-        // check that the contract type is valid
-        require(_contractType < 5, "INVALID CONTRACT TYPE");
+        if (_contractType > 3) revert InvalidContractType();
 
-        // handle deposit types
         if (_contractType == 0) {
-            require(_amount == msg.value, "WRONG ETH AMOUNT");
+            if (_amount != msg.value) revert WrongEthAmount();
         } else if (_contractType == 1) {
-            // REMINDER: User must approve this contract to spend the tokens before calling this function
-            // Unfortunately there's no way of doing this in just one transaction.
-            // Wallet abstraction pls
-
-            // If ECO is deposited as a normal ERC20 and then inflation is increased,
-            // the recipient would get more tokens than what was deposited.
-            require(_tokenAddress != ecoAddress, "ECO DEPOSITS MUST USE _contractType 4");
-
             IERC20 token = IERC20(_tokenAddress);
-
-            // transfer the tokens to the contract
             token.safeTransferFrom(msg.sender, address(this), _amount);
         } else if (_contractType == 2) {
-            // REMINDER: User must approve this contract to spend the tokens before calling this function.
-            require(_amount == 1, "AMOUNT MUST BE 1 FOR ERC721");
-
+            if (_amount != 1) revert Erc721AmountMustBeOne();
             IERC721 token = IERC721(_tokenAddress);
-            // require(token.ownerOf(_tokenId) == msg.sender, "Invalid token id");
             token.safeTransferFrom(msg.sender, address(this), _tokenId, "Internal transfer");
         } else if (_contractType == 3) {
-            // REMINDER: User must approve this contract to spend the tokens before calling this function.
-
             IERC1155 token = IERC1155(_tokenAddress);
             token.safeTransferFrom(msg.sender, address(this), _tokenId, _amount, "Internal transfer");
-        } else if (_contractType == 4) {
-            // REMINDER: User must approve this contract to spend the tokens before calling this function
-            // SafeERC20 normalizes the return-bool surface for non-standard tokens (and is required
-            // for tokens that don't return on success). linearInflationMultiplier() is read via the
-            // IL2ECO interface separately.
-            IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), _amount);
-            _amount *= IL2ECO(_tokenAddress).linearInflationMultiplier();
         }
 
         return _amount;
     }
 
     /**
-     * Pulls the tokens via EIP-3009 according to the encoded data
-     * Also validates that _onBehalfOf is the unpacked  _from.
+     * Pulls the tokens via EIP-3009 according to the encoded data.
+     * Also validates that _onBehalfOf is the unpacked _from.
      */
     function _pullTokensVia3009Encoded(
         address _tokenAddress,
@@ -464,7 +453,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         (_from, _nonce, _validAfter, _validBefore, _v, _r, _s) =
             abi.decode(_encodedArgs, (address, bytes32, uint256, uint256, uint8, bytes32, bytes32));
 
-        require(_from == _onBehalfOf, "WRONG _onBehalfOf FOR EIP-3009");
+        if (_from != _onBehalfOf) revert Wrong3009OnBehalfOf();
         return _pullTokensVia3009(_tokenAddress, _from, _amount, _pubKey20, _nonce, _validAfter, _validBefore, _v, _r, _s);
     }
 
@@ -532,10 +521,6 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         bytes32 _r,
         bytes32 _s
     ) public nonReentrant returns (uint256) {
-        // If ECO is deposited as a normal ERC20 and then inflation is increased,
-        // the recipient would get more tokens than what was deposited.
-        require(_tokenAddress != ecoAddress, "ECO must be be deposited via makeDeposit with tokenType 4");
-
         _pullTokensVia3009(
              _tokenAddress,
              _from,
@@ -570,7 +555,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         override
         returns (bytes4)
     {
-        require(_operator == address(this), "DIRECT TRANSFERS NOT ALLOWED");
+        if (_operator != address(this)) revert DirectTransfersNotAllowed();
         return this.onERC721Received.selector;
     }
 
@@ -582,7 +567,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         uint256, /* _value */
         bytes calldata /* _data */
     ) external view override returns (bytes4) {
-        require(_operator == address(this), "DIRECT TRANSFERS NOT ALLOWED");
+        if (_operator != address(this)) revert DirectTransfersNotAllowed();
         return this.onERC1155Received.selector;
     }
 
@@ -594,7 +579,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         uint256[] calldata, /* _values */
         bytes calldata /* _data */
     ) external view override returns (bytes4) {
-        require(_operator == address(this), "DIRECT TRANSFERS NOT ALLOWED");
+        if (_operator != address(this)) revert DirectTransfersNotAllowed();
         return this.onERC1155BatchReceived.selector;
     }
 
@@ -639,7 +624,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
             )
         );
         address authorizationSigner = getSigner(digest, _MFASignature);
-        require(authorizationSigner == MFA_AUTHORIZER, "WRONG MFA SIGNATURE");
+        if (authorizationSigner != mfaAuthorizer) revert WrongMfaSignature();
 
         return _withdrawDeposit(
             _index,
@@ -652,7 +637,6 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
 
     /**
      * @notice Function to withdraw tokens. Must be called by the recipient.
-     *         This is useful for 
      * @return bool true if successful
      */
     function withdrawDepositAsRecipient(
@@ -660,7 +644,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         address _recipientAddress,
         bytes memory _signature
     ) external nonReentrant returns (bool) {
-        require(_recipientAddress == msg.sender, "NOT THE RECIPIENT");
+        if (_recipientAddress != msg.sender) revert NotTheRecipient();
 
         return _withdrawDeposit(
             _index,
@@ -690,9 +674,9 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         bool _authorized
     ) internal returns (bool) {
         // check that the deposit exists and that it isn't already withdrawn
-        require(_index < deposits.length, "DEPOSIT INDEX DOES NOT EXIST");
+        if (_index >= deposits.length) revert DepositIndexOutOfBounds();
         Deposit memory _deposit = deposits[_index];
-        require(_deposit.claimed == false, "DEPOSIT ALREADY WITHDRAWN");
+        if (_deposit.claimed) revert DepositAlreadyClaimed();
         
         // check that the signer is the same as the one stored in the deposit.
         // Signature may be empty for address-bound deposits.
@@ -713,9 +697,9 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
             );
             depositSigner = getSigner(_recipientAddressHash, _signature);
         }
-        require(!_deposit.requiresMFA || _authorized, "REQUIRES AUTHORIZATION");
-        require(_deposit.pubKey20 == address(0) || depositSigner == _deposit.pubKey20, "WRONG SIGNATURE");
-        require(_deposit.recipient == address(0) || _recipientAddress == _deposit.recipient, "WRONG RECIPIENT");
+        if (_deposit.requiresMFA && !_authorized) revert RequiresMfaAuthorization();
+        if (_deposit.pubKey20 != address(0) && depositSigner != _deposit.pubKey20) revert WrongSignature();
+        if (_deposit.recipient != address(0) && _recipientAddress != _deposit.recipient) revert WrongRecipient();
 
         // emit the withdraw event
         emit WithdrawEvent(_index, _deposit.contractType, _deposit.amount, _recipientAddress);
@@ -727,7 +711,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         if (_deposit.contractType == 0) {
             /// handle eth deposits
             (bool success,) = _recipientAddress.call{value: _deposit.amount}("");
-            require(success, "Transfer failed");
+            if (!success) revert EthTransferFailed();
         } else if (_deposit.contractType == 1) {
             /// handle erc20 deposits
             IERC20 token = IERC20(_deposit.tokenAddress);
@@ -740,31 +724,27 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
             /// handle erc1155 deposits
             IERC1155 token = IERC1155(_deposit.tokenAddress);
             token.safeTransferFrom(address(this), _recipientAddress, _deposit.tokenId, _deposit.amount, "");
-        } else if (_deposit.contractType == 4) {
-            /// handle rebasing erc20 deposits on l2
-            uint256 scaledAmount = _deposit.amount / IL2ECO(_deposit.tokenAddress).linearInflationMultiplier();
-            IERC20(_deposit.tokenAddress).safeTransfer(_recipientAddress, scaledAmount);
         }
 
         return true;
     }
 
     /**
-     * @notice Function to allow a sender to withdraw their deposit after 24 hours
+     * @notice Function to allow a sender to withdraw their deposit
      * @param _index uint256 index of the deposit
      * @param _senderAddress the address of the depositor
      * @return bool true if successful
      */
     function _withdrawDepositSender(uint256 _index, address _senderAddress) internal returns (bool) {
         // check that the deposit exists
-        require(_index < deposits.length, "DEPOSIT INDEX DOES NOT EXIST");
+        if (_index >= deposits.length) revert DepositIndexOutOfBounds();
         Deposit memory _deposit = deposits[_index];
-        require(_deposit.claimed == false, "DEPOSIT ALREADY WITHDRAWN");
+        if (_deposit.claimed) revert DepositAlreadyClaimed();
         // check that the sender is the one who made the deposit
-        require(_deposit.senderAddress == _senderAddress, "NOT THE SENDER");
+        if (_deposit.senderAddress != _senderAddress) revert NotTheSender();
         // check timestamp for address-bound links
         if (_deposit.recipient != address(0)) {
-            require(block.timestamp > _deposit.reclaimableAfter, "TOO EARLY TO RECLAIM");
+            if (block.timestamp <= _deposit.reclaimableAfter) revert TooEarlyToReclaim();
         }
 
         // emit the withdraw event
@@ -776,7 +756,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
         if (_deposit.contractType == 0) {
             /// handle eth deposits
             (bool success,) = payable(_deposit.senderAddress).call{value: _deposit.amount}("");
-            require(success, "FAILED TO WITHDRAW ETH TO SENDER");
+            if (!success) revert EthTransferFailed();
         } else if (_deposit.contractType == 1) {
             /// handle erc20 deposits
             IERC20 token = IERC20(_deposit.tokenAddress);
@@ -789,10 +769,6 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
             /// handle erc1155 deposits
             IERC1155 token = IERC1155(_deposit.tokenAddress);
             token.safeTransferFrom(address(this), _deposit.senderAddress, _deposit.tokenId, _deposit.amount, "");
-        } else if (_deposit.contractType == 4) {
-            /// handle rebasing erc20 deposits on l2
-            uint256 scaledAmount = _deposit.amount / IL2ECO(_deposit.tokenAddress).linearInflationMultiplier();
-            IERC20(_deposit.tokenAddress).safeTransfer(_deposit.senderAddress, scaledAmount);
         }
 
         return true;

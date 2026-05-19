@@ -22,7 +22,7 @@ contract RecipientBoundTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        vault = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0));
         testToken.mint(address(this), 1000);
         testToken.approve(address(vault), 1000);
     }
@@ -45,7 +45,7 @@ contract RecipientBoundTest is Test {
         require(testToken.balanceOf(SAMPLE_ADDRESS) == 0, "SAMPLE_ADDRESS MUST NOT HAVE TOKENS AT START!");
 
         // Should not be able to withdraw to anybody except SAMPLE_ADDRESS
-        vm.expectRevert("WRONG RECIPIENT");
+        vm.expectRevert(EnvelopeVault.WrongRecipient.selector);
         vault.withdrawDeposit(depositIndex, address(this), bytes(""));
 
         vault.withdrawDeposit(depositIndex, SAMPLE_ADDRESS, bytes(""));
@@ -72,7 +72,7 @@ contract RecipientBoundTest is Test {
         require(testToken.balanceOf(address(this)) == 0, "TOKEN WAS NOT CHARGED!");
 
         // Try to reclaim, but it's too early
-        vm.expectRevert("TOO EARLY TO RECLAIM");
+        vm.expectRevert(EnvelopeVault.TooEarlyToReclaim.selector);
         vault.withdrawDepositSender(depositIndex);
 
         vm.warp(block.timestamp + 11); // advance past reclaimableAfter

@@ -19,7 +19,7 @@ contract TestSenderWithdrawEther is Test {
 
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0));
     }
 
     function testSenderWithdrawEther(uint64 amount) public {
@@ -44,7 +44,7 @@ contract TestSenderWithdrawErc20 is Test {
     // apparently not possible to fuzz test in setUp() function?
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0));
         testToken = new ERC20Mock(); // contractType 1
 
         // Mint tokens for test accounts (larger than uint128)
@@ -78,7 +78,7 @@ contract TestSenderWithdrawErc721 is Test, ERC721Holder {
     // apparently not possible to fuzz test in setUp() function?
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0));
         testToken = new ERC721Mock(); // contractType 2
 
         // Mint token for test
@@ -106,23 +106,19 @@ contract TestSenderWithdrawErc1155 is Test, ERC1155Holder {
     bytes32 public constant PRIVKEY = 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
 
     uint256 _depositIdx;
-    uint256 _tokenId = 1; // tokenId used for ERC1155
-    uint256 _tokenAmount = 100; // amount of ERC1155 tokens
+    uint256 _tokenId = 1;
 
-    // apparently not possible to fuzz test in setUp() function?
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(0));
-        testToken = new ERC1155Mock(); // contractType 3
+        vault = new EnvelopeVault(address(0));
+        testToken = new ERC1155Mock();
 
-        // Mint tokens for test
-        testToken.mint(address(this), _tokenId, _tokenAmount, "");
-
-        // Approve the contract to spend the tokens
+        // Mint tokens
+        testToken.mint(address(this), _tokenId, 100, "");
         testToken.setApprovalForAll(address(vault), true);
 
         // Make a deposit
-        _depositIdx = vault.makeDeposit(address(testToken), 3, _tokenAmount, _tokenId, PUBKEY20);
+        _depositIdx = vault.makeDeposit(address(testToken), 3, 100, _tokenId, PUBKEY20);
     }
 
     function testSenderWithdrawErc1155() public {

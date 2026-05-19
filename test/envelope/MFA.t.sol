@@ -16,7 +16,7 @@ contract EnvelopeVaultMFATest is Test {
     address public constant LEGACY_MFA_AUTHORIZER = 0x3B14D43Bf521EF7FD9600533bEB73B6e9178DE7C;
 
     function setUp() public {
-        vault = new EnvelopeVault(address(0), LEGACY_MFA_AUTHORIZER);
+        vault = new EnvelopeVault(LEGACY_MFA_AUTHORIZER);
     }
 
     function testMFADeposit() public {
@@ -44,11 +44,11 @@ contract EnvelopeVaultMFATest is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Withdrawing without authorization, so should fail
-        vm.expectRevert("REQUIRES AUTHORIZATION");
+        vm.expectRevert(EnvelopeVault.RequiresMfaAuthorization.selector);
         vault.withdrawDeposit(depositIndex, address(this), signature);
 
         // Withdrawing with incorrect authorization signature
-        vm.expectRevert("WRONG MFA SIGNATURE");
+        vm.expectRevert(EnvelopeVault.WrongMfaSignature.selector);
         vault.withdrawMFADeposit(depositIndex, address(this), signature, signature);
 
         // Authorization is correct! Withdrawal has to be successful!

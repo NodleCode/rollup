@@ -27,7 +27,7 @@ contract EnvelopeVaultGaslessTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        vault = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0));
     }
 
     function testMakeDepositERC20WithAuthorization() public {
@@ -88,7 +88,7 @@ contract EnvelopeVaultGaslessTest is Test {
         uint256 depositIndex,
         address depositorAddress,
         bytes32 privateKey,
-        string memory expectRevert
+        bytes4 expectedError
     ) internal {
         bytes32 digest = _calculateDigest(depositIndex);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(privateKey), digest);
@@ -96,8 +96,8 @@ contract EnvelopeVaultGaslessTest is Test {
 
         EnvelopeVault.GaslessReclaim memory reclaimRequest = EnvelopeVault.GaslessReclaim(depositIndex);
 
-        if (bytes(expectRevert).length > 0) {
-            vm.expectRevert(bytes(expectRevert));
+        if (expectedError != bytes4(0)) {
+            vm.expectRevert(expectedError);
         }
 
         vault.withdrawDepositSenderGasless(reclaimRequest, depositorAddress, signature);
@@ -109,27 +109,27 @@ contract EnvelopeVaultGaslessTest is Test {
         uint256 depositIndex2 = _makeDeposit(SAMPLE_ADDRESS);
 
         // Test a successful withdrawal of the second deposit
-        _withdrawDepositSenderGaslessEOA(depositIndex2, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, "");
+        _withdrawDepositSenderGaslessEOA(depositIndex2, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, bytes4(0));
 
         // depositIndex2 has already been withdrawn
-        _withdrawDepositSenderGaslessEOA(depositIndex2, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, "DEPOSIT ALREADY WITHDRAWN");
+        _withdrawDepositSenderGaslessEOA(depositIndex2, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, EnvelopeVault.DepositAlreadyClaimed.selector);
 
         // Correct depositor address, but wrong private key.
         // Private key and the provided address don't match.
-        _withdrawDepositSenderGaslessEOA(depositIndex1, SAMPLE_ADDRESS, SAMPLE_PRIVKEY_2, "INVALID SIGNATURE");
+        _withdrawDepositSenderGaslessEOA(depositIndex1, SAMPLE_ADDRESS, SAMPLE_PRIVKEY_2, EnvelopeVault.InvalidGaslessReclaimSignature.selector);
 
         // Provided address and private key do match, but they are wrong.
-        _withdrawDepositSenderGaslessEOA(depositIndex1, SAMPLE_ADDRESS_2, SAMPLE_PRIVKEY_2, "NOT THE SENDER");
+        _withdrawDepositSenderGaslessEOA(depositIndex1, SAMPLE_ADDRESS_2, SAMPLE_PRIVKEY_2, EnvelopeVault.NotTheSender.selector);
 
         // Make one more from another address
         uint256 depositIndex3 = _makeDeposit(SAMPLE_ADDRESS_2);
 
         // Make sure that we can't withdraw it with the keys from another deposit
-        _withdrawDepositSenderGaslessEOA(depositIndex3, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, "NOT THE SENDER");
+        _withdrawDepositSenderGaslessEOA(depositIndex3, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, EnvelopeVault.NotTheSender.selector);
 
         // Withdraw both
-        _withdrawDepositSenderGaslessEOA(depositIndex1, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, "");
-        _withdrawDepositSenderGaslessEOA(depositIndex3, SAMPLE_ADDRESS_2, SAMPLE_PRIVKEY_2, "");
+        _withdrawDepositSenderGaslessEOA(depositIndex1, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, bytes4(0));
+        _withdrawDepositSenderGaslessEOA(depositIndex3, SAMPLE_ADDRESS_2, SAMPLE_PRIVKEY_2, bytes4(0));
     }
 
     // Test that smart contract wallets are able to withdraw gaslessly too
@@ -143,13 +143,13 @@ contract EnvelopeVaultGaslessTest is Test {
         EnvelopeVault.GaslessReclaim memory reclaimRequest = EnvelopeVault.GaslessReclaim(depositIndex);
 
         // Submit a wrong signature
-        vm.expectRevert("INVALID SIGNATURE");
+        vm.expectRevert(EnvelopeVault.InvalidGaslessReclaimSignature.selector);
         vault.withdrawDepositSenderGasless(
             reclaimRequest, address(scwallet), bytes("LOL THIS IS DEFINITELY NOT THE SIGNATURE")
         );
 
         // Try to withdraw with an EOA
-        _withdrawDepositSenderGaslessEOA(depositIndex, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, "NOT THE SENDER");
+        _withdrawDepositSenderGaslessEOA(depositIndex, SAMPLE_ADDRESS, SAMPLE_PRIVKEY, EnvelopeVault.NotTheSender.selector);
 
         // Withdraw!
         vault.withdrawDepositSenderGasless(
@@ -161,7 +161,7 @@ contract EnvelopeVaultGaslessTest is Test {
     }
 
     /**
-     * Test that we can use makeCustomisableDeposit to deposit gaslessly
+     * Test that we can use makeCustomDeposit to deposit gaslessly
     */
     function testGaslessViaMakeCustomisableDeposit() public {
         testToken.mint(SAMPLE_ADDRESS, 1000);

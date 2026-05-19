@@ -24,7 +24,7 @@ contract TestSigWithdrawEther is Test {
 
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0));
     }
 
     // test sender withdrawal of ETH
@@ -33,7 +33,7 @@ contract TestSigWithdrawEther is Test {
         uint256 depositIdx = vault.makeDeposit{value: amount}(address(0), 0, amount, 0, _pubkey20);
 
         // Can't use withdrawDepositAsRecipient
-        vm.expectRevert("NOT THE RECIPIENT");
+        vm.expectRevert(EnvelopeVault.NotTheRecipient.selector);
         vault.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureAnybody);
 
         // Anybody can withdraw
@@ -45,11 +45,11 @@ contract TestSigWithdrawEther is Test {
         uint256 depositIdx = vault.makeDeposit{value: amount}(address(0), 0, amount, 0, _pubkey20);
 
         // Can't use pure withdrawDeposit
-        vm.expectRevert("WRONG SIGNATURE");
+        vm.expectRevert(EnvelopeVault.WrongSignature.selector);
         vault.withdrawDeposit(depositIdx, _recipientAddress, signatureRecipient);
         
         // Only the recipient is able to withdraw via withdrawDepositAsRecipient
-        vm.expectRevert("NOT THE RECIPIENT");
+        vm.expectRevert(EnvelopeVault.NotTheRecipient.selector);
         vault.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureRecipient);
 
         vm.prank(_recipientAddress);  // Withdraw!

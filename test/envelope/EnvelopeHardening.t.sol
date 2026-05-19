@@ -4,16 +4,13 @@ pragma solidity 0.8.26;
 // Hardening tests added during the OZ-v5 / ZkSync-aligned refactor of the vendored vault.
 // Each test maps back to a finding in the audit:
 //   T1 — direct ERC721 / ERC1155 transfers must revert (fix for S1 receivers footgun)
-//   T2 — MFA_AUTHORIZER is now a per-deploy constructor arg (fix for S3 hardcoded key)
-//   T4 — _storeDeposit rejects deposits with no withdrawal authority (fix for S4)
-//   T5 — _withdrawDeposit L2ECO branch sends to recipient, not sender (upstream bug fix)
+//   T2 — mfaAuthorizer is now a per-deploy constructor arg (fix for S3 hardcoded key)
 
 import {Test} from "forge-std/Test.sol";
 import {EnvelopeVault} from "../../src/envelope/V4/EnvelopeVault.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";
-import {L2ECOMock} from "./mocks/L2ECOMock.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
@@ -26,7 +23,7 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
     address constant PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
 
     function setUp() public {
-        vault = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0));
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
     }
@@ -40,13 +37,13 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
 
     function test_T1_directERC721TransferReverts() public {
         erc721.mint(address(this), 42);
-        vm.expectRevert("DIRECT TRANSFERS NOT ALLOWED");
+        vm.expectRevert(EnvelopeVault.DirectTransfersNotAllowed.selector);
         erc721.safeTransferFrom(address(this), address(vault), 42);
     }
 
     function test_T1_directERC1155TransferReverts() public {
         erc1155.mint(address(this), 7, 1, "");
-        vm.expectRevert("DIRECT TRANSFERS NOT ALLOWED");
+        vm.expectRevert(EnvelopeVault.DirectTransfersNotAllowed.selector);
         erc1155.safeTransferFrom(address(this), address(vault), 7, 1, "");
     }
 
@@ -57,20 +54,20 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         amounts[0] = 1; amounts[1] = 1;
         erc1155.mint(address(this), 1, 1, "");
         erc1155.mint(address(this), 2, 1, "");
-        vm.expectRevert("DIRECT TRANSFERS NOT ALLOWED");
+        vm.expectRevert(EnvelopeVault.DirectTransfersNotAllowed.selector);
         erc1155.safeBatchTransferFrom(address(this), address(vault), ids, amounts, "");
     }
 
     // ── T2 ─────────────────────────────────────────────────────────────────
-    // MFA_AUTHORIZER is now per-deploy. Prove a freshly-deployed EnvelopeVault
+    // mfaAuthorizer is now per-deploy. Prove a freshly-deployed EnvelopeVault
     // accepts MFA signatures from a *test* signer rather than the upstream key.
 
     function test_T2_customMfaAuthorizerAcceptsItsSignature() public {
         uint256 mfaPrivKey = uint256(keccak256("nodle.vault.mfa-test-signer"));
         address mfaSigner = vm.addr(mfaPrivKey);
 
-        EnvelopeVault nodleVault = new EnvelopeVault(address(0), mfaSigner);
-        assertEq(nodleVault.MFA_AUTHORIZER(), mfaSigner, "constructor arg ignored");
+        EnvelopeVault nodleVault = new EnvelopeVault(mfaSigner);
+        assertEq(nodleVault.mfaAuthorizer(), mfaSigner, "constructor arg ignored");
 
         // make an MFA-gated deposit, then craft both signatures with our test keys.
         uint256 depositPrivKey = uint256(keccak256("nodle.vault.deposit-key"));
@@ -96,7 +93,7 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         (uint8 wv, bytes32 wr, bytes32 ws) = vm.sign(depositPrivKey, wdHash);
         bytes memory wdSig = abi.encodePacked(wr, ws, wv);
 
-        // MFA signature (signed by configured MFA_AUTHORIZER)
+        // MFA signature (signed by configured mfaAuthorizer)
         bytes32 mfaHash = MessageHashUtilsLite.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
@@ -128,112 +125,6 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         bytes memory mfaSig = hex"00";
         vm.expectRevert();
         vault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig);
-    }
-
-    // ── T4 ─────────────────────────────────────────────────────────────────
-    // A deposit with both pubKey20 == 0 AND recipient == 0 has no auth — anyone
-    // could withdraw it. The new _storeDeposit guard rejects this footgun.
-
-    function test_T4_dualZeroDepositRejected() public {
-        vm.expectRevert("DEPOSIT MUST HAVE AUTH");
-        vault.makeDeposit{value: 1 wei}(address(0), 0, 1, 0, address(0));
-    }
-
-    function test_T4_dualZeroCustomDepositRejected() public {
-        vm.expectRevert("DEPOSIT MUST HAVE AUTH");
-        vault.makeCustomDeposit{value: 1 wei}(
-            address(0), 0, 1, 0, address(0), address(this), false, address(0), uint40(0), false, ""
-        );
-    }
-
-    function test_T4_pubKeyOnlyAccepted() public {
-        uint256 idx = vault.makeDeposit{value: 1 wei}(address(0), 0, 1, 0, PUBKEY20);
-        assertEq(idx, 0);
-    }
-
-    function test_T4_recipientOnlyAccepted() public {
-        uint256 idx = vault.makeCustomDeposit{value: 1 wei}(
-            address(0), 0, 1, 0, address(0), address(this), false, ALICE, uint40(0), false, ""
-        );
-        assertEq(idx, 0);
-    }
-
-    // ── T5 ─────────────────────────────────────────────────────────────────
-    // Upstream copy-paste bug: _withdrawDeposit's contractType==4 (L2ECO) branch
-    // transferred to _deposit.senderAddress instead of _recipientAddress. The
-    // recipient would receive nothing while the deposit was marked claimed.
-    // Patch sends to _recipientAddress (matching all other contractType branches)
-    // and routes through SafeERC20 (consistent with the contractType==1 branch).
-
-    function test_T5_L2ECOWithdrawGoesToRecipientNotSender() public {
-        uint256 depositPrivKey = uint256(keccak256("l2eco-link-key"));
-        address pubKey20 = vm.addr(depositPrivKey);
-        uint256 senderPk = uint256(keccak256("l2eco-sender"));
-        address sender = vm.addr(senderPk);
-        address recipient = address(0xDECAF);
-
-        // Multiplier = 2 → vault stores `amount * 2` (inflation-invariant).
-        L2ECOMock eco = new L2ECOMock(2);
-        eco.mint(sender, 100);
-
-        vm.prank(sender);
-        eco.approve(address(vault), 100);
-
-        vm.prank(sender);
-        uint256 idx = vault.makeDeposit(address(eco), 4, 100, 0, pubKey20);
-
-        // Sanity: vault holds the raw tokens, deposit stores the scaled amount.
-        assertEq(eco.balanceOf(address(vault)), 100, "vault should hold raw tokens");
-        assertEq(eco.balanceOf(sender), 0, "sender's tokens should be in the vault");
-        EnvelopeVault.Deposit memory d = vault.getDeposit(idx);
-        assertEq(d.amount, 200, "deposit amount should be inflation-invariant (amount * multiplier)");
-
-        // Recipient (not sender) claims using the link's private key.
-        bytes32 digest = MessageHashUtilsLite.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    vault.ENVELOPE_SALT(),
-                    block.chainid,
-                    address(vault),
-                    idx,
-                    recipient,
-                    vault.ANYONE_WITHDRAWAL_MODE()
-                )
-            )
-        );
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(depositPrivKey, digest);
-        bytes memory sig = abi.encodePacked(r, s, v);
-        vault.withdrawDeposit(idx, recipient, sig);
-
-        // The fix: recipient gets 100, sender stays at 0.
-        // If the bug were still present, sender would have 100 and recipient 0.
-        assertEq(eco.balanceOf(recipient), 100, "recipient must receive the L2ECO tokens");
-        assertEq(eco.balanceOf(sender), 0, "sender must NOT receive the L2ECO tokens back");
-        assertEq(eco.balanceOf(address(vault)), 0, "vault should be drained");
-    }
-
-    function test_T5_L2ECOSenderReclaimStillGoesToSender() public {
-        // Counterpart sanity: _withdrawDepositSender (sender-initiated reclaim path)
-        // is correctly routed to senderAddress — we shouldn't have over-corrected.
-        uint256 senderPk = uint256(keccak256("l2eco-reclaim-sender"));
-        address sender = vm.addr(senderPk);
-        address pubKey20 = vm.addr(uint256(keccak256("l2eco-reclaim-key")));
-
-        L2ECOMock eco = new L2ECOMock(1);
-        eco.mint(sender, 50);
-
-        vm.prank(sender);
-        eco.approve(address(vault), 50);
-        vm.prank(sender);
-        uint256 idx = vault.makeDeposit(address(eco), 4, 50, 0, pubKey20);
-
-        assertEq(eco.balanceOf(sender), 0);
-
-        vm.prank(sender);
-        vault.withdrawDepositSender(idx);
-
-        assertEq(eco.balanceOf(sender), 50, "sender reclaim should return the tokens");
-        assertEq(eco.balanceOf(address(vault)), 0);
     }
 }
 

@@ -11,7 +11,6 @@ import {EnvelopeBatcher} from "../../src/envelope/V4/EnvelopeBatcher.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";
-import {L2ECOMock} from "./mocks/L2ECOMock.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
@@ -64,7 +63,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
     function setUp() public {
         LINK_PUBKEY20 = vm.addr(LINK_PRIV);
-        vault = new EnvelopeVault(address(0), address(0));
+        vault = new EnvelopeVault(address(0));
         batcher = new EnvelopeBatcher();
         erc20 = new ERC20Mock();
         erc721 = new ERC721Mock();
@@ -99,14 +98,14 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     // ── EnvelopeVault deposit input validation ──────────────────────────────────
 
     function test_RevertWhen_DepositInvalidContractType() public {
-        // _pullTokensViaApproval rejects contractType >= 5.
-        vm.expectRevert("INVALID CONTRACT TYPE");
+        // _pullTokensViaApproval rejects contractType > 3.
+        vm.expectRevert(EnvelopeVault.InvalidContractType.selector);
         vault.makeDeposit{value: 0}(address(0), 5, 0, 0, LINK_PUBKEY20);
     }
 
     function test_RevertWhen_DepositEthAmountMismatch() public {
         // contractType==0 requires _amount == msg.value.
-        vm.expectRevert("WRONG ETH AMOUNT");
+        vm.expectRevert(EnvelopeVault.WrongEthAmount.selector);
         vault.makeDeposit{value: 100}(address(0), 0, 50, 0, LINK_PUBKEY20);
     }
 
@@ -114,24 +113,15 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         // contractType==2 requires _amount == 1.
         erc721.mint(address(this), 1);
         erc721.approve(address(vault), 1);
-        vm.expectRevert("AMOUNT MUST BE 1 FOR ERC721");
+        vm.expectRevert(EnvelopeVault.Erc721AmountMustBeOne.selector);
         vault.makeDeposit(address(erc721), 2, 2, 1, LINK_PUBKEY20);
-    }
-
-    function test_RevertWhen_DepositEcoTokenViaPlainErc20() public {
-        // Deploying with _ecoAddress = testToken forces contractType==4 for that token.
-        EnvelopeVault ecoVault = new EnvelopeVault(address(erc20), address(0));
-        erc20.mint(address(this), 100);
-        erc20.approve(address(ecoVault), 100);
-        vm.expectRevert("ECO DEPOSITS MUST USE _contractType 4");
-        ecoVault.makeDeposit(address(erc20), 1, 100, 0, LINK_PUBKEY20);
     }
 
     // ── EnvelopeVault withdraw input validation ─────────────────────────────────
 
     function test_RevertWhen_WithdrawIndexOutOfBounds() public {
         bytes memory sig = _signWithdrawal(99, ALICE, LINK_PRIV);
-        vm.expectRevert("DEPOSIT INDEX DOES NOT EXIST");
+        vm.expectRevert(EnvelopeVault.DepositIndexOutOfBounds.selector);
         vault.withdrawDeposit(99, ALICE, sig);
     }
 
@@ -140,7 +130,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
         vault.withdrawDeposit(idx, ALICE, sig);
 
-        vm.expectRevert("DEPOSIT ALREADY WITHDRAWN");
+        vm.expectRevert(EnvelopeVault.DepositAlreadyClaimed.selector);
         vault.withdrawDeposit(idx, ALICE, sig);
     }
 
@@ -150,7 +140,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         uint256 wrongKey = uint256(keccak256("wrong-signer"));
         bytes memory sig = _signWithdrawal(idx, ALICE, wrongKey);
 
-        vm.expectRevert("WRONG SIGNATURE");
+        vm.expectRevert(EnvelopeVault.WrongSignature.selector);
         vault.withdrawDeposit(idx, ALICE, sig);
     }
 
@@ -174,7 +164,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
         // BOB tries to call on behalf of ALICE — caller must equal the recipient param.
         vm.prank(BOB);
-        vm.expectRevert("NOT THE RECIPIENT");
+        vm.expectRevert(EnvelopeVault.NotTheRecipient.selector);
         vault.withdrawDepositAsRecipient(idx, ALICE, sig);
     }
 
@@ -186,7 +176,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         // Even with a valid pubKey signature, the contract-stored recipient blocks
         // anyone else from being the named recipient on withdrawal.
         bytes memory sig = _signWithdrawal(idx, BOB, LINK_PRIV);
-        vm.expectRevert("WRONG RECIPIENT");
+        vm.expectRevert(EnvelopeVault.WrongRecipient.selector);
         vault.withdrawDeposit(idx, BOB, sig);
     }
 
@@ -195,7 +185,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         uint256 idx = vault.makeCustomDeposit{value: 1 ether}(
             address(0), 0, 1 ether, 0, LINK_PUBKEY20, address(this), false, ALICE, reclaimAfter, false, ""
         );
-        vm.expectRevert("TOO EARLY TO RECLAIM");
+        vm.expectRevert(EnvelopeVault.TooEarlyToReclaim.selector);
         vault.withdrawDepositSender(idx);
 
         vm.warp(reclaimAfter + 1);
@@ -205,16 +195,16 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     function test_RevertWhen_SenderReclaimNotTheSender() public {
         uint256 idx = _depositEth(1 ether);
         vm.prank(ALICE);
-        vm.expectRevert("NOT THE SENDER");
+        vm.expectRevert(EnvelopeVault.NotTheSender.selector);
         vault.withdrawDepositSender(idx);
     }
 
     function test_RevertWhen_MFADepositWithoutMFASignature() public {
-        // vault is deployed with MFA_AUTHORIZER == address(0), so MFA-flagged
+        // vault is deployed with mfaAuthorizer == address(0), so MFA-flagged
         // deposits can never be withdrawn via withdrawDeposit (REQUIRES AUTHORIZATION).
         uint256 idx = vault.makeMFADeposit{value: 1 ether}(address(0), 0, 1 ether, 0, LINK_PUBKEY20);
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
-        vm.expectRevert("REQUIRES AUTHORIZATION");
+        vm.expectRevert(EnvelopeVault.RequiresMfaAuthorization.selector);
         vault.withdrawDeposit(idx, ALICE, sig);
     }
 
@@ -285,8 +275,6 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     }
 
     // batchMakeDepositNoReturn — ETH path must require exact total, non-ETH path must reject msg.value.
-    // Both rules were added during PR review (upstream forwarded msg.value per iteration, which
-    // reverts on iteration 2 when length > 1).
 
     function test_BatchNoReturnEth_HappyPath() public {
         address[] memory pubKeys = new address[](3);
@@ -331,32 +319,5 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         uint256[] memory ids = batcher.batchMakeDeposit(address(vault), address(0), 0, 0, 0, pubKeys);
         assertEq(ids.length, 0);
         assertEq(vault.getDepositCount(), 0);
-    }
-
-    // ── L2ECO inflation-invariant accounting ───────────────────────────────
-
-    function test_L2ECOWithdrawAdjustsForChangedInflation() public {
-        // Deposit at multiplier=2 stores `amount * 2` as the inflation-invariant amount.
-        // If the multiplier changes before withdrawal, the recipient receives
-        // `stored / current` raw tokens — proportional to the depositor's share of the
-        // rebasing token's supply at deposit time.
-        L2ECOMock eco = new L2ECOMock(2);
-        eco.mint(address(this), 100);
-        eco.approve(address(vault), 100);
-        uint256 idx = vault.makeDeposit(address(eco), 4, 100, 0, LINK_PUBKEY20);
-
-        // Multiplier increases from 2 → 4 (token supply doubled). The vault holds 100
-        // raw tokens but the "share" is recorded as 200 (= 100 * 2). At multiplier 4
-        // the share is now worth 200 / 4 = 50 raw tokens. Simulate the rebase by
-        // also reducing the vault's token balance to match (mock doesn't auto-rebase).
-        eco.setMultiplier(4);
-        // Burn half the vault's balance to mirror what a real rebase would do to it.
-        vm.prank(address(vault));
-        eco.transfer(address(0xdead), 50);
-
-        bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
-        vault.withdrawDeposit(idx, ALICE, sig);
-
-        assertEq(eco.balanceOf(ALICE), 50);
     }
 }
