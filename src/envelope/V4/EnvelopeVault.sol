@@ -71,6 +71,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     error DirectTransfersNotAllowed();
     error FeeExceedsDepositAmount();
     error NoFeesToWithdraw();
+    error MfaSignatureExpired();
 
     // ── Data Structures ──────────────────────────────────────────────────────────
 
@@ -299,9 +300,10 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         bytes memory _signature,
         bytes memory _MFASignature,
         uint256 _serviceFee,
-        uint256 _gasAbsorptionFee
+        uint256 _gasAbsorptionFee,
+        uint256 _deadline
     ) external nonReentrant returns (bool) {
-        _verifyMfaSignature(_index, _recipientAddress, _serviceFee, _gasAbsorptionFee, _MFASignature);
+        _verifyMfaSignature(_index, _recipientAddress, _serviceFee, _gasAbsorptionFee, _deadline, _MFASignature);
         _collectFees(_index, _serviceFee, _gasAbsorptionFee);
         return _withdrawDeposit(_index, _recipientAddress, ANYONE_WITHDRAWAL_MODE, _signature, true);
     }
@@ -324,9 +326,10 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         bytes memory _MFASignature,
         uint256 _serviceFee,
         uint256 _gasAbsorptionFee,
-        address _treasury
+        address _treasury,
+        uint256 _deadline
     ) external nonReentrant returns (bool) {
-        _verifyMfaSignature(_index, _recipientAddress, _serviceFee, _gasAbsorptionFee, _MFASignature);
+        _verifyMfaSignature(_index, _recipientAddress, _serviceFee, _gasAbsorptionFee, _deadline, _MFASignature);
 
         // Treasury validates the sponsorship
         IPaymaster(_treasury).validateSponsoredOperation(msg.sender, _gasAbsorptionFee);
@@ -389,10 +392,14 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         bytes calldata _signature,
         bytes calldata _MFASignature,
         uint256 _gasAbsorptionFee,
-        address _treasury
+        address _treasury,
+        uint256 _deadline
     ) external nonReentrant returns (bool) {
         // Verify sender authorized this reclaim
         verifyGaslessReclaim(_reclaim, _signer, _signature);
+
+        // Check deadline (0 = no expiry)
+        if (_deadline != 0 && block.timestamp > _deadline) revert MfaSignatureExpired();
 
         // Verify MFA signature covers the fee for this sponsored reclaim
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
@@ -403,7 +410,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                     address(this),
                     _reclaim.depositIndex,
                     _signer,
-                    _gasAbsorptionFee
+                    _gasAbsorptionFee,
+                    _deadline
                 )
             )
         );
@@ -520,8 +528,12 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         address _recipientAddress,
         uint256 _serviceFee,
         uint256 _gasAbsorptionFee,
+        uint256 _deadline,
         bytes memory _MFASignature
     ) internal view {
+        // deadline == 0 means no expiry
+        if (_deadline != 0 && block.timestamp > _deadline) revert MfaSignatureExpired();
+
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
@@ -531,7 +543,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                     _index,
                     _recipientAddress,
                     _serviceFee,
-                    _gasAbsorptionFee
+                    _gasAbsorptionFee,
+                    _deadline
                 )
             )
         );

@@ -20,7 +20,7 @@ contract EnvelopeVaultMFATest is Test {
         vault = new EnvelopeVault(MFA_AUTHORIZER, address(this));
     }
 
-    function _signMfa(uint256 depositIndex, address recipient, uint256 serviceFee, uint256 gasAbsorptionFee)
+    function _signMfa(uint256 depositIndex, address recipient, uint256 serviceFee, uint256 gasAbsorptionFee, uint256 deadline)
         internal
         view
         returns (bytes memory)
@@ -34,7 +34,8 @@ contract EnvelopeVaultMFATest is Test {
                     depositIndex,
                     recipient,
                     serviceFee,
-                    gasAbsorptionFee
+                    gasAbsorptionFee,
+                    deadline
                 )
             )
         );
@@ -74,11 +75,11 @@ contract EnvelopeVaultMFATest is Test {
 
         // Withdrawing with incorrect MFA signature should fail
         vm.expectRevert(EnvelopeVault.WrongMfaSignature.selector);
-        vault.withdrawMFADeposit(depositIndex, address(this), signature, signature, 0, 0);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, signature, 0, 0, 0);
 
-        // Correct MFA authorization with zero fees
-        bytes memory mfaSig = _signMfa(depositIndex, address(this), 0, 0);
-        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, 0, 0);
+        // Correct MFA authorization with zero fees and no deadline
+        bytes memory mfaSig = _signMfa(depositIndex, address(this), 0, 0, 0);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, 0, 0, 0);
     }
 
     function testMFADepositWithFees() public {
@@ -111,11 +112,11 @@ contract EnvelopeVaultMFATest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(SAMPLE_PRIVKEY), wdDigest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        // MFA signature with fees
-        bytes memory mfaSig = _signMfa(depositIndex, address(this), serviceFee, gasAbsorptionFee);
+        // MFA signature with fees and no deadline
+        bytes memory mfaSig = _signMfa(depositIndex, address(this), serviceFee, gasAbsorptionFee, 0);
 
         uint256 balBefore = address(this).balance;
-        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, serviceFee, gasAbsorptionFee);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, serviceFee, gasAbsorptionFee, 0);
         uint256 balAfter = address(this).balance;
 
         // Recipient gets deposit minus fees
@@ -144,8 +145,8 @@ contract EnvelopeVaultMFATest is Test {
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(SAMPLE_PRIVKEY), wdDigest);
         bytes memory signature = abi.encodePacked(r, s, v);
-        bytes memory mfaSig = _signMfa(depositIndex, address(this), serviceFee, 0);
-        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, serviceFee, 0);
+        bytes memory mfaSig = _signMfa(depositIndex, address(this), serviceFee, 0, 0);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, serviceFee, 0, 0);
 
         // Non-owner cannot withdraw fees
         vm.prank(address(0xdead));
@@ -179,9 +180,9 @@ contract EnvelopeVaultMFATest is Test {
 
         // Fee exceeds deposit
         uint256 bigFee = 1 ether;
-        bytes memory mfaSig = _signMfa(depositIndex, address(this), bigFee, 0);
+        bytes memory mfaSig = _signMfa(depositIndex, address(this), bigFee, 0, 0);
         vm.expectRevert(EnvelopeVault.FeeExceedsDepositAmount.selector);
-        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, bigFee, 0);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, bigFee, 0, 0);
     }
 
     receive() payable external {}

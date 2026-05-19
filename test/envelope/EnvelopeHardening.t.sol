@@ -96,6 +96,7 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         // MFA signature (signed by configured mfaAuthorizer, includes fee amounts)
         uint256 serviceFee = 0;
         uint256 gasAbsorptionFee = 0;
+        uint256 deadline = 0; // no expiry
         bytes32 mfaHash = MessageHashUtilsLite.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
@@ -105,14 +106,15 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
                     idx,
                     address(this),
                     serviceFee,
-                    gasAbsorptionFee
+                    gasAbsorptionFee,
+                    deadline
                 )
             )
         );
         (uint8 mv, bytes32 mr, bytes32 ms) = vm.sign(mfaPrivKey, mfaHash);
         bytes memory mfaSig = abi.encodePacked(mr, ms, mv);
 
-        nodleVault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig, serviceFee, gasAbsorptionFee);
+        nodleVault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig, serviceFee, gasAbsorptionFee, 0);
     }
 
     function test_T2_zeroMfaAuthorizerRejectsAllMfaWithdrawals() public {
@@ -128,7 +130,7 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         bytes memory wdSig = hex"00";
         bytes memory mfaSig = hex"00";
         vm.expectRevert();
-        vault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig, 0, 0);
+        vault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig, 0, 0, 0);
     }
 }
 

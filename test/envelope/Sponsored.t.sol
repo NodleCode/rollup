@@ -80,7 +80,7 @@ contract EnvelopeVaultSponsoredTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _signMfa(uint256 depositIndex, address recipient, uint256 serviceFee, uint256 gasAbsorptionFee)
+    function _signMfa(uint256 depositIndex, address recipient, uint256 serviceFee, uint256 gasAbsorptionFee, uint256 deadline)
         internal view returns (bytes memory)
     {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
@@ -92,7 +92,8 @@ contract EnvelopeVaultSponsoredTest is Test {
                     depositIndex,
                     recipient,
                     serviceFee,
-                    gasAbsorptionFee
+                    gasAbsorptionFee,
+                    deadline
                 )
             )
         );
@@ -112,7 +113,7 @@ contract EnvelopeVaultSponsoredTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _signMfaForReclaim(uint256 depositIndex, address signer, uint256 gasAbsorptionFee)
+    function _signMfaForReclaim(uint256 depositIndex, address signer, uint256 gasAbsorptionFee, uint256 deadline)
         internal view returns (bytes memory)
     {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
@@ -123,7 +124,8 @@ contract EnvelopeVaultSponsoredTest is Test {
                     address(vault),
                     depositIndex,
                     signer,
-                    gasAbsorptionFee
+                    gasAbsorptionFee,
+                    deadline
                 )
             )
         );
@@ -144,12 +146,12 @@ contract EnvelopeVaultSponsoredTest is Test {
         uint256 idx = _makeDeposit(depositAmount, true);
 
         bytes memory linkSig = _signWithdrawal(idx, address(this));
-        bytes memory mfaSig = _signMfa(idx, address(this), serviceFee, gasAbsorptionFee);
+        bytes memory mfaSig = _signMfa(idx, address(this), serviceFee, gasAbsorptionFee, 0);
 
         uint256 balBefore = address(this).balance;
         vm.prank(OPERATOR);
         vault.withdrawMFADepositSponsored(
-            idx, address(this), linkSig, mfaSig, serviceFee, gasAbsorptionFee, address(paymaster)
+            idx, address(this), linkSig, mfaSig, serviceFee, gasAbsorptionFee, address(paymaster), 0
         );
         uint256 balAfter = address(this).balance;
 
@@ -172,14 +174,14 @@ contract EnvelopeVaultSponsoredTest is Test {
         uint256 idx = _makeDeposit(1 ether, true);
 
         bytes memory linkSig = _signWithdrawal(idx, address(this));
-        bytes memory mfaSig = _signMfa(idx, address(this), 0, 0.01 ether);
+        bytes memory mfaSig = _signMfa(idx, address(this), 0, 0.01 ether, 0);
 
         paymaster.setRevert(true);
 
         vm.prank(OPERATOR);
         vm.expectRevert("paymaster: denied");
         vault.withdrawMFADepositSponsored(
-            idx, address(this), linkSig, mfaSig, 0, 0.01 ether, address(paymaster)
+            idx, address(this), linkSig, mfaSig, 0, 0.01 ether, address(paymaster), 0
         );
     }
 
@@ -189,12 +191,12 @@ contract EnvelopeVaultSponsoredTest is Test {
 
         uint256 bigFee = 2 ether;
         bytes memory linkSig = _signWithdrawal(idx, address(this));
-        bytes memory mfaSig = _signMfa(idx, address(this), bigFee, 0);
+        bytes memory mfaSig = _signMfa(idx, address(this), bigFee, 0, 0);
 
         vm.prank(OPERATOR);
         vm.expectRevert(EnvelopeVault.FeeExceedsDepositAmount.selector);
         vault.withdrawMFADepositSponsored(
-            idx, address(this), linkSig, mfaSig, bigFee, 0, address(paymaster)
+            idx, address(this), linkSig, mfaSig, bigFee, 0, address(paymaster), 0
         );
     }
 
@@ -214,12 +216,12 @@ contract EnvelopeVaultSponsoredTest is Test {
         });
 
         bytes memory senderSig = _signGaslessReclaim(idx);
-        bytes memory mfaSig = _signMfaForReclaim(idx, SENDER, gasAbsorptionFee);
+        bytes memory mfaSig = _signMfaForReclaim(idx, SENDER, gasAbsorptionFee, 0);
 
         uint256 senderBalBefore = SENDER.balance;
 
         vm.prank(OPERATOR);
-        vault.withdrawDepositSenderSponsored(reclaim, SENDER, senderSig, mfaSig, gasAbsorptionFee, address(paymaster));
+        vault.withdrawDepositSenderSponsored(reclaim, SENDER, senderSig, mfaSig, gasAbsorptionFee, address(paymaster), 0);
 
         // Sender gets deposit minus gas fee
         uint256 senderBalAfter = SENDER.balance;
@@ -250,11 +252,11 @@ contract EnvelopeVaultSponsoredTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(wrongKey, digest);
         bytes memory wrongSig = abi.encodePacked(r, s, v);
 
-        bytes memory mfaSig = _signMfaForReclaim(idx, wrongSigner, 0);
+        bytes memory mfaSig = _signMfaForReclaim(idx, wrongSigner, 0, 0);
 
         vm.prank(OPERATOR);
         vm.expectRevert(EnvelopeVault.NotTheSender.selector);
-        vault.withdrawDepositSenderSponsored(reclaim, wrongSigner, wrongSig, mfaSig, 0, address(paymaster));
+        vault.withdrawDepositSenderSponsored(reclaim, wrongSigner, wrongSig, mfaSig, 0, address(paymaster), 0);
     }
 
     function test_RevertIf_SponsoredReclaimPaymasterDenies() public {
@@ -266,13 +268,87 @@ contract EnvelopeVaultSponsoredTest is Test {
         });
 
         bytes memory senderSig = _signGaslessReclaim(idx);
-        bytes memory mfaSig = _signMfaForReclaim(idx, SENDER, 0.01 ether);
+        bytes memory mfaSig = _signMfaForReclaim(idx, SENDER, 0.01 ether, 0);
 
         paymaster.setRevert(true);
 
         vm.prank(OPERATOR);
         vm.expectRevert("paymaster: denied");
-        vault.withdrawDepositSenderSponsored(reclaim, SENDER, senderSig, mfaSig, 0.01 ether, address(paymaster));
+        vault.withdrawDepositSenderSponsored(reclaim, SENDER, senderSig, mfaSig, 0.01 ether, address(paymaster), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Deadline tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function test_WithdrawMFADepositSponsoredWithDeadline() public {
+        vm.prank(SENDER);
+        uint256 idx = _makeDeposit(1 ether, true);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory linkSig = _signWithdrawal(idx, address(this));
+        bytes memory mfaSig = _signMfa(idx, address(this), 0, 0.01 ether, deadline);
+
+        // Should succeed before deadline
+        vm.prank(OPERATOR);
+        vault.withdrawMFADepositSponsored(
+            idx, address(this), linkSig, mfaSig, 0, 0.01 ether, address(paymaster), deadline
+        );
+    }
+
+    function test_RevertIf_MFASignatureExpiredSponsored() public {
+        vm.prank(SENDER);
+        uint256 idx = _makeDeposit(1 ether, true);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory linkSig = _signWithdrawal(idx, address(this));
+        bytes memory mfaSig = _signMfa(idx, address(this), 0, 0.01 ether, deadline);
+
+        // Warp past deadline
+        vm.warp(deadline + 1);
+
+        vm.prank(OPERATOR);
+        vm.expectRevert(EnvelopeVault.MfaSignatureExpired.selector);
+        vault.withdrawMFADepositSponsored(
+            idx, address(this), linkSig, mfaSig, 0, 0.01 ether, address(paymaster), deadline
+        );
+    }
+
+    function test_RevertIf_MFASignatureExpiredSponsoredReclaim() public {
+        vm.prank(SENDER);
+        uint256 idx = _makeDeposit(1 ether, false);
+
+        EnvelopeVault.GaslessReclaim memory reclaim = EnvelopeVault.GaslessReclaim({
+            depositIndex: idx
+        });
+
+        uint256 deadline = block.timestamp + 30 minutes;
+        bytes memory senderSig = _signGaslessReclaim(idx);
+        bytes memory mfaSig = _signMfaForReclaim(idx, SENDER, 0.01 ether, deadline);
+
+        // Warp past deadline
+        vm.warp(deadline + 1);
+
+        vm.prank(OPERATOR);
+        vm.expectRevert(EnvelopeVault.MfaSignatureExpired.selector);
+        vault.withdrawDepositSenderSponsored(reclaim, SENDER, senderSig, mfaSig, 0.01 ether, address(paymaster), deadline);
+    }
+
+    function test_ZeroDeadlineMeansNoExpiry() public {
+        vm.prank(SENDER);
+        uint256 idx = _makeDeposit(1 ether, true);
+
+        bytes memory linkSig = _signWithdrawal(idx, address(this));
+        // deadline = 0 means never expires
+        bytes memory mfaSig = _signMfa(idx, address(this), 0, 0, 0);
+
+        // Warp far into the future
+        vm.warp(block.timestamp + 365 days);
+
+        vm.prank(OPERATOR);
+        vault.withdrawMFADepositSponsored(
+            idx, address(this), linkSig, mfaSig, 0, 0, address(paymaster), 0
+        );
     }
 
     receive() external payable {}
