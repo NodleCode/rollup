@@ -11,23 +11,20 @@ contract EnvelopeVaultMFATest is Test {
     address public constant SAMPLE_ADDRESS = address(0x8fd379246834eac74B8419FfdA202CF8051F7A03);
     bytes32 public constant SAMPLE_PRIVKEY = 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
 
-    // Upstream Squirrel-Labs MFA authorizer address. The hardcoded `authorization` blob below
-    // was signed by the corresponding offline private key — keep both together.
-    address public constant LEGACY_MFA_AUTHORIZER = 0x3B14D43Bf521EF7FD9600533bEB73B6e9178DE7C;
+    // MFA authorizer key pair for testing
+    uint256 public constant MFA_PRIVKEY = uint256(keccak256("nodle.vault.mfa-authorizer"));
+    address public MFA_AUTHORIZER;
 
     function setUp() public {
-        vault = new EnvelopeVault(LEGACY_MFA_AUTHORIZER);
+        MFA_AUTHORIZER = vm.addr(MFA_PRIVKEY);
+        vault = new EnvelopeVault(MFA_AUTHORIZER, address(this));
     }
 
-    function testMFADeposit() public {
-      uint256 depositIndex = vault.makeSelflessMFADeposit{value: 1}(
-        0x0000000000000000000000000000000000000000,
-        0,
-        1,
-        0,
-        SAMPLE_ADDRESS,
-        0x0000000000000000000000000000000000001234);
-
+    function _signMfa(uint256 depositIndex, address recipient, uint256 serviceFee, uint256 gasAbsorptionFee)
+        internal
+        view
+        returns (bytes memory)
+    {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
@@ -35,26 +32,157 @@ contract EnvelopeVaultMFATest is Test {
                     block.chainid,
                     address(vault),
                     depositIndex,
-                    address(this), // recipient
+                    recipient,
+                    serviceFee,
+                    gasAbsorptionFee
+                )
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(MFA_PRIVKEY, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function testMFADeposit() public {
+        uint256 depositIndex = vault.makeSelflessMFADeposit{value: 1 ether}(
+            address(0),
+            0,
+            1 ether,
+            0,
+            SAMPLE_ADDRESS,
+            address(0x1234)
+        );
+
+        // Build withdrawal signature
+        bytes32 wdDigest = MessageHashUtils.toEthSignedMessageHash(
+            keccak256(
+                abi.encodePacked(
+                    vault.ENVELOPE_SALT(),
+                    block.chainid,
+                    address(vault),
+                    depositIndex,
+                    address(this),
                     vault.ANYONE_WITHDRAWAL_MODE()
                 )
             )
         );
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(SAMPLE_PRIVKEY), digest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(SAMPLE_PRIVKEY), wdDigest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        // Withdrawing without authorization, so should fail
+        // Withdrawing without authorization should fail
         vm.expectRevert(EnvelopeVault.RequiresMfaAuthorization.selector);
         vault.withdrawDeposit(depositIndex, address(this), signature);
 
-        // Withdrawing with incorrect authorization signature
+        // Withdrawing with incorrect MFA signature should fail
         vm.expectRevert(EnvelopeVault.WrongMfaSignature.selector);
-        vault.withdrawMFADeposit(depositIndex, address(this), signature, signature);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, signature, 0, 0);
 
-        // Authorization is correct! Withdrawal has to be successful!
-        bytes memory authorization = hex"41caae599d693a31ea45aab95c8d166e9709cb450f1c76a2b06306ee61cb28b37ed0cad0d47d055580ce204ac9973b671a0970d02f9ee6572a9234f3130707321c";
-        vault.withdrawMFADeposit(depositIndex, address(this), signature, authorization);
+        // Correct MFA authorization with zero fees
+        bytes memory mfaSig = _signMfa(depositIndex, address(this), 0, 0);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, 0, 0);
     }
 
-    receive () payable external {}
+    function testMFADepositWithFees() public {
+        uint256 depositAmount = 1 ether;
+        uint256 serviceFee = 0.01 ether;
+        uint256 gasAbsorptionFee = 0.005 ether;
+
+        uint256 depositIndex = vault.makeSelflessMFADeposit{value: depositAmount}(
+            address(0),
+            0,
+            depositAmount,
+            0,
+            SAMPLE_ADDRESS,
+            address(0x1234)
+        );
+
+        // Build withdrawal signature
+        bytes32 wdDigest = MessageHashUtils.toEthSignedMessageHash(
+            keccak256(
+                abi.encodePacked(
+                    vault.ENVELOPE_SALT(),
+                    block.chainid,
+                    address(vault),
+                    depositIndex,
+                    address(this),
+                    vault.ANYONE_WITHDRAWAL_MODE()
+                )
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(SAMPLE_PRIVKEY), wdDigest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // MFA signature with fees
+        bytes memory mfaSig = _signMfa(depositIndex, address(this), serviceFee, gasAbsorptionFee);
+
+        uint256 balBefore = address(this).balance;
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, serviceFee, gasAbsorptionFee);
+        uint256 balAfter = address(this).balance;
+
+        // Recipient gets deposit minus fees
+        assertEq(balAfter - balBefore, depositAmount - serviceFee - gasAbsorptionFee);
+
+        // Fees accumulated in contract
+        assertEq(vault.accumulatedFees(address(0)), serviceFee + gasAbsorptionFee);
+    }
+
+    function testWithdrawFeesOnlyOwner() public {
+        // Make deposit + withdraw with fees to accumulate some
+        uint256 depositAmount = 1 ether;
+        uint256 serviceFee = 0.01 ether;
+
+        uint256 depositIndex = vault.makeSelflessMFADeposit{value: depositAmount}(
+            address(0), 0, depositAmount, 0, SAMPLE_ADDRESS, address(0x1234)
+        );
+
+        bytes32 wdDigest = MessageHashUtils.toEthSignedMessageHash(
+            keccak256(
+                abi.encodePacked(
+                    vault.ENVELOPE_SALT(), block.chainid, address(vault),
+                    depositIndex, address(this), vault.ANYONE_WITHDRAWAL_MODE()
+                )
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(SAMPLE_PRIVKEY), wdDigest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        bytes memory mfaSig = _signMfa(depositIndex, address(this), serviceFee, 0);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, serviceFee, 0);
+
+        // Non-owner cannot withdraw fees
+        vm.prank(address(0xdead));
+        vm.expectRevert();
+        vault.withdrawFees(address(0));
+
+        // Owner can withdraw
+        uint256 balBefore = address(this).balance;
+        vault.withdrawFees(address(0));
+        assertEq(address(this).balance - balBefore, serviceFee);
+        assertEq(vault.accumulatedFees(address(0)), 0);
+    }
+
+    function test_RevertIf_FeeExceedsDeposit() public {
+        uint256 depositAmount = 0.01 ether;
+
+        uint256 depositIndex = vault.makeSelflessMFADeposit{value: depositAmount}(
+            address(0), 0, depositAmount, 0, SAMPLE_ADDRESS, address(0x1234)
+        );
+
+        bytes32 wdDigest = MessageHashUtils.toEthSignedMessageHash(
+            keccak256(
+                abi.encodePacked(
+                    vault.ENVELOPE_SALT(), block.chainid, address(vault),
+                    depositIndex, address(this), vault.ANYONE_WITHDRAWAL_MODE()
+                )
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(SAMPLE_PRIVKEY), wdDigest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // Fee exceeds deposit
+        uint256 bigFee = 1 ether;
+        bytes memory mfaSig = _signMfa(depositIndex, address(this), bigFee, 0);
+        vm.expectRevert(EnvelopeVault.FeeExceedsDepositAmount.selector);
+        vault.withdrawMFADeposit(depositIndex, address(this), signature, mfaSig, bigFee, 0);
+    }
+
+    receive() payable external {}
 }

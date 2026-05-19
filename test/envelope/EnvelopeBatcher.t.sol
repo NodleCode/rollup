@@ -19,7 +19,7 @@ contract EnvelopeBatcherTest is Test, ERC1155Holder, ERC721Holder {
 
     function setUp() public {
         batcher = new EnvelopeBatcher();
-        vault = new EnvelopeVault(address(0));
+        vault = new EnvelopeVault(address(0), address(this));
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();

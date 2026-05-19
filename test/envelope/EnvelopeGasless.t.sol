@@ -27,7 +27,7 @@ contract EnvelopeVaultGaslessTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        vault = new EnvelopeVault(address(0));
+        vault = new EnvelopeVault(address(0), address(this));
     }
 
     function testMakeDepositERC20WithAuthorization() public {

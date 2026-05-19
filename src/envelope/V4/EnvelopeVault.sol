@@ -46,9 +46,10 @@ import {IERC1155Receiver} from "@openzeppelin/contracts/token/ERC1155/IERC1155Re
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {IEIP3009} from "../util/IEIP3009.sol";
 
-contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
+contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ownable2Step {
     using SafeERC20 for IERC20;
 
     // ── Custom Errors ────────────────────────────────────────────────────────────
@@ -70,6 +71,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
     error DirectTransfersNotAllowed();
     error ContractTypeMustBeOneFor3009();
     error Wrong3009OnBehalfOf();
+    error FeeExceedsDepositAmount();
+    error NoFeesToWithdraw();
 
     // ── Data Structures ──────────────────────────────────────────────────────────
 
@@ -121,6 +124,9 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
 
     Deposit[] public deposits; // array of deposits
 
+    /// @notice Accumulated fees per token address (address(0) for ETH).
+    mapping(address => uint256) public accumulatedFees;
+
     // events
     event DepositEvent(
         uint256 indexed _index, uint8 indexed _contractType, uint256 _amount, address indexed _senderAddress
@@ -128,10 +134,15 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
     event WithdrawEvent(
         uint256 indexed _index, uint8 indexed _contractType, uint256 _amount, address indexed _recipientAddress
     );
+    event FeeCollected(
+        uint256 indexed _index, address indexed tokenAddress, uint256 serviceFee, uint256 gasAbsorptionFee
+    );
+    event FeesWithdrawn(address indexed tokenAddress, uint256 amount);
     event MessageEvent(string message);
 
     /// @param _mfaAuthorizer address authorized to sign MFA withdraw approvals (use address(0) to disable MFA).
-    constructor(address _mfaAuthorizer) {
+    /// @param _owner initial owner of the contract (receives accumulated fees).
+    constructor(address _mfaAuthorizer, address _owner) Ownable(_owner) {
         emit MessageEvent("Hello World, have a nutty day!");
         mfaAuthorizer = _mfaAuthorizer;
         DOMAIN_SEPARATOR = hash(
@@ -602,16 +613,24 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
     }
 
     /**
-     * @notice Function to withdraw tokens with MFA.
-     * @return bool true if successful
+     * @notice Function to withdraw tokens with MFA. Fees are backend-signed flat amounts
+     *         denominated in the deposit's token.
+     * @param _index deposit index
+     * @param _recipientAddress address to receive the deposit (minus fees)
+     * @param _signature withdrawal signature from the deposit's pubKey20
+     * @param _MFASignature backend signature authorizing this withdrawal and specifying fees
+     * @param _serviceFee flat fee (in deposit token units) for the MFA service
+     * @param _gasAbsorptionFee flat fee (in deposit token units) to cover gasless claim; 0 if not absorbing
      */
     function withdrawMFADeposit(
         uint256 _index,
         address _recipientAddress,
         bytes memory _signature,
-        bytes memory _MFASignature
+        bytes memory _MFASignature,
+        uint256 _serviceFee,
+        uint256 _gasAbsorptionFee
     ) external nonReentrant returns (bool) {
-        // Verify the MFA signature
+        // Verify the MFA signature (includes fee amounts to prevent tampering)
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
@@ -619,12 +638,24 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
                     block.chainid,
                     address(this),
                     _index,
-                    _recipientAddress
+                    _recipientAddress,
+                    _serviceFee,
+                    _gasAbsorptionFee
                 )
             )
         );
         address authorizationSigner = getSigner(digest, _MFASignature);
         if (authorizationSigner != mfaAuthorizer) revert WrongMfaSignature();
+
+        // Deduct fees from deposit amount before withdrawal
+        uint256 totalFee = _serviceFee + _gasAbsorptionFee;
+        if (totalFee > 0) {
+            Deposit storage dep = deposits[_index];
+            if (totalFee > dep.amount) revert FeeExceedsDepositAmount();
+            dep.amount -= totalFee;
+            accumulatedFees[dep.tokenAddress] += totalFee;
+            emit FeeCollected(_index, dep.tokenAddress, _serviceFee, _gasAbsorptionFee);
+        }
 
         return _withdrawDeposit(
             _index,
@@ -851,6 +882,25 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard {
             }
         }
         return _deposits;
+    }
+
+    /**
+     * @notice Withdraw accumulated fees for a given token. Only callable by owner.
+     * @param _tokenAddress token to withdraw fees for (address(0) for ETH)
+     */
+    function withdrawFees(address _tokenAddress) external onlyOwner nonReentrant {
+        uint256 amount = accumulatedFees[_tokenAddress];
+        if (amount == 0) revert NoFeesToWithdraw();
+        accumulatedFees[_tokenAddress] = 0;
+
+        if (_tokenAddress == address(0)) {
+            (bool success,) = msg.sender.call{value: amount}("");
+            if (!success) revert EthTransferFailed();
+        } else {
+            IERC20(_tokenAddress).safeTransfer(msg.sender, amount);
+        }
+
+        emit FeesWithdrawn(_tokenAddress, amount);
     }
 
     // and that's all! Have a nutty day!

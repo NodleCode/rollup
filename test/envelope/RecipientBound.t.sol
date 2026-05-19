@@ -22,7 +22,7 @@ contract RecipientBoundTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        vault = new EnvelopeVault(address(0));
+        vault = new EnvelopeVault(address(0), address(this));
         testToken.mint(address(this), 1000);
         testToken.approve(address(vault), 1000);
     }
