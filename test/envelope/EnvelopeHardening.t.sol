@@ -23,7 +23,7 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
     address constant PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
 
     function setUp() public {
-        vault = new EnvelopeVault(address(0), address(this));
+        vault = new EnvelopeVault(address(0), address(this), address(0));
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
     }
@@ -50,8 +50,10 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
     function test_T1_directERC1155BatchTransferReverts() public {
         uint256[] memory ids = new uint256[](2);
         uint256[] memory amounts = new uint256[](2);
-        ids[0] = 1; ids[1] = 2;
-        amounts[0] = 1; amounts[1] = 1;
+        ids[0] = 1;
+        ids[1] = 2;
+        amounts[0] = 1;
+        amounts[1] = 1;
         erc1155.mint(address(this), 1, 1, "");
         erc1155.mint(address(this), 2, 1, "");
         vm.expectRevert(EnvelopeVault.DirectTransfersNotAllowed.selector);
@@ -66,16 +68,14 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         uint256 mfaPrivKey = uint256(keccak256("nodle.vault.mfa-test-signer"));
         address mfaSigner = vm.addr(mfaPrivKey);
 
-        EnvelopeVault nodleVault = new EnvelopeVault(mfaSigner, address(this));
+        EnvelopeVault nodleVault = new EnvelopeVault(mfaSigner, address(this), address(0));
         assertEq(nodleVault.mfaAuthorizer(), mfaSigner, "constructor arg ignored");
 
         // make an MFA-gated deposit, then craft both signatures with our test keys.
         uint256 depositPrivKey = uint256(keccak256("nodle.vault.deposit-key"));
         address depositSigner = vm.addr(depositPrivKey);
 
-        uint256 idx = nodleVault.makeSelflessMFADeposit{value: 1 wei}(
-            address(0), 0, 1, 0, depositSigner, address(this)
-        );
+        uint256 idx = nodleVault.makeSelflessMFADeposit{value: 1 wei}(address(0), 0, 1, 0, depositSigner, address(this));
 
         // withdrawal signature (signed by deposit pubkey)
         bytes32 wdHash = MessageHashUtilsLite.toEthSignedMessageHash(
@@ -93,28 +93,19 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         (uint8 wv, bytes32 wr, bytes32 ws) = vm.sign(depositPrivKey, wdHash);
         bytes memory wdSig = abi.encodePacked(wr, ws, wv);
 
-        // MFA signature (signed by configured mfaAuthorizer, includes fee amounts)
-        uint256 serviceFee = 0;
-        uint256 gasAbsorptionFee = 0;
+        // MFA signature (signed by configured mfaAuthorizer, includes deadline)
         uint256 deadline = 0; // no expiry
         bytes32 mfaHash = MessageHashUtilsLite.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    nodleVault.ENVELOPE_SALT(),
-                    block.chainid,
-                    address(nodleVault),
-                    idx,
-                    address(this),
-                    serviceFee,
-                    gasAbsorptionFee,
-                    deadline
+                    nodleVault.ENVELOPE_SALT(), block.chainid, address(nodleVault), idx, address(this), deadline
                 )
             )
         );
         (uint8 mv, bytes32 mr, bytes32 ms) = vm.sign(mfaPrivKey, mfaHash);
         bytes memory mfaSig = abi.encodePacked(mr, ms, mv);
 
-        nodleVault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig, serviceFee, gasAbsorptionFee, 0);
+        nodleVault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig, deadline);
     }
 
     function test_T2_zeroMfaAuthorizerRejectsAllMfaWithdrawals() public {
@@ -122,15 +113,13 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         uint256 depositPrivKey = uint256(keccak256("dep"));
         address depositSigner = vm.addr(depositPrivKey);
 
-        uint256 idx = vault.makeSelflessMFADeposit{value: 1 wei}(
-            address(0), 0, 1, 0, depositSigner, address(this)
-        );
+        uint256 idx = vault.makeSelflessMFADeposit{value: 1 wei}(address(0), 0, 1, 0, depositSigner, address(this));
 
         // empty/garbage MFA sig must not pass when authorizer is 0
         bytes memory wdSig = hex"00";
         bytes memory mfaSig = hex"00";
         vm.expectRevert();
-        vault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig, 0, 0, 0);
+        vault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig, 0);
     }
 }
 

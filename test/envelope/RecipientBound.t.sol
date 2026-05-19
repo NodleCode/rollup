@@ -22,7 +22,7 @@ contract RecipientBoundTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        vault = new EnvelopeVault(address(0), address(this));
+        vault = new EnvelopeVault(address(0), address(this), address(0));
         testToken.mint(address(this), 1000);
         testToken.approve(address(vault), 1000);
     }
@@ -48,12 +48,12 @@ contract RecipientBoundTest is Test {
 
         vault.withdrawDeposit(depositIndex, SAMPLE_ADDRESS, bytes(""));
         require(testToken.balanceOf(SAMPLE_ADDRESS) == 1000, "SAMPLE_ADDRESS SHOULD HAVE RECEIVED TOKENS!");
-   }
+    }
 
     /*
      * Reclaim an address-bound deposit.
     */
-   function testRecipientBoundReclaim() public {
+    function testRecipientBoundReclaim() public {
         uint256 depositIndex = vault.makeCustomDeposit(
             address(testToken),
             1, // contract type - erc 20
@@ -74,5 +74,5 @@ contract RecipientBoundTest is Test {
         vm.warp(block.timestamp + 11); // advance past reclaimableAfter
         vault.withdrawDepositSender(depositIndex);
         require(testToken.balanceOf(address(this)) == 1000, "WAS NOT REFUNDED!");
-   }
+    }
 }

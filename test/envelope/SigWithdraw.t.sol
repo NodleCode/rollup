@@ -24,7 +24,7 @@ contract TestSigWithdrawEther is Test {
 
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(this));
+        vault = new EnvelopeVault(address(0), address(this), address(0));
     }
 
     // test sender withdrawal of ETH

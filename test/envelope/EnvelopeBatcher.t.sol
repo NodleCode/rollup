@@ -19,7 +19,7 @@ contract EnvelopeBatcherTest is Test, ERC1155Holder, ERC721Holder {
 
     function setUp() public {
         batcher = new EnvelopeBatcher();
-        vault = new EnvelopeVault(address(0), address(this));
+        vault = new EnvelopeVault(address(0), address(this), address(0));
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();
@@ -176,18 +176,13 @@ contract EnvelopeBatcherTest is Test, ERC1155Holder, ERC721Holder {
         amounts[1] = 20;
         amounts[2] = 30;
         amounts[3] = 40;
-        
-        uint256[] memory depositIndices = batcher.batchMakeDepositRaffle{value: 100}(
-            address(vault),
-            address(testToken),
-            0,
-            amounts,
-            PUBKEY20
-        );
 
-        for(uint256 i = 0; i < amounts.length; i++) {
+        uint256[] memory depositIndices =
+            batcher.batchMakeDepositRaffle{value: 100}(address(vault), address(testToken), 0, amounts, PUBKEY20);
+
+        for (uint256 i = 0; i < amounts.length; i++) {
             EnvelopeVault.Deposit memory deposit = vault.getDeposit(depositIndices[i]);
-            assert(deposit.amount == amounts[i]);  // main assertion
+            assert(deposit.amount == amounts[i]); // main assertion
 
             // a few sanity checks
             assert(deposit.contractType == 0);
@@ -207,18 +202,13 @@ contract EnvelopeBatcherTest is Test, ERC1155Holder, ERC721Holder {
 
         testToken.mint(address(this), 100);
         testToken.approve(address(batcher), 100);
-        
-        uint256[] memory depositIndices = batcher.batchMakeDepositRaffle(
-            address(vault),
-            address(testToken),
-            1,
-            amounts,
-            PUBKEY20
-        );
 
-        for(uint256 i = 0; i < amounts.length; i++) {
+        uint256[] memory depositIndices =
+            batcher.batchMakeDepositRaffle(address(vault), address(testToken), 1, amounts, PUBKEY20);
+
+        for (uint256 i = 0; i < amounts.length; i++) {
             EnvelopeVault.Deposit memory deposit = vault.getDeposit(depositIndices[i]);
-            assert(deposit.amount == amounts[i]);  // main assertion
+            assert(deposit.amount == amounts[i]); // main assertion
 
             // a few sanity checks
             assert(deposit.contractType == 1);

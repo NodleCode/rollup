@@ -25,7 +25,7 @@ contract EnvelopeVaultIntegrationTest is Test, ERC1155Holder, ERC721Holder {
 
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(this));
+        vault = new EnvelopeVault(address(0), address(this), address(0));
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();

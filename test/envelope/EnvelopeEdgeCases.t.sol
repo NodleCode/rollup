@@ -63,7 +63,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
     function setUp() public {
         LINK_PUBKEY20 = vm.addr(LINK_PRIV);
-        vault = new EnvelopeVault(address(0), address(this));
+        vault = new EnvelopeVault(address(0), address(this), address(0));
         batcher = new EnvelopeBatcher();
         erc20 = new ERC20Mock();
         erc721 = new ERC721Mock();

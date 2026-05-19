@@ -1,175 +1,123 @@
-# EnvelopeVault — link-based asset vault
+# EnvelopeVault
 
 `src/envelope/V4/EnvelopeVault.sol`
 
 ## Purpose
 
-A non-custodial vault that lets a sender deposit ETH / ERC-20 / ERC-721 / ERC-1155 assets against an arbitrary `pubKey20` (last 20 bytes of an ECDSA public key). Anyone holding the matching **private key** can later claim the asset to any recipient address by producing a signature. Optionally a deposit can be:
-
-- **Recipient-bound** — only a pre-named recipient address can claim
-- **MFA-gated** — claim also requires a second signature from an admin-configured `MFA_AUTHORIZER`
-- **Sender-reclaimable** — sender can reclaim after a configurable delay if the link is never used
-
-This is the vendored upstream contract from `peanutprotocol/peanut-contracts@main` with security hardening + ZkSync alignment patches applied during vendoring.
+`EnvelopeVault` is a link-based asset vault for ETH, ERC-20, ERC-721, and ERC-1155 gifts. A sender deposits an asset against a per-link `pubKey20`; the recipient claims by presenting a signature from the matching private key. The vault supports open links, address-bound links, optional backend MFA, sender reclaim, deposit-time service fees, and prepaid gasless claim/reclaim eligibility for ZkSync paymasters.
 
 ## Constructor
 
 ```solidity
-constructor(address _ecoAddress, address _mfaAuthorizer)
+constructor(address mfaAuthorizer, address owner, address feeToken)
 ```
 
-| Param | Purpose | `address(0)` means |
-|---|---|---|
-| `_ecoAddress` | Rebasing ECO-like ERC-20 token to gate from regular ERC-20 deposits (forces it through `contractType==4`) | no token gating |
-| `_mfaAuthorizer` | EOA whose ECDSA signatures unlock `withdrawMFADeposit` | MFA disabled — any deposit flagged `withMFA=true` is unrecoverable |
+| Param | Purpose |
+|---|---|
+| `mfaAuthorizer` | Backend signer for MFA claim approvals and deposit-time fee authorizations. `address(0)` disables non-zero fee authorizations and makes MFA withdrawals fail. |
+| `owner` | Owns the vault and can withdraw accumulated fees. |
+| `feeToken` | ERC-20 used for Nodle service and gasless sponsorship fees, for example NODL. `address(0)` permits only zero-fee deposits. |
 
-Both stored `immutable`. The MFA authorizer was promoted from a hardcoded constant in upstream to per-deploy config during vendoring.
+The constructor also sets the EIP-712 domain separator used by the vault-side validation helpers.
 
-The constructor also computes and stores `DOMAIN_SEPARATOR` for the gasless-reclaim EIP-712 signature flow.
+## Deposit Model
 
-## Storage
+All deposits store a `Deposit` record:
 
 ```solidity
 struct Deposit {
-    address pubKey20;          // 20 bytes  — claim signature must recover to this
-    uint256 amount;            // 32 bytes  — asset amount (or 1 for ERC-721)
-    address tokenAddress;      // 20 bytes  — 0x0 for ETH
-    uint8   contractType;      //  1 byte   — 0=ETH 1=ERC20 2=ERC721 3=ERC1155 4=L2ECO
-    bool    claimed;           //  1 byte
-    bool    requiresMFA;       //  1 byte
-    uint40  timestamp;         //  5 bytes  — deposit time
-    uint256 tokenId;           // 32 bytes  — 0 for ERC-20
-    address senderAddress;     // 20 bytes  — who owns reclaim rights
-    address recipient;         // 20 bytes  — if non-zero, only this address can claim
-    uint40  reclaimableAfter;  //  5 bytes  — sender reclaim earliest (for recipient-bound only)
-} // 6 slots, packed
-
-Deposit[] public deposits;       // index = depositIndex
-address public ecoAddress;       // immutable
-address public immutable MFA_AUTHORIZER;
-bytes32 public DOMAIN_SEPARATOR; // set at construction; not immutable for clarity
+    address pubKey20;
+    uint256 amount;
+    address tokenAddress;
+    uint8 contractType;      // 0=ETH, 1=ERC20, 2=ERC721, 3=ERC1155
+    bool claimed;
+    bool requiresMFA;
+    uint40 timestamp;
+    uint256 tokenId;
+    address senderAddress;
+    address recipient;
+    uint40 reclaimableAfter;
+    uint256 serviceFee;      // feeToken amount collected at deposit creation
+    uint256 gaslessFee;      // feeToken amount prepaid for paymaster sponsorship
+}
 ```
 
-## Constants
+`serviceFee` and `gaslessFee` are not deducted from the gift amount. They are separate `feeToken` transfers from the depositor to the vault and are accounted in `accumulatedFees[address(feeToken)]`.
 
-| Name | Value | Purpose |
-|---|---|---|
-| `ENVELOPE_SALT` | `keccak256("Konrad makes tokens go woosh tadam")` | Domain-tags every link signature; prevents the same signature being reused on a different Envelope deployment |
-| `ANYONE_WITHDRAWAL_MODE` | `bytes32(0)` | Default mode — anyone holding the private key can withdraw on behalf of an arbitrary recipient |
-| `RECIPIENT_WITHDRAWAL_MODE` | `keccak256("only recipient")` | Used for `withdrawDepositAsRecipient` — only the recipient address signs |
-| `GASLESS_RECLAIM_TYPEHASH` | `keccak256("GaslessReclaim(uint256 depositIndex)")` | EIP-712 type for sender's gasless reclaim |
+## Main Deposit Functions
 
-## Deposit functions
-
-All deposit functions are `payable` (ETH path uses `msg.value`) and `nonReentrant`. They route through internal `_pullTokensViaApproval` / `_pullTokensVia3009Encoded` for asset transfer, then `_storeDeposit` for state update.
-
-| Function | Use case |
+| Function | Flow |
 |---|---|
-| `makeDeposit(token, contractType, amount, tokenId, pubKey20)` | Simplest — depositor is `msg.sender`, no MFA, no recipient bind |
-| `makeMFADeposit(...)` | Same shape, but `withMFA=true` |
-| `makeSelflessDeposit(..., onBehalfOf)` | Deposit credited to `onBehalfOf` (reclaim rights go to them, not msg.sender) — used by batcher |
-| `makeSelflessMFADeposit(..., onBehalfOf)` | Selfless + MFA |
-| `makeCustomDeposit(token, contractType, amount, tokenId, pubKey20, onBehalfOf, withMFA, recipient, reclaimableAfter, isGasless3009, args3009)` | All knobs exposed — the canonical entry point. Pulls funds from `msg.sender`. |
-| `makeDepositWithAuthorization(token, from, amount, pubKey20, nonce, validAfter, validBefore, v, r, s)` | EIP-3009 path for USDC-style tokens — no pre-approval needed |
+| `makeDeposit(token, type, amount, tokenId, pubKey20)` | Basic open link. No MFA, no fees, no gasless sponsorship. |
+| `makeMFADeposit(...)` | Basic open link that requires backend MFA at claim time. No deposit-time fees unless using `makeCustomDepositWithFees`. |
+| `makeSelflessDeposit(..., onBehalfOf)` | Creates a link whose reclaim rights belong to `onBehalfOf`. Used by batch flows. |
+| `makeSelflessMFADeposit(..., onBehalfOf)` | Selfless deposit plus MFA requirement. |
+| `makeCustomDeposit(...)` | Canonical no-fee entry point with MFA flag, optional recipient binding, and optional reclaim delay. |
+| `makeCustomDepositWithFees(request, feeAuthorization)` | Canonical paid-service entry point. Pulls the gift asset, verifies backend-signed fees, collects `feeToken`, and records gasless eligibility when `gaslessFee > 0`. |
 
-The minimalistic deposit functions (`makeDeposit`, `makeMFADeposit`, `makeSelflessDeposit`, `makeSelflessMFADeposit`) are marked `@deprecated` upstream but kept for ABI compatibility; new integrations should call `makeCustomDeposit`.
+`FeeAuthorization` covers the full deposit intent, the fee payer (`msg.sender`), the two fee amounts, and a backend-selected deadline. `deadline == 0` means no expiry. If either fee is non-zero, the signature must recover to `mfaAuthorizer`.
 
-### `_storeDeposit` invariant — dual-zero rejection
+## Withdraw And Claim Functions
 
-A deposit with both `pubKey20 == 0` AND `recipient == 0` has **no withdrawal authority** — `_withdrawDeposit` would accept any caller without a valid signature. The hardening patch added at vendor time enforces:
-
-```solidity
-require(_pubKey20 != address(0) || _recipient != address(0), "DEPOSIT MUST HAVE AUTH");
-```
-
-so the dual-zero footgun is impossible.
-
-## Withdraw functions
-
-| Function | Caller | Auth |
+| Function | Caller | Authorization |
 |---|---|---|
-| `withdrawDeposit(index, recipient, signature)` | anyone | `signature` (recovers to `pubKey20`) signed over `keccak256(ENVELOPE_SALT, chainid, address(this), index, recipient, ANYONE_WITHDRAWAL_MODE)` |
-| `withdrawMFADeposit(index, recipient, signature, MFASignature)` | anyone | Both above signature AND a signature from `MFA_AUTHORIZER` over `keccak256(ENVELOPE_SALT, chainid, address(this), index, recipient)` |
-| `withdrawDepositAsRecipient(index, recipient, signature)` | `recipient` only (msg.sender) | `signature` signed with `RECIPIENT_WITHDRAWAL_MODE` instead of `ANYONE_WITHDRAWAL_MODE` |
-| `withdrawDepositSender(index)` | original sender | none beyond `msg.sender == _deposit.senderAddress`; for recipient-bound deposits also requires `block.timestamp > reclaimableAfter` |
-| `withdrawDepositSenderGasless(reclaim, signer, signature)` | anyone | EIP-712 signature from `signer` (must equal `senderAddress`) over `GaslessReclaim(depositIndex)` |
+| `withdrawDeposit(index, recipient, signature)` | Anyone, or a recipient using a paymaster | Link key signs `(salt, chainId, vault, index, recipient, ANYONE_WITHDRAWAL_MODE)`. |
+| `withdrawMFADeposit(index, recipient, signature, mfaSignature, deadline)` | Anyone, or a recipient using a paymaster | Link signature plus backend MFA signature over `(salt, chainId, vault, index, recipient, deadline)`. |
+| `withdrawDepositAsRecipient(index, recipient, signature)` | Must be `recipient` | Link key signs using `RECIPIENT_WITHDRAWAL_MODE`. |
+| `withdrawDepositSender(index)` | Original `senderAddress` | Sender reclaim. If the deposit is recipient-bound, `block.timestamp` must be greater than `reclaimableAfter`. |
 
-All withdraws set `claimed = true` BEFORE the asset transfer (CEI). `nonReentrant` adds belt-and-suspenders.
+All withdrawal paths set `claimed = true` before transferring assets. Claim-time fee collection was intentionally removed: fees are now collected when the envelope is created.
 
-## Asset paths
+## Gasless Paymaster Flow
 
-`contractType` determines how assets flow:
+Gasless operation is handled by ZkSync paymasters, not by an internal vault callback. The vault is only the source of truth for whether a paymaster should sponsor a call.
 
-| Code | Asset | Deposit | Withdraw |
-|---|---|---|---|
-| 0 | ETH | `msg.value` | `recipient.call{value: amount}("")` |
-| 1 | ERC-20 | `SafeERC20.safeTransferFrom(msg.sender, this, amount)` | `SafeERC20.safeTransfer(recipient, amount)` |
-| 2 | ERC-721 | `safeTransferFrom(msg.sender, this, tokenId, "Internal transfer")` | `safeTransferFrom(this, recipient, tokenId)` |
-| 3 | ERC-1155 | `safeTransferFrom(msg.sender, this, tokenId, amount, "Internal transfer")` | `safeTransferFrom(this, recipient, tokenId, amount, "")` |
-| 4 | L2ECO (rebasing) | `SafeERC20.safeTransferFrom`; stored amount multiplied by `linearInflationMultiplier()` for inflation-invariance | inverse: `amount / linearInflationMultiplier()`, then `SafeERC20.safeTransfer` |
+1. Sender creates a deposit through `makeCustomDepositWithFees` with `gaslessFee > 0`.
+2. The vault collects the gasless sponsorship fee immediately in `feeToken` and records it on the deposit.
+3. A receiver submits a ZkSync transaction to `withdrawDeposit`, `withdrawMFADeposit`, or `withdrawDepositAsRecipient` using `EnvelopePaymaster`.
+4. ZkSync calls the paymaster before execution. The paymaster checks the transaction targets this vault and calls `isValidGaslessOperation(from, transaction.data)`.
+5. The vault re-checks the deposit state, gasless fee, recipient/sender identity, signatures, MFA deadline, and reclaim delay.
+6. If validation passes, the paymaster pays ETH to the bootloader. The vault function then executes normally.
 
-For ERC-20, the depositor must approve the vault first (Path C). The user pays for that approve themselves; the deposit tx is then submitted by the depositor calling `makeCustomDeposit` directly.
+Sender reclaim can also be gasless: the sender submits `withdrawDepositSender(index)` through the paymaster. This is allowed only for deposits with `gaslessFee > 0` and the same reclaim timing rules as the regular reclaim path.
 
-## Receiver hooks (S1 hardening)
-
-The vault implements `IERC721Receiver` + `IERC1155Receiver` because withdrawing NFTs goes through `safeTransferFrom` and the **recipient** may be a contract that needs the receiver-check; for the vault itself, the only legitimate calls to its own receiver hooks are when the vault itself is the operator (i.e. during withdraw). Direct deposits via `safeTransferFrom(user → vault, ...)` from outside this contract are explicitly rejected:
+## Paymaster Validation Helper
 
 ```solidity
-require(_operator == address(this), "DIRECT TRANSFERS NOT ALLOWED");
+function isValidGaslessOperation(address caller, bytes calldata callData) external view returns (bool);
 ```
 
-This closes the upstream footgun where the hooks silently returned `bytes4(0)`, causing some tokens to accept the transfer and strand the asset in the vault.
+This function is intended for paymaster validation. It accepts only these selectors:
 
-## EIP-3009 path
+- `withdrawDeposit`
+- `withdrawMFADeposit`
+- `withdrawDepositAsRecipient`
+- `withdrawDepositSender`
 
-For tokens that implement EIP-3009 (USDC and forks), the user signs `ReceiveWithAuthorization(...)` off-chain; the relayer submits to the vault via `makeDepositWithAuthorization` (or `makeCustomDeposit` with `_isGasless3009=true`). No pre-approval is needed — this is Path B.
+For claim calls, `caller` must be the recipient. For reclaim calls, `caller` must be the stored sender. The helper returns false for non-prepaid deposits, claimed deposits, unsupported selectors, wrong callers, invalid signatures, expired MFA approvals, or early reclaims.
 
-The vault re-derives the nonce as `keccak256(pubKey20, _nonce)` before calling the token's `receiveWithAuthorization` — this binds the EIP-3009 signature to the specific link, preventing front-running where another link's owner steals the deposit.
+## Fees
+
+| Fee | Collected | Meaning |
+|---|---|---|
+| `serviceFee` | Deposit creation | Paid backend service fee for optional security/MFA/compliance checks. |
+| `gaslessFee` | Deposit creation | Prepaid compensation for paymaster-sponsored claim or reclaim. |
+
+Both fees are backend-priced off-chain and backend-signed on-chain. The vault does not encode pricing policy; it enforces the signed amounts and deadline. The owner withdraws accumulated fees through `withdrawFees(token)`.
+
+## Removed EIP-3009 Path
+
+The previous EIP-3009 deposit and gasless reclaim paths were removed. ERC-20 deposits now use standard allowance-based transfers, and ZkSync gasless UX is provided by the paymaster flow above.
 
 ## Events
 
 ```solidity
-event DepositEvent(uint256 indexed _index, uint8 indexed _contractType,
-                   uint256 _amount, address indexed _senderAddress);
-event WithdrawEvent(uint256 indexed _index, uint8 indexed _contractType,
-                    uint256 _amount, address indexed _recipientAddress);
-event MessageEvent(string message); // emitted once at deploy ("Hello World, have a nutty day!")
+event DepositEvent(uint256 indexed index, uint8 indexed contractType, uint256 amount, address indexed senderAddress);
+event WithdrawEvent(uint256 indexed index, uint8 indexed contractType, uint256 amount, address indexed recipientAddress);
+event FeeCollected(uint256 indexed index, address indexed tokenAddress, uint256 serviceFee, uint256 gaslessFee);
+event FeesWithdrawn(address indexed tokenAddress, uint256 amount);
 ```
 
-## Views
+## Test Coverage
 
-```solidity
-function getDepositCount() external view returns (uint256);
-function getDeposit(uint256 _index) external view returns (Deposit memory);
-function getAllDeposits() external view returns (Deposit[] memory);
-function getAllDepositsForAddress(address _address) external view returns (Deposit[] memory);
-function getSigner(bytes32 messageHash, bytes memory signature) public pure returns (address);
-```
-
-Note that `getAllDeposits` / `getAllDepositsForAddress` scale linearly with array length. Indexing services should listen to events instead.
-
-## Vendoring patches applied at import
-
-| | Patch |
-|---|---|
-| OZ v5 | `security/ReentrancyGuard.sol` → `utils/ReentrancyGuard.sol` |
-| OZ v5 | `ECDSA.toEthSignedMessageHash` → `MessageHashUtils.toEthSignedMessageHash` |
-| OZ v5 | `IL2ECO.transfer/transferFrom` → `SafeERC20.safeTransfer/safeTransferFrom` (cast IL2ECO → IERC20) |
-| Hardening (S1) | `onERC{721,1155,1155Batch}Received` revert on non-self operator |
-| Hardening (S3) | `MFA_AUTHORIZER` from `constant` to `immutable` constructor arg |
-| Hardening (S4) | `_storeDeposit` rejects dual-zero pubKey20 + recipient |
-| Bug fix | `_withdrawDeposit` L2ECO branch was sending to `senderAddress`; fixed to `_recipientAddress` |
-| ZkSync | All raw IL2ECO calls switched to SafeERC20 |
-| ZkSync | Explicit `override(IERC165)` on `supportsInterface` |
-| Modern | Named imports throughout |
-| Modern | Pragma pinned to `0.8.26` |
-
-## Test coverage
-
-| Suite | File |
-|---|---|
-| Vendored upstream tests | `test/envelope/EnvelopeVault.t.sol`, `Deposit.t.sol`, `SigWithdraw.t.sol`, `SenderWithdraw.t.sol`, `MFA.t.sol`, `RecipientBound.t.sol`, `Integration.t.sol`, `EnvelopeGasless.t.sol` |
-| Hardening (S1–S4 + T1–T4 + T5) | `test/envelope/EnvelopeHardening.t.sol` |
-| Edge cases | `test/envelope/EnvelopeEdgeCases.t.sol` |
-
-90 tests pass.
+Core coverage lives in `test/envelope/`. Gasless fee and vault-side paymaster eligibility tests live in `test/envelope/Gasless.t.sol`; ZkSync paymaster validation tests live in `test/paymasters/EnvelopePaymaster.t.sol`.
