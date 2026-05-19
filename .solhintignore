@@ -6,4 +6,3 @@
 # Our own code (EnvelopeApprovalPaymaster, anything authored in this repo)
 # is NOT in this list and remains lint-clean.
 src/envelope/V4/EnvelopeVault.sol
-src/envelope/V4/EnvelopeBatcher.sol

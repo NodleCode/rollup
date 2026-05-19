@@ -21,7 +21,6 @@ dotenv.config({ path: ".env-test" });
  *   - ENVELOPE_OWNER:          Owner/fee withdrawer. Defaults to deployer.
  *   - ENVELOPE_FEE_TOKEN:      ERC20 token used for service/gasless fees (e.g. NODL).
  *                            Defaults to 0x0 (non-zero fee authorizations disabled).
- *   - ENVELOPE_DEPLOY_BATCHER: "true"|"false". Default "true". Deploys EnvelopeBatcher.
  *   - ENVELOPE_DEPLOY_PAYMASTER: "true"|"false". Default "false". Deploys EnvelopePaymaster.
  *   - ENVELOPE_PAYMASTER_ADMIN: Admin for EnvelopePaymaster. Defaults to deployer.
  *   - ENVELOPE_PAYMASTER_WITHDRAWER: ETH withdrawer for EnvelopePaymaster. Defaults to deployer.
@@ -34,18 +33,17 @@ dotenv.config({ path: ".env-test" });
 module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const ZERO = "0x0000000000000000000000000000000000000000";
 
-  const mfaAuthorizer = process.env.ENVELOPE_MFA_AUTHORIZER ?? ZERO;
-  const envelopeOwner = process.env.ENVELOPE_OWNER ?? wallet.address;
-  const feeToken = process.env.ENVELOPE_FEE_TOKEN ?? ZERO;
-  const deployBatcher = (process.env.ENVELOPE_DEPLOY_BATCHER ?? "true").toLowerCase() === "true";
-  const deployPaymaster = (process.env.ENVELOPE_DEPLOY_PAYMASTER ?? "false").toLowerCase() === "true";
-  const paymasterAdmin = process.env.ENVELOPE_PAYMASTER_ADMIN ?? wallet.address;
-  const paymasterWithdrawer = process.env.ENVELOPE_PAYMASTER_WITHDRAWER ?? wallet.address;
-
   const rpcUrl = hre.network.config.url!;
   const provider = new Provider(rpcUrl);
   const wallet = new Wallet(process.env.DEPLOYER_PRIVATE_KEY!, provider);
   const deployer = new Deployer(hre, wallet);
+
+  const mfaAuthorizer = process.env.ENVELOPE_MFA_AUTHORIZER ?? ZERO;
+  const envelopeOwner = process.env.ENVELOPE_OWNER ?? wallet.address;
+  const feeToken = process.env.ENVELOPE_FEE_TOKEN ?? ZERO;
+  const deployPaymaster = (process.env.ENVELOPE_DEPLOY_PAYMASTER ?? "false").toLowerCase() === "true";
+  const paymasterAdmin = process.env.ENVELOPE_PAYMASTER_ADMIN ?? wallet.address;
+  const paymasterWithdrawer = process.env.ENVELOPE_PAYMASTER_WITHDRAWER ?? wallet.address;
 
   console.log("=== Deploying Envelope on ZkSync ===");
   console.log("Network:        ", hre.network.name);
@@ -53,7 +51,6 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   console.log("MFA Authorizer: ", mfaAuthorizer);
   console.log("Owner:          ", envelopeOwner);
   console.log("Fee Token:      ", feeToken);
-  console.log("Deploy Batcher: ", deployBatcher);
   console.log("Deploy Paymaster:", deployPaymaster);
   console.log("");
 
@@ -61,14 +58,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const vault = await deployContract(deployer, "EnvelopeVault", [mfaAuthorizer, envelopeOwner, feeToken]);
   const vaultAddr = await vault.getAddress();
 
-  // 2. Batcher — optional.
-  let batcherAddr: string | undefined;
-  if (deployBatcher) {
-    const batcher = await deployContract(deployer, "EnvelopeBatcher", []);
-    batcherAddr = await batcher.getAddress();
-  }
-
-  // 3. Paymaster — optional. Must be funded with ETH after deployment.
+  // 2. Paymaster — optional. Must be funded with ETH after deployment.
   let paymasterAddr: string | undefined;
   if (deployPaymaster) {
     const envelopePaymaster = await deployContract(deployer, "EnvelopePaymaster", [
@@ -82,7 +72,6 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   console.log("");
   console.log("=== Deployment Complete ===");
   console.log("EnvelopeVault:        ", vaultAddr);
-  if (batcherAddr) console.log("EnvelopeBatcher: ", batcherAddr);
   if (paymasterAddr) console.log("EnvelopePaymaster: ", paymasterAddr);
   console.log("");
 
@@ -97,19 +86,6 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
     });
   } catch (e: any) {
     console.log("Verification failed or already verified:", e.message);
-  }
-
-  if (batcherAddr) {
-    try {
-      console.log("Verifying EnvelopeBatcher...");
-      await hre.run("verify:verify", {
-        address: batcherAddr,
-        contract: "src/envelope/V4/EnvelopeBatcher.sol:EnvelopeBatcher",
-        constructorArguments: [],
-      });
-    } catch (e: any) {
-      console.log("Verification failed or already verified:", e.message);
-    }
   }
 
   if (paymasterAddr) {
@@ -128,7 +104,6 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   console.log("");
   console.log("=== Add these to .env-test: ===");
   console.log(`ENVELOPE_VAULT=${vaultAddr}`);
-  if (batcherAddr) console.log(`ENVELOPE_BATCHER=${batcherAddr}`);
   if (paymasterAddr) console.log(`ENVELOPE_PAYMASTER=${paymasterAddr}`);
 
   if (mfaAuthorizer === ZERO) {

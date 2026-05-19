@@ -71,6 +71,11 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     error FeeAuthorizationExpired();
     error WrongFeeAuthorizationSignature();
     error FeeTokenNotConfigured();
+    error ParametersLengthMismatch();
+    error InvalidTotalEtherSent();
+    error EthNotAcceptedForNonEthDeposit();
+    error Erc721BatchNotSupported();
+    error UnsupportedRaffleContractType();
 
     // ── Data Structures ──────────────────────────────────────────────────────────
 
@@ -323,6 +328,171 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         );
     }
 
+    /// @notice Create many same-shape deposits in one transaction.
+    /// @dev The caller remains the recorded sender for every deposit and keeps reclaim rights.
+    ///      ERC-721 is intentionally excluded here because each NFT needs a distinct tokenId.
+    function makeBatchDeposit(
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256 _amount,
+        uint256 _tokenId,
+        address[] calldata _pubKeys20
+    ) external payable nonReentrant returns (uint256[] memory) {
+        uint256 totalAmount = _amount * _pubKeys20.length;
+        _pullUniformBatchAssets(msg.sender, _tokenAddress, _contractType, totalAmount, _tokenId);
+
+        uint256[] memory depositIndexes = new uint256[](_pubKeys20.length);
+        for (uint256 i = 0; i < _pubKeys20.length; ++i) {
+            depositIndexes[i] = _storeDeposit(
+                _tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender, false, address(0), 0, 0, 0
+            );
+        }
+        return depositIndexes;
+    }
+
+    /// @notice Same as makeBatchDeposit, but avoids allocating and returning the indexes array.
+    function makeBatchDepositNoReturn(
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256 _amount,
+        uint256 _tokenId,
+        address[] calldata _pubKeys20
+    ) external payable nonReentrant {
+        uint256 totalAmount = _amount * _pubKeys20.length;
+        _pullUniformBatchAssets(msg.sender, _tokenAddress, _contractType, totalAmount, _tokenId);
+
+        for (uint256 i = 0; i < _pubKeys20.length; ++i) {
+            _storeDeposit(
+                _tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender, false, address(0), 0, 0, 0
+            );
+        }
+    }
+
+    /// @notice Create a heterogeneous batch of no-fee deposits.
+    /// @dev Supports ETH, ERC-20, ERC-721, and ERC-1155. Recipient binding is intentionally
+    ///      left to makeBatchCustomDepositWithFees via DepositRequest[].
+    function makeBatchCustomDeposit(
+        address[] calldata _tokenAddresses,
+        uint8[] calldata _contractTypes,
+        uint256[] calldata _amounts,
+        uint256[] calldata _tokenIds,
+        address[] calldata _pubKeys20,
+        bool[] calldata _withMFAs
+    ) external payable nonReentrant returns (uint256[] memory) {
+        _validateBatchArrayLengths(
+            _tokenAddresses.length,
+            _contractTypes.length,
+            _amounts.length,
+            _tokenIds.length,
+            _pubKeys20.length,
+            _withMFAs.length
+        );
+
+        uint256 expectedEther;
+        for (uint256 i = 0; i < _amounts.length; ++i) {
+            if (_contractTypes[i] > 3) revert InvalidContractType();
+            if (_contractTypes[i] == 0) expectedEther += _amounts[i];
+        }
+        if (msg.value != expectedEther) revert InvalidTotalEtherSent();
+
+        uint256[] memory depositIndexes = new uint256[](_amounts.length);
+        for (uint256 i = 0; i < _amounts.length; ++i) {
+            uint256 amount = _pullTokensViaApprovalFrom(
+                msg.sender,
+                _tokenAddresses[i],
+                _contractTypes[i],
+                _amounts[i],
+                _tokenIds[i],
+                _contractTypes[i] == 0 ? _amounts[i] : 0
+            );
+            depositIndexes[i] = _storeDeposit(
+                _tokenAddresses[i],
+                _contractTypes[i],
+                amount,
+                _tokenIds[i],
+                _pubKeys20[i],
+                msg.sender,
+                _withMFAs[i],
+                address(0),
+                0,
+                0,
+                0
+            );
+        }
+        return depositIndexes;
+    }
+
+    /// @notice Create a heterogeneous batch of deposits with backend-authorized fees.
+    /// @dev Fee authorizations are signed for the real caller because batching is vault-native.
+    function makeBatchCustomDepositWithFees(
+        DepositRequest[] calldata _requests,
+        FeeAuthorization[] calldata _feeAuthorizations
+    ) external payable nonReentrant returns (uint256[] memory) {
+        if (_requests.length != _feeAuthorizations.length) {
+            revert ParametersLengthMismatch();
+        }
+
+        uint256 expectedEther;
+        for (uint256 i = 0; i < _requests.length; ++i) {
+            if (_requests[i].contractType > 3) revert InvalidContractType();
+            if (_requests[i].contractType == 0) expectedEther += _requests[i].amount;
+            _verifyFeeAuthorization(_requests[i], _feeAuthorizations[i]);
+        }
+        if (msg.value != expectedEther) revert InvalidTotalEtherSent();
+
+        uint256[] memory depositIndexes = new uint256[](_requests.length);
+        for (uint256 i = 0; i < _requests.length; ++i) {
+            DepositRequest calldata request = _requests[i];
+            FeeAuthorization calldata feeAuthorization = _feeAuthorizations[i];
+            uint256 amount = _pullTokensViaApprovalFrom(
+                msg.sender,
+                request.tokenAddress,
+                request.contractType,
+                request.amount,
+                request.tokenId,
+                request.contractType == 0 ? request.amount : 0
+            );
+
+            uint256 index = deposits.length;
+            _collectDepositFees(index, msg.sender, feeAuthorization.serviceFee, feeAuthorization.gaslessFee);
+            depositIndexes[i] = _storeDeposit(
+                request.tokenAddress,
+                request.contractType,
+                amount,
+                request.tokenId,
+                request.pubKey20,
+                request.onBehalfOf,
+                request.withMFA,
+                request.recipient,
+                request.reclaimableAfter,
+                feeAuthorization.serviceFee,
+                feeAuthorization.gaslessFee
+            );
+        }
+
+        return depositIndexes;
+    }
+
+    /// @notice Create raffle-style ETH or ERC-20 deposits sharing one pubKey20 and different amounts.
+    function makeBatchDepositRaffle(
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256[] calldata _amounts,
+        address _pubKey20
+    ) external payable nonReentrant returns (uint256[] memory) {
+        return _makeBatchDepositRaffle(_tokenAddress, _contractType, _amounts, _pubKey20, false);
+    }
+
+    /// @notice Create MFA-gated raffle-style ETH or ERC-20 deposits sharing one pubKey20.
+    function makeBatchMFADepositRaffle(
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256[] calldata _amounts,
+        address _pubKey20
+    ) external payable nonReentrant returns (uint256[] memory) {
+        return _makeBatchDepositRaffle(_tokenAddress, _contractType, _amounts, _pubKey20, true);
+    }
+
     // ══════════════════════════════════════════════════════════════════════════════
     // Withdrawal Functions
     // ══════════════════════════════════════════════════════════════════════════════
@@ -494,14 +664,14 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
 
     function getAllDepositsForAddress(address _address) external view returns (Deposit[] memory) {
         uint256 count = 0;
-        for (uint256 i = 0; i < deposits.length; i++) {
+        for (uint256 i = 0; i < deposits.length; ++i) {
             if (deposits[i].senderAddress == _address) {
                 count++;
             }
         }
         Deposit[] memory _deposits = new Deposit[](count);
         count = 0;
-        for (uint256 i = 0; i < deposits.length; i++) {
+        for (uint256 i = 0; i < deposits.length; ++i) {
             if (deposits[i].senderAddress == _address) {
                 _deposits[count] = deposits[i];
                 count++;
@@ -682,21 +852,105 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         return recovered;
     }
 
+    function _validateBatchArrayLengths(
+        uint256 _tokenAddressesLength,
+        uint256 _contractTypesLength,
+        uint256 _amountsLength,
+        uint256 _tokenIdsLength,
+        uint256 _pubKeys20Length,
+        uint256 _withMFAsLength
+    ) internal pure {
+        if (
+            _tokenAddressesLength != _pubKeys20Length || _contractTypesLength != _pubKeys20Length
+                || _amountsLength != _pubKeys20Length || _tokenIdsLength != _pubKeys20Length
+                || _withMFAsLength != _pubKeys20Length
+        ) revert ParametersLengthMismatch();
+    }
+
+    function _pullUniformBatchAssets(
+        address _from,
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256 _totalAmount,
+        uint256 _tokenId
+    ) internal {
+        if (_contractType == 0) {
+            if (msg.value != _totalAmount) revert InvalidTotalEtherSent();
+            return;
+        }
+        if (msg.value != 0) revert EthNotAcceptedForNonEthDeposit();
+
+        if (_contractType == 1) {
+            if (_totalAmount > 0) IERC20(_tokenAddress).safeTransferFrom(_from, address(this), _totalAmount);
+        } else if (_contractType == 2) {
+            revert Erc721BatchNotSupported();
+        } else if (_contractType == 3) {
+            if (_totalAmount > 0) {
+                IERC1155(_tokenAddress).safeTransferFrom(_from, address(this), _tokenId, _totalAmount, "");
+            }
+        } else {
+            revert InvalidContractType();
+        }
+    }
+
+    function _makeBatchDepositRaffle(
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256[] calldata _amounts,
+        address _pubKey20,
+        bool _requiresMFA
+    ) internal returns (uint256[] memory) {
+        if (_contractType != 0 && _contractType != 1) {
+            revert UnsupportedRaffleContractType();
+        }
+
+        uint256 totalAmount;
+        for (uint256 i = 0; i < _amounts.length; ++i) {
+            totalAmount += _amounts[i];
+        }
+
+        if (_contractType == 0) {
+            if (msg.value != totalAmount) revert InvalidTotalEtherSent();
+        } else {
+            if (msg.value != 0) revert EthNotAcceptedForNonEthDeposit();
+            if (totalAmount > 0) IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), totalAmount);
+        }
+
+        uint256[] memory depositIndexes = new uint256[](_amounts.length);
+        for (uint256 i = 0; i < _amounts.length; ++i) {
+            depositIndexes[i] = _storeDeposit(
+                _tokenAddress, _contractType, _amounts[i], 0, _pubKey20, msg.sender, _requiresMFA, address(0), 0, 0, 0
+            );
+        }
+        return depositIndexes;
+    }
+
     function _pullTokensViaApproval(address _tokenAddress, uint8 _contractType, uint256 _amount, uint256 _tokenId)
         internal
         returns (uint256)
     {
+        return _pullTokensViaApprovalFrom(msg.sender, _tokenAddress, _contractType, _amount, _tokenId, msg.value);
+    }
+
+    function _pullTokensViaApprovalFrom(
+        address _from,
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256 _amount,
+        uint256 _tokenId,
+        uint256 _ethAmount
+    ) internal returns (uint256) {
         if (_contractType > 3) revert InvalidContractType();
 
         if (_contractType == 0) {
-            if (_amount != msg.value) revert WrongEthAmount();
+            if (_amount != _ethAmount) revert WrongEthAmount();
         } else if (_contractType == 1) {
-            IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), _amount);
+            IERC20(_tokenAddress).safeTransferFrom(_from, address(this), _amount);
         } else if (_contractType == 2) {
             if (_amount != 1) revert Erc721AmountMustBeOne();
-            IERC721(_tokenAddress).safeTransferFrom(msg.sender, address(this), _tokenId, "Internal transfer");
+            IERC721(_tokenAddress).safeTransferFrom(_from, address(this), _tokenId, "Internal transfer");
         } else if (_contractType == 3) {
-            IERC1155(_tokenAddress).safeTransferFrom(msg.sender, address(this), _tokenId, _amount, "Internal transfer");
+            IERC1155(_tokenAddress).safeTransferFrom(_from, address(this), _tokenId, _amount, "Internal transfer");
         }
 
         return _amount;

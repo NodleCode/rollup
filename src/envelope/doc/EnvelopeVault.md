@@ -54,8 +54,20 @@ struct Deposit {
 | `makeSelflessMFADeposit(..., onBehalfOf)` | Selfless deposit plus MFA requirement. |
 | `makeCustomDeposit(...)` | Canonical no-fee entry point with MFA flag, optional recipient binding, and optional reclaim delay. |
 | `makeCustomDepositWithFees(request, feeAuthorization)` | Canonical paid-service entry point. Pulls the gift asset, verifies backend-signed fees, collects `feeToken`, and records gasless eligibility when `gaslessFee > 0`. |
+| `makeBatchDeposit(...)` | Creates many same-shape no-fee deposits in one transaction. ETH, ERC-20, and ERC-1155 are supported; ERC-721 uses the heterogeneous batch path. |
+| `makeBatchDepositNoReturn(...)` | Same as `makeBatchDeposit` but skips allocating/returning the deposit indexes array. |
+| `makeBatchCustomDeposit(...)` | Creates a heterogeneous no-fee batch and supports ETH, ERC-20, ERC-721, and ERC-1155. |
+| `makeBatchCustomDepositWithFees(requests, feeAuthorizations)` | Creates a heterogeneous paid/gasless-ready batch using the same `DepositRequest` and `FeeAuthorization` structs as the single-deposit flow. |
+| `makeBatchDepositRaffle(...)` | Creates ETH or ERC-20 raffle-style deposits with different amounts and one shared `pubKey20`. |
+| `makeBatchMFADepositRaffle(...)` | Same as raffle batching, but every deposit requires MFA at claim time. |
 
 `FeeAuthorization` covers the full deposit intent, the fee payer (`msg.sender`), the two fee amounts, and a backend-selected deadline. `deadline == 0` means no expiry. If either fee is non-zero, the signature must recover to `mfaAuthorizer`.
+
+## Vault-Native Batching
+
+Batching is implemented directly in `EnvelopeVault` rather than a separate companion contract. This keeps the real sender as `msg.sender`, so reclaim rights and backend fee signatures use the same identity as single deposits. It also removes the extra custody hop where a batcher temporarily holds tokens before forwarding them to the vault.
+
+The batching functions share the same storage and events as single deposits. Same-shape batches aggregate ERC-20/ERC-1155 pulls for efficiency; heterogeneous batches pull each asset separately and can include ERC-721 token IDs. Batched fee authorizations are signed for the caller of the vault, not an intermediate contract.
 
 ## Withdraw And Claim Functions
 

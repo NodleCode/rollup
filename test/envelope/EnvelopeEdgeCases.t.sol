@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.26;
 
-// Edge-case coverage for EnvelopeVault / EnvelopeBatcher — gates the vendored happy-path
-// tests don't exercise directly. Names follow the repo's test_RevertWhen_* / test_*
+// Edge-case coverage for EnvelopeVault behavior the happy-path tests don't exercise directly.
+// Names follow the repo's test_RevertWhen_* / test_*
 // convention. Each test is single-purpose; comments explain the *why*, not the *what*.
 
 import {Test} from "forge-std/Test.sol";
 import {EnvelopeVault} from "../../src/envelope/V4/EnvelopeVault.sol";
-import {EnvelopeBatcher} from "../../src/envelope/V4/EnvelopeBatcher.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";
@@ -49,7 +48,6 @@ contract ReentrantToken is ERC20Mock {
 
 contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     EnvelopeVault public vault;
-    EnvelopeBatcher public batcher;
     ERC20Mock public erc20;
     ERC721Mock public erc721;
     ERC1155Mock public erc1155;
@@ -64,7 +62,6 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     function setUp() public {
         LINK_PUBKEY20 = vm.addr(LINK_PRIV);
         vault = new EnvelopeVault(address(0), address(this), address(0));
-        batcher = new EnvelopeBatcher();
         erc20 = new ERC20Mock();
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
@@ -78,12 +75,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    vault.ENVELOPE_SALT(),
-                    block.chainid,
-                    address(vault),
-                    idx,
-                    recipient,
-                    vault.ANYONE_WITHDRAWAL_MODE()
+                    vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, recipient, vault.ANYONE_WITHDRAWAL_MODE()
                 )
             )
         );
@@ -150,12 +142,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    vault.ENVELOPE_SALT(),
-                    block.chainid,
-                    address(vault),
-                    idx,
-                    ALICE,
-                    vault.RECIPIENT_WITHDRAWAL_MODE()
+                    vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, ALICE, vault.RECIPIENT_WITHDRAWAL_MODE()
                 )
             )
         );
@@ -251,13 +238,15 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         assertTrue(evil.attempted(), "reentrancy attempt should have run");
     }
 
-    // ── EnvelopeBatcher input validation ───────────────────────────────────
+    // ── Vault-native batch input validation ───────────────────────────────────
 
     function test_RevertWhen_BatchEthAmountMismatch() public {
         address[] memory pubKeys = new address[](3);
-        for (uint256 i = 0; i < 3; i++) pubKeys[i] = LINK_PUBKEY20;
-        vm.expectRevert("INVALID TOTAL ETHER SENT");
-        batcher.batchMakeDeposit{value: 1 ether}(address(vault), address(0), 0, 1 ether, 0, pubKeys);
+        for (uint256 i = 0; i < 3; i++) {
+            pubKeys[i] = LINK_PUBKEY20;
+        }
+        vm.expectRevert(EnvelopeVault.InvalidTotalEtherSent.selector);
+        vault.makeBatchDeposit{value: 1 ether}(address(0), 0, 1 ether, 0, pubKeys);
         // expected 3 * 1 ether, sent 1 ether
     }
 
@@ -270,53 +259,53 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         address[] memory pks = new address[](2);
         bool[] memory mfa = new bool[](3); // wrong length
 
-        vm.expectRevert("PARAMETERS LENGTH MISMATCH");
-        batcher.batchMakeDepositArbitrary(address(vault), tokens, types, amounts, ids, pks, mfa);
+        vm.expectRevert(EnvelopeVault.ParametersLengthMismatch.selector);
+        vault.makeBatchCustomDeposit(tokens, types, amounts, ids, pks, mfa);
     }
 
-    // batchMakeDepositNoReturn — ETH path must require exact total, non-ETH path must reject msg.value.
+    // makeBatchDepositNoReturn — ETH path must require exact total, non-ETH path must reject msg.value.
 
     function test_BatchNoReturnEth_HappyPath() public {
         address[] memory pubKeys = new address[](3);
-        for (uint256 i = 0; i < 3; i++) pubKeys[i] = LINK_PUBKEY20;
+        for (uint256 i = 0; i < 3; i++) {
+            pubKeys[i] = LINK_PUBKEY20;
+        }
 
-        batcher.batchMakeDepositNoReturn{value: 3 ether}(
-            address(vault), address(0), 0, 1 ether, 0, pubKeys
-        );
+        vault.makeBatchDepositNoReturn{value: 3 ether}(address(0), 0, 1 ether, 0, pubKeys);
         assertEq(vault.getDepositCount(), 3);
     }
 
     function test_RevertWhen_BatchNoReturnEthAmountMismatch() public {
         address[] memory pubKeys = new address[](3);
-        for (uint256 i = 0; i < 3; i++) pubKeys[i] = LINK_PUBKEY20;
-        vm.expectRevert("INVALID TOTAL ETHER SENT");
-        batcher.batchMakeDepositNoReturn{value: 1 ether}(
-            address(vault), address(0), 0, 1 ether, 0, pubKeys
-        );
+        for (uint256 i = 0; i < 3; i++) {
+            pubKeys[i] = LINK_PUBKEY20;
+        }
+        vm.expectRevert(EnvelopeVault.InvalidTotalEtherSent.selector);
+        vault.makeBatchDepositNoReturn{value: 1 ether}(address(0), 0, 1 ether, 0, pubKeys);
     }
 
     function test_RevertWhen_BatchNoReturnEthSentForErc20() public {
         // ERC-20 path must reject msg.value — would otherwise strand dust in the vault.
         erc20.mint(address(this), 1000);
-        erc20.approve(address(batcher), 1000);
+        erc20.approve(address(vault), 1000);
         address[] memory pubKeys = new address[](2);
-        for (uint256 i = 0; i < 2; i++) pubKeys[i] = LINK_PUBKEY20;
-        vm.expectRevert("ETH NOT ACCEPTED FOR NON-ETH DEPOSIT");
-        batcher.batchMakeDepositNoReturn{value: 1 wei}(
-            address(vault), address(erc20), 1, 100, 0, pubKeys
-        );
+        for (uint256 i = 0; i < 2; i++) {
+            pubKeys[i] = LINK_PUBKEY20;
+        }
+        vm.expectRevert(EnvelopeVault.EthNotAcceptedForNonEthDeposit.selector);
+        vault.makeBatchDepositNoReturn{value: 1 wei}(address(erc20), 1, 100, 0, pubKeys);
     }
 
     function test_RevertWhen_BatchRaffleErc721NotSupported() public {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = 1;
-        vm.expectRevert("ONLY ETH AND ERC20 RAFFLES ARE SUPPORTED");
-        batcher.batchMakeDepositRaffle(address(vault), address(erc721), 2, amounts, LINK_PUBKEY20);
+        vm.expectRevert(EnvelopeVault.UnsupportedRaffleContractType.selector);
+        vault.makeBatchDepositRaffle(address(erc721), 2, amounts, LINK_PUBKEY20);
     }
 
     function test_BatchZeroLengthDepositsIsNoop() public {
         address[] memory pubKeys = new address[](0);
-        uint256[] memory ids = batcher.batchMakeDeposit(address(vault), address(0), 0, 0, 0, pubKeys);
+        uint256[] memory ids = vault.makeBatchDeposit(address(0), 0, 0, 0, pubKeys);
         assertEq(ids.length, 0);
         assertEq(vault.getDepositCount(), 0);
     }
