@@ -3,57 +3,72 @@ pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
 import "../../src/envelope/EnvelopeLinks.sol";
-import "./mocks/ERC20Mock.sol";
-import "./mocks/ERC721Mock.sol";
-import "./mocks/ERC1155Mock.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
-import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 contract TestSigWithdrawEther is Test {
     EnvelopeLinks public vault;
 
-    // sample inputs
-    address _pubkey20 = 0x8fd379246834eac74B8419FfdA202CF8051F7A03;
+    uint256 constant LINK_PRIV = 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+    address _pubkey20;
     address _recipientAddress = 0x6B3751c5b04Aa818EA90115AA06a4D9A36A16f02;
-    bytes public signatureAnybody =
-        hex"02a37d0548c14c6b07eba4ef1438eb946cdada4f481164755129eb3725f7e8c13d7c052308e73314338f4d484a5f4aef20c7519a1dbc283e4826253b742817241c";
-    bytes public signatureRecipient =
-        hex"364c17bca8823977b29b7646c954353996f363549f08ce3943969171c050f0d74006eabb597df680e9e4229631f473bfbedf995336a03d2fd3be7f1fff22d2511b";
 
-    receive() external payable {} // necessary to receive ether
+    receive() external payable {}
 
     function setUp() public {
-        console.log("Setting up test");
         vault = new EnvelopeLinks(address(0), address(this), address(0));
+        _pubkey20 = vm.addr(LINK_PRIV);
     }
 
-    // test sender withdrawal of ETH
+    function _signOpen(uint256 idx, address recipient) internal view returns (bytes memory) {
+        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
+            keccak256(
+                abi.encodePacked(vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, recipient, vault.OPEN_CLAIM_MODE())
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIV, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _signBound(uint256 idx, address recipient) internal view returns (bytes memory) {
+        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
+            keccak256(
+                abi.encodePacked(vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, recipient, vault.BOUND_CLAIM_MODE())
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIV, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
     function testSigWithdrawEther(uint64 amount) public {
         vm.assume(amount > 0);
         uint256 depositIdx = vault.createLink{value: amount}(address(0), 0, amount, 0, _pubkey20);
+        bytes memory sigAnybody = _signOpen(depositIdx, _recipientAddress);
 
-        // Can't use withdrawDepositAsRecipient
-        vm.expectRevert(EnvelopeLinks.NotTheRecipient.selector);
-        vault.claimAsBoundRecipient(depositIdx, _recipientAddress, signatureAnybody);
+        // Can't use claimAsBoundRecipient on unbound link
+        vm.prank(_recipientAddress);
+        vm.expectRevert(EnvelopeLinks.LinkNotRecipientBound.selector);
+        vault.claimAsBoundRecipient(depositIdx, _recipientAddress, sigAnybody);
 
-        // Anybody can withdraw
-        vault.claim(depositIdx, _recipientAddress, signatureAnybody);
+        // Anybody can withdraw with open-mode signature
+        vault.claim(depositIdx, _recipientAddress, sigAnybody);
     }
 
     function testWithdrawDepositAsRecipient(uint64 amount) public {
         vm.assume(amount > 0);
-        uint256 depositIdx = vault.createLink{value: amount}(address(0), 0, amount, 0, _pubkey20);
+        uint256 depositIdx = vault.createCustomLink{value: amount}(
+            address(0), 0, amount, 0, _pubkey20, address(this), false, _recipientAddress, 0
+        );
+        bytes memory sigBound = _signBound(depositIdx, _recipientAddress);
 
-        // Can't use pure withdrawDeposit
+        // Can't use open claim with bound-mode signature
         vm.expectRevert(EnvelopeLinks.WrongSignature.selector);
-        vault.claim(depositIdx, _recipientAddress, signatureRecipient);
+        vault.claim(depositIdx, _recipientAddress, sigBound);
 
-        // Only the recipient is able to withdraw via withdrawDepositAsRecipient
+        // Non-recipient caller is rejected
         vm.expectRevert(EnvelopeLinks.NotTheRecipient.selector);
-        vault.claimAsBoundRecipient(depositIdx, _recipientAddress, signatureRecipient);
+        vault.claimAsBoundRecipient(depositIdx, _recipientAddress, sigBound);
 
-        vm.prank(_recipientAddress); // Withdraw!
-        vault.claimAsBoundRecipient(depositIdx, _recipientAddress, signatureRecipient);
+        vm.prank(_recipientAddress);
+        vault.claimAsBoundRecipient(depositIdx, _recipientAddress, sigBound);
     }
 }

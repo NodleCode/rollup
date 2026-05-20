@@ -200,11 +200,51 @@ constructor(address mfaAuthorizer, address owner, address feeToken)
 
 | Param           | Purpose                                                                                                                                                             |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mfaAuthorizer` | Backend signer for MFA claim approvals and link-creation-time fee authorizations. `address(0)` disables non-zero fee authorizations and makes MFA withdrawals fail. |
-| `owner`         | Owns the vault and can withdraw accumulated fees.                                                                                                                   |
+| `mfaAuthorizer` | Backend signer for MFA claim approvals and link-creation-time fee authorizations. `address(0)` disables non-zero fee authorizations and makes MFA withdrawals fail. Rotatable by owner via `setMfaAuthorizer`. |
+| `owner`         | Owns the vault, can withdraw accumulated fees, and rotate the `mfaAuthorizer`.                                                                                      |
 | `feeToken`      | ERC-20 used for Nodle service and gasless sponsorship fees, for example NODL. `address(0)` permits only zero-fee deposits.                                          |
 
-The constructor also sets the EIP-712 domain separator used by the vault-side validation helpers.
+## Owner Functions
+
+| Function                            | Purpose                                                                                  |
+| ----------------------------------- | ---------------------------------------------------------------------------------------- |
+| `setMfaAuthorizer(address)`         | Rotate the MFA/fee-authorization signer. Invalidates all in-flight signatures from the old key. |
+| `withdrawFees(address tokenAddress)`| Withdraw accumulated service and gasless fees for a given token.                         |
+
+## Security Properties
+
+### Fee-On-Transfer Token Safety
+
+For ERC-20 deposits, the vault measures the actual `balanceOf` delta rather than trusting the requested `amount`. This prevents insolvency when fee-on-transfer or rebasing tokens are deposited. The recorded `link.asset.amount` reflects what the vault actually received and can transfer back.
+
+For raffle-style links (which have per-link variable amounts), a fee-on-transfer token will cause the deposit to revert because the vault asserts the received total matches the requested total.
+
+### Fee Authorization Replay Protection
+
+Each `FeeAuthorization` signature can only be used once. The vault tracks consumed authorizations via `usedFeeAuthorizations[keccak256(signature)]` and reverts with `FeeAuthorizationAlreadyUsed` on replay attempts.
+
+### Recipient Validation
+
+- Claims to `address(0)` are rejected with `ZeroRecipientAddress`.
+- `claimAsBoundRecipient` reverts with `LinkNotRecipientBound` if the link has no stored recipient, preventing misuse of the bound-mode signature on open links.
+
+### MFA Authorizer Rotation
+
+The `mfaAuthorizer` is mutable (not immutable). In case of backend key compromise, the owner can rotate the signer immediately via `setMfaAuthorizer`. All in-flight MFA and fee authorization signatures from the old key become invalid after rotation.
+
+### Unsupported Token Types
+
+The following token types are **not supported** and should not be deposited:
+
+- **Rebasing tokens** (e.g., stETH, AMPL): balance changes between deposit and claim may cause under/overpayment.
+- **Tokens with transfer hooks that modify balances** beyond a simple fee deduction.
+- **ERC-777 tokens**: the vault does not implement `tokensReceived` and relies on `nonReentrant` guards.
+
+ERC-20 tokens that charge a fixed transfer fee (e.g., USDT on some chains) are supported — the vault records the actual received amount.
+
+### View-Only Functions (Off-Chain Only)
+
+`getLinkIndexesCreatedBy` and `getAllLinkIndexes` iterate over the entire links array. These are O(n) and intended for off-chain use only. On-chain callers will encounter out-of-gas for large link counts.
 
 ## Deposit Model
 

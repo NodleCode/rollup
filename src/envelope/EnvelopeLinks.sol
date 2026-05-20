@@ -44,6 +44,11 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     error EthNotAcceptedForNonEthLink();
     error Erc721BatchNotSupported();
     error UnsupportedRaffleContractType();
+    error InsufficientTokensReceived();
+    error ZeroRecipientAddress();
+    error LinkNotRecipientBound();
+    error FeeAuthorizationAlreadyUsed();
+    error MfaAuthorizerIsZero();
 
     // ── Data Structures ──────────────────────────────────────────────────────────
 
@@ -111,21 +116,9 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     bytes32 public constant OPEN_CLAIM_MODE = 0x0000000000000000000000000000000000000000000000000000000000000000; // default. Any address can trigger the withdrawal function
     bytes32 public constant BOUND_CLAIM_MODE = 0x2bb5bef2b248d3edba501ad918c3ab524cce2aea54d4c914414e1c4401dc4ff4; // keccak256("only recipient") - only the signed recipient can trigger the withdrawal function
 
-    bytes32 public DOMAIN_SEPARATOR; // initialized in the constructor
-
-    bytes32 public constant EIP712DOMAIN_TYPEHASH =
-        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-
-    /// @notice Address authorized to issue MFA signatures gating claimWithMFA calls.
-    /// @dev Configurable per deployment. Address(0) disables MFA — claimWithMFA will revert.
-    address public immutable mfaAuthorizer;
-
-    struct EIP712Domain {
-        string name;
-        string version;
-        uint256 chainId;
-        address verifyingContract;
-    }
+    /// @notice Address authorized to issue MFA signatures gating claimWithMFA calls and fee authorizations.
+    /// @dev Rotatable by owner. Address(0) disables MFA — claimWithMFA will revert.
+    address public mfaAuthorizer;
 
     Link[] internal links; // array of links
 
@@ -135,6 +128,9 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     /// @notice Accumulated fees per token address (address(0) for ETH; feeToken for link-creation fees).
     mapping(address => uint256) public accumulatedFees;
 
+    /// @notice Tracks consumed fee authorizations to prevent replay.
+    mapping(bytes32 => bool) public usedFeeAuthorizations;
+
     // events
     event LinkCreated(uint256 indexed _index, uint8 indexed _contractType, uint256 _amount, address indexed _creator);
     event LinkRedeemed(
@@ -142,30 +138,14 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     );
     event FeeCollected(uint256 indexed _index, address indexed tokenAddress, uint256 serviceFee, uint256 gaslessFee);
     event FeesWithdrawn(address indexed tokenAddress, uint256 amount);
-    event MessageEvent(string message);
+    event MfaAuthorizerUpdated(address indexed oldAuthorizer, address indexed newAuthorizer);
 
     /// @param _mfaAuthorizer address authorized to sign backend fee and MFA approvals (use address(0) to disable).
     /// @param _owner initial owner of the contract (receives accumulated fees).
     /// @param _feeToken ERC-20 token used for fees; address(0) disables non-zero fee authorizations.
     constructor(address _mfaAuthorizer, address _owner, address _feeToken) Ownable(_owner) {
-        emit MessageEvent("Hello World, have a nutty day!");
         mfaAuthorizer = _mfaAuthorizer;
         feeToken = IERC20(_feeToken);
-        DOMAIN_SEPARATOR = hash(
-            EIP712Domain({name: "Envelope", version: "4.4", chainId: block.chainid, verifyingContract: address(this)})
-        );
-    }
-
-    function hash(EIP712Domain memory eip712Domain) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                EIP712DOMAIN_TYPEHASH,
-                keccak256(bytes(eip712Domain.name)),
-                keccak256(bytes(eip712Domain.version)),
-                eip712Domain.chainId,
-                eip712Domain.verifyingContract
-            )
-        );
     }
 
     /**
@@ -322,14 +302,15 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         address[] calldata _claimKeys
     ) external payable nonReentrant returns (uint256[] memory) {
         uint256 totalAmount = _amount * _claimKeys.length;
-        _pullUniformBatchAssets(msg.sender, _tokenAddress, _contractType, totalAmount, _tokenId);
+        uint256 actualTotal = _pullUniformBatchAssets(msg.sender, _tokenAddress, _contractType, totalAmount, _tokenId);
+        uint256 perLinkAmount = _claimKeys.length > 0 ? actualTotal / _claimKeys.length : 0;
 
         uint256[] memory linkIndexes = new uint256[](_claimKeys.length);
         for (uint256 i = 0; i < _claimKeys.length; ++i) {
             linkIndexes[i] = _storeLink(
                 _tokenAddress,
                 _contractType,
-                _amount,
+                perLinkAmount,
                 _tokenId,
                 _claimKeys[i],
                 msg.sender,
@@ -353,13 +334,14 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         address[] calldata _claimKeys
     ) external payable nonReentrant {
         uint256 totalAmount = _amount * _claimKeys.length;
-        _pullUniformBatchAssets(msg.sender, _tokenAddress, _contractType, totalAmount, _tokenId);
+        uint256 actualTotal = _pullUniformBatchAssets(msg.sender, _tokenAddress, _contractType, totalAmount, _tokenId);
+        uint256 perLinkAmount = _claimKeys.length > 0 ? actualTotal / _claimKeys.length : 0;
 
         for (uint256 i = 0; i < _claimKeys.length; ++i) {
             _storeLink(
                 _tokenAddress,
                 _contractType,
-                _amount,
+                perLinkAmount,
                 _tokenId,
                 _claimKeys[i],
                 msg.sender,
@@ -495,6 +477,8 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         returns (bool)
     {
         if (_recipientAddress != msg.sender) revert NotTheRecipient();
+        if (_index >= links.length) revert LinkIndexOutOfBounds();
+        if (links[_index].parties.recipient == address(0)) revert LinkNotRecipientBound();
         return _executeClaim(_index, _recipientAddress, BOUND_CLAIM_MODE, _signature, false);
     }
 
@@ -546,6 +530,15 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     // ══════════════════════════════════════════════════════════════════════════════
     // Owner Functions
     // ══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @notice Update the MFA authorizer address. Only callable by owner.
+     * @param _newAuthorizer new MFA signer address (address(0) disables MFA).
+     */
+    function setMfaAuthorizer(address _newAuthorizer) external onlyOwner {
+        emit MfaAuthorizerUpdated(mfaAuthorizer, _newAuthorizer);
+        mfaAuthorizer = _newAuthorizer;
+    }
 
     /**
      * @notice Withdraw accumulated fees for a given token. Only callable by owner.
@@ -665,6 +658,7 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256 _deadline,
         bytes memory _MFASignature
     ) internal view {
+        if (mfaAuthorizer == address(0)) revert MfaAuthorizerIsZero();
         // deadline == 0 means no expiry
         if (_deadline != 0 && block.timestamp > _deadline) revert MfaSignatureExpired();
 
@@ -682,6 +676,7 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         view
         returns (bool)
     {
+        if (mfaAuthorizer == address(0)) return false;
         if (_deadline != 0 && block.timestamp > _deadline) return false;
 
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
@@ -694,7 +689,6 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
 
     function _verifyFeeAuthorization(LinkRequest calldata _request, FeeAuthorization calldata _feeAuthorization)
         internal
-        view
     {
         uint256 totalFee = _feeAuthorization.serviceFee + _feeAuthorization.gaslessFee;
         if (totalFee == 0 && !_feeAuthorization.gaslessSponsored && _feeAuthorization.signature.length == 0) return;
@@ -704,6 +698,12 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         }
 
         bytes32 digest = _feeAuthorizationDigest(_request, _feeAuthorization, msg.sender);
+
+        // Replay protection: mark this authorization as consumed.
+        bytes32 authHash = keccak256(_feeAuthorization.signature);
+        if (usedFeeAuthorizations[authHash]) revert FeeAuthorizationAlreadyUsed();
+        usedFeeAuthorizations[authHash] = true;
+
         address authorizationSigner = getSigner(digest, _feeAuthorization.signature);
         if (authorizationSigner != mfaAuthorizer) revert WrongFeeAuthorizationSignature();
     }
@@ -863,6 +863,7 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         bytes memory _signature,
         bool _authorized
     ) internal view returns (bool) {
+        if (_recipientAddress == address(0)) return false;
         Link memory deposit = links[_index];
         if (deposit.status.redeemed) return false;
         if (deposit.status.requiresMFA && !_authorized) return false;
@@ -975,21 +976,27 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint8 _contractType,
         uint256 _totalAmount,
         uint256 _tokenId
-    ) internal {
+    ) internal returns (uint256) {
         if (_contractType == 0) {
             if (msg.value != _totalAmount) revert InvalidTotalEtherSent();
-            return;
+            return _totalAmount;
         }
         if (msg.value != 0) revert EthNotAcceptedForNonEthLink();
 
         if (_contractType == 1) {
-            if (_totalAmount > 0) IERC20(_tokenAddress).safeTransferFrom(_from, address(this), _totalAmount);
+            if (_totalAmount > 0) {
+                uint256 balanceBefore = IERC20(_tokenAddress).balanceOf(address(this));
+                IERC20(_tokenAddress).safeTransferFrom(_from, address(this), _totalAmount);
+                return IERC20(_tokenAddress).balanceOf(address(this)) - balanceBefore;
+            }
+            return 0;
         } else if (_contractType == 2) {
             revert Erc721BatchNotSupported();
         } else if (_contractType == 3) {
             if (_totalAmount > 0) {
                 IERC1155(_tokenAddress).safeTransferFrom(_from, address(this), _tokenId, _totalAmount, "");
             }
+            return _totalAmount;
         } else {
             revert InvalidContractType();
         }
@@ -1015,7 +1022,12 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
             if (msg.value != totalAmount) revert InvalidTotalEtherSent();
         } else {
             if (msg.value != 0) revert EthNotAcceptedForNonEthLink();
-            if (totalAmount > 0) IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), totalAmount);
+            if (totalAmount > 0) {
+                uint256 balanceBefore = IERC20(_tokenAddress).balanceOf(address(this));
+                IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), totalAmount);
+                uint256 actualReceived = IERC20(_tokenAddress).balanceOf(address(this)) - balanceBefore;
+                if (actualReceived < totalAmount) revert InsufficientTokensReceived();
+            }
         }
 
         uint256[] memory linkIndexes = new uint256[](_amounts.length);
@@ -1058,7 +1070,9 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         if (_contractType == 0) {
             if (_amount != _ethAmount) revert WrongEthAmount();
         } else if (_contractType == 1) {
+            uint256 balanceBefore = IERC20(_tokenAddress).balanceOf(address(this));
             IERC20(_tokenAddress).safeTransferFrom(_from, address(this), _amount);
+            _amount = IERC20(_tokenAddress).balanceOf(address(this)) - balanceBefore;
         } else if (_contractType == 2) {
             if (_amount != 1) revert Erc721AmountMustBeOne();
             IERC721(_tokenAddress).safeTransferFrom(_from, address(this), _tokenId, "Internal transfer");
@@ -1076,6 +1090,7 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         bytes memory _signature,
         bool _authorized
     ) internal returns (bool) {
+        if (_recipientAddress == address(0)) revert ZeroRecipientAddress();
         if (_index >= links.length) revert LinkIndexOutOfBounds();
         Link memory link = links[_index];
         if (link.status.redeemed) revert LinkAlreadyRedeemed();

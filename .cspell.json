@@ -16,6 +16,7 @@
     "src/swarms/doc/iso3166-2"
   ],
   "ignoreWords": [
+    "AMPL",
     "NODL",
     "Nodle",
     "depin",
