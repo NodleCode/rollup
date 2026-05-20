@@ -36,9 +36,9 @@ The paymaster does not keep per-gift state and does not price fees. Fee pricing,
 The paymaster delegates selector checks to the vault. The currently accepted operations are:
 
 - `withdrawDeposit`
-- `withdrawMFADeposit`
-- `withdrawDepositAsRecipient`
-- `withdrawDepositSender`
+- `claimWithMFA`
+- `claimAsBoundRecipient`
+- `reclaim`
 
 Approval-based paymaster flow is explicitly rejected.
 

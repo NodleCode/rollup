@@ -28,7 +28,7 @@ contract RecipientBoundTest is Test {
     }
 
     function testRecipientBoundDeposit() public {
-        uint256 depositIndex = vault.makeCustomDeposit(
+        uint256 depositIndex = vault.createCustomLink(
             address(testToken),
             1, // contract type - erc 20
             1000, // amount
@@ -44,9 +44,9 @@ contract RecipientBoundTest is Test {
 
         // Should not be able to withdraw to anybody except SAMPLE_ADDRESS
         vm.expectRevert(EnvelopeVault.WrongRecipient.selector);
-        vault.withdrawDeposit(depositIndex, address(this), bytes(""));
+        vault.claim(depositIndex, address(this), bytes(""));
 
-        vault.withdrawDeposit(depositIndex, SAMPLE_ADDRESS, bytes(""));
+        vault.claim(depositIndex, SAMPLE_ADDRESS, bytes(""));
         require(testToken.balanceOf(SAMPLE_ADDRESS) == 1000, "SAMPLE_ADDRESS SHOULD HAVE RECEIVED TOKENS!");
     }
 
@@ -54,7 +54,7 @@ contract RecipientBoundTest is Test {
      * Reclaim an address-bound deposit.
     */
     function testRecipientBoundReclaim() public {
-        uint256 depositIndex = vault.makeCustomDeposit(
+        uint256 depositIndex = vault.createCustomLink(
             address(testToken),
             1, // contract type - erc 20
             1000, // amount
@@ -69,10 +69,10 @@ contract RecipientBoundTest is Test {
 
         // Try to reclaim, but it's too early
         vm.expectRevert(EnvelopeVault.TooEarlyToReclaim.selector);
-        vault.withdrawDepositSender(depositIndex);
+        vault.reclaim(depositIndex);
 
         vm.warp(block.timestamp + 11); // advance past reclaimableAfter
-        vault.withdrawDepositSender(depositIndex);
+        vault.reclaim(depositIndex);
         require(testToken.balanceOf(address(this)) == 1000, "WAS NOT REFUNDED!");
     }
 }

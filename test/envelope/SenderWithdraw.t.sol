@@ -24,10 +24,10 @@ contract TestSenderWithdrawEther is Test {
 
     function testSenderWithdrawEther(uint64 amount) public {
         vm.assume(amount > 0);
-        uint256 depositIdx = vault.makeDeposit{value: amount}(address(0), 0, amount, 0, PUBKEY20);
+        uint256 depositIdx = vault.createLink{value: amount}(address(0), 0, amount, 0, PUBKEY20);
 
         // Withdraw the deposit
-        vault.withdrawDepositSender(depositIdx);
+        vault.reclaim(depositIdx);
     }
 }
 
@@ -55,12 +55,12 @@ contract TestSenderWithdrawErc20 is Test {
 
         // Make a deposit
         uint256 amount = 2 ** 128;
-        _depositIdx = vault.makeDeposit(address(testToken), 1, amount, 0, PUBKEY20);
+        _depositIdx = vault.createLink(address(testToken), 1, amount, 0, PUBKEY20);
     }
 
     function testSenderWithdrawErc20() public {
         // Withdraw the deposit
-        vault.withdrawDepositSender(_depositIdx);
+        vault.reclaim(_depositIdx);
     }
 }
 
@@ -88,12 +88,12 @@ contract TestSenderWithdrawErc721 is Test, ERC721Holder {
         testToken.approve(address(vault), _tokenId);
 
         // Make a deposit
-        _depositIdx = vault.makeDeposit(address(testToken), 2, 1, _tokenId, PUBKEY20);
+        _depositIdx = vault.createLink(address(testToken), 2, 1, _tokenId, PUBKEY20);
     }
 
     function testSenderWithdrawErc721() public {
         // Withdraw the deposit
-        vault.withdrawDepositSender(_depositIdx);
+        vault.reclaim(_depositIdx);
     }
 }
 
@@ -118,11 +118,11 @@ contract TestSenderWithdrawErc1155 is Test, ERC1155Holder {
         testToken.setApprovalForAll(address(vault), true);
 
         // Make a deposit
-        _depositIdx = vault.makeDeposit(address(testToken), 3, 100, _tokenId, PUBKEY20);
+        _depositIdx = vault.createLink(address(testToken), 3, 100, _tokenId, PUBKEY20);
     }
 
     function testSenderWithdrawErc1155() public {
         // Withdraw the deposit
-        vault.withdrawDepositSender(_depositIdx);
+        vault.reclaim(_depositIdx);
     }
 }

@@ -48,33 +48,33 @@ contract EnvelopeVaultTest is Test {
     function testMakeDepositERC20() public {
         uint256 amount = 100;
 
-        uint256 depositIndex = vault.makeDeposit(address(testToken), 1, amount, 0, PUBKEY20);
+        uint256 depositIndex = vault.createLink(address(testToken), 1, amount, 0, PUBKEY20);
 
         assertEq(depositIndex, 0, "Deposit failed");
-        assertEq(vault.getDepositCount(), 1, "Deposit count mismatch");
+        assertEq(vault.getLinkCount(), 1, "Deposit count mismatch");
     }
 
     function testMakeSelflessDepositERC20() public {
         uint256 amount = 100;
 
         // Make a deposit on behalf of SAMPLE_ADDRESS
-        uint256 depositIndex = vault.makeSelflessDeposit(address(testToken), 1, amount, 0, PUBKEY20, SAMPLE_ADDRESS);
+        uint256 depositIndex = vault.createLinkFor(address(testToken), 1, amount, 0, PUBKEY20, SAMPLE_ADDRESS);
 
         // Deposit was made on behalf of other address, so we can't withdraw
-        vm.expectRevert(EnvelopeVault.NotTheSender.selector);
-        vault.withdrawDepositSender(depositIndex);
+        vm.expectRevert(EnvelopeVault.NotTheCreator.selector);
+        vault.reclaim(depositIndex);
 
         vm.prank(SAMPLE_ADDRESS); // selfless deposit's owner can reclaim
-        vault.withdrawDepositSender(depositIndex);
+        vault.reclaim(depositIndex);
     }
 
     function testMakeDepositERC721() public {
         uint256 tokenId = 1;
 
-        uint256 depositIndex = vault.makeDeposit(address(testToken721), 2, 1, tokenId, PUBKEY20);
+        uint256 depositIndex = vault.createLink(address(testToken721), 2, 1, tokenId, PUBKEY20);
 
         assertEq(depositIndex, 0, "Deposit failed");
-        assertEq(vault.getDepositCount(), 1, "Deposit count mismatch");
+        assertEq(vault.getLinkCount(), 1, "Deposit count mismatch");
     }
 
     // test sender withdrawal
@@ -82,17 +82,17 @@ contract EnvelopeVaultTest is Test {
         uint256 amount = 1000;
 
         assertEq(testToken.balanceOf(address(vault)), 0, "Contract balance mismatch");
-        uint256 depositIndex = vault.makeDeposit(address(testToken), 1, amount, 0, PUBKEY20);
+        uint256 depositIndex = vault.createLink(address(testToken), 1, amount, 0, PUBKEY20);
 
         assertEq(depositIndex, 0, "Deposit failed");
-        assertEq(vault.getDepositCount(), 1, "Deposit count mismatch");
+        assertEq(vault.getLinkCount(), 1, "Deposit count mismatch");
         assertEq(testToken.balanceOf(address(vault)), 1000, "Contract balance mismatch");
 
         // wait 25 hours
         vm.warp(block.timestamp + 25 hours);
 
         // Withdraw the deposit
-        vault.withdrawDepositSender(depositIndex);
+        vault.reclaim(depositIndex);
 
         // Check that the contract has the correct balance
         assertEq(testToken.balanceOf(address(vault)), 0, "Contract balance mismatch");

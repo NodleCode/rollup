@@ -39,7 +39,7 @@ contract EnvelopeVaultMFATest is Test {
                     address(vault),
                     depositIndex,
                     recipient,
-                    vault.ANYONE_WITHDRAWAL_MODE()
+                    vault.OPEN_CLAIM_MODE()
                 )
             )
         );
@@ -49,34 +49,34 @@ contract EnvelopeVaultMFATest is Test {
 
     function testMFADeposit() public {
         uint256 depositIndex =
-            vault.makeSelflessMFADeposit{value: 1 ether}(address(0), 0, 1 ether, 0, SAMPLE_ADDRESS, address(0x1234));
+            vault.createMFALinkFor{value: 1 ether}(address(0), 0, 1 ether, 0, SAMPLE_ADDRESS, address(0x1234));
 
         bytes memory withdrawalSig = _signWithdrawal(depositIndex, address(this));
 
         vm.expectRevert(EnvelopeVault.RequiresMfaAuthorization.selector);
-        vault.withdrawDeposit(depositIndex, address(this), withdrawalSig);
+        vault.claim(depositIndex, address(this), withdrawalSig);
 
         vm.expectRevert(EnvelopeVault.WrongMfaSignature.selector);
-        vault.withdrawMFADeposit(depositIndex, address(this), withdrawalSig, withdrawalSig, 0);
+        vault.claimWithMFA(depositIndex, address(this), withdrawalSig, withdrawalSig, 0);
 
         bytes memory mfaSig = _signMfa(depositIndex, address(this), 0);
-        vault.withdrawMFADeposit(depositIndex, address(this), withdrawalSig, mfaSig, 0);
+        vault.claimWithMFA(depositIndex, address(this), withdrawalSig, mfaSig, 0);
     }
 
     function testMFADepositWithDeadline() public {
         uint256 depositIndex =
-            vault.makeSelflessMFADeposit{value: 1 ether}(address(0), 0, 1 ether, 0, SAMPLE_ADDRESS, address(0x1234));
+            vault.createMFALinkFor{value: 1 ether}(address(0), 0, 1 ether, 0, SAMPLE_ADDRESS, address(0x1234));
 
         uint256 deadline = block.timestamp + 1 hours;
         bytes memory withdrawalSig = _signWithdrawal(depositIndex, address(this));
         bytes memory mfaSig = _signMfa(depositIndex, address(this), deadline);
 
-        vault.withdrawMFADeposit(depositIndex, address(this), withdrawalSig, mfaSig, deadline);
+        vault.claimWithMFA(depositIndex, address(this), withdrawalSig, mfaSig, deadline);
     }
 
     function test_RevertIf_MfaSignatureExpired() public {
         uint256 depositIndex =
-            vault.makeSelflessMFADeposit{value: 1 ether}(address(0), 0, 1 ether, 0, SAMPLE_ADDRESS, address(0x1234));
+            vault.createMFALinkFor{value: 1 ether}(address(0), 0, 1 ether, 0, SAMPLE_ADDRESS, address(0x1234));
 
         uint256 deadline = block.timestamp + 1 hours;
         bytes memory withdrawalSig = _signWithdrawal(depositIndex, address(this));
@@ -85,7 +85,7 @@ contract EnvelopeVaultMFATest is Test {
         vm.warp(deadline + 1);
 
         vm.expectRevert(EnvelopeVault.MfaSignatureExpired.selector);
-        vault.withdrawMFADeposit(depositIndex, address(this), withdrawalSig, mfaSig, deadline);
+        vault.claimWithMFA(depositIndex, address(this), withdrawalSig, mfaSig, deadline);
     }
 
     receive() external payable {}

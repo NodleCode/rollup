@@ -37,12 +37,12 @@ contract EnvelopeVaultIntegrationTest is Test, ERC1155Holder, ERC721Holder {
     // check invariants
     function testIntegrationEtherSenderWithdraw(uint64 amount) public {
         vm.assume(amount > 0);
-        assertEq(vault.getDepositCount(), 0); // deposit count invariant
+        assertEq(vault.getLinkCount(), 0); // deposit count invariant
         assertEq(address(vault).balance, 0); // contract balance invariant
         uint256 senderBalance = address(this).balance; // sender balance invariant
-        uint256 depositIdx = vault.makeDeposit{value: amount}(address(0), 0, amount, 0, PUBKEY20);
+        uint256 depositIdx = vault.createLink{value: amount}(address(0), 0, amount, 0, PUBKEY20);
         assertEq(depositIdx, 0); // deposit index invariant
-        assertEq(vault.getDepositCount(), 1); // deposit count invariant
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
         assertEq(address(vault).balance, amount); // contract balance invariant
         assertEq(address(this).balance, senderBalance - amount); // sender balance invariant
 
@@ -50,8 +50,8 @@ contract EnvelopeVaultIntegrationTest is Test, ERC1155Holder, ERC721Holder {
         vm.warp(block.timestamp + 25 hours);
 
         // Withdraw the deposit
-        vault.withdrawDepositSender(depositIdx);
-        assertEq(vault.getDepositCount(), 1); // deposit count invariant
+        vault.reclaim(depositIdx);
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
         assertEq(address(vault).balance, 0); // contract balance invariant
         assertEq(address(this).balance, senderBalance); // sender balance invariant
     }
@@ -63,9 +63,9 @@ contract EnvelopeVaultIntegrationTest is Test, ERC1155Holder, ERC721Holder {
         // approve the contract to spend the tokens
         testToken.approve(address(vault), amount);
         assertEq(testToken.balanceOf(address(this)), amount); // contract token balance invariant
-        uint256 depositIdx = vault.makeDeposit(address(testToken), 1, amount, 0, PUBKEY20);
+        uint256 depositIdx = vault.createLink(address(testToken), 1, amount, 0, PUBKEY20);
         assertEq(depositIdx, 0); // deposit index invariant
-        assertEq(vault.getDepositCount(), 1); // deposit count invariant
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
         assertEq(testToken.balanceOf(address(vault)), amount); // contract token balance invariant
         assertEq(testToken.balanceOf(address(this)), 0); // sender token balance invariant
 
@@ -73,8 +73,8 @@ contract EnvelopeVaultIntegrationTest is Test, ERC1155Holder, ERC721Holder {
         vm.warp(block.timestamp + 25 hours);
 
         // Withdraw the deposit
-        vault.withdrawDepositSender(depositIdx);
-        assertEq(vault.getDepositCount(), 1); // deposit count invariant
+        vault.reclaim(depositIdx);
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
         assertEq(testToken.balanceOf(address(vault)), 0); // contract token balance invariant
         assertEq(testToken.balanceOf(address(this)), amount); // sender token balance invariant
     }
@@ -86,15 +86,15 @@ contract EnvelopeVaultIntegrationTest is Test, ERC1155Holder, ERC721Holder {
         testToken721.approve(address(vault), tokenId);
 
         // invariant checks
-        assertEq(vault.getDepositCount(), 0);
+        assertEq(vault.getLinkCount(), 0);
         assertEq(testToken721.ownerOf(tokenId), address(this));
         assertEq(testToken721.balanceOf(address(vault)), 0);
         assertEq(testToken721.balanceOf(address(this)), 1);
-        uint256 depositIdx = vault.makeDeposit(address(testToken721), 2, 1, tokenId, PUBKEY20);
+        uint256 depositIdx = vault.createLink(address(testToken721), 2, 1, tokenId, PUBKEY20);
 
         // invariant checks
         assertEq(depositIdx, 0);
-        assertEq(vault.getDepositCount(), 1);
+        assertEq(vault.getLinkCount(), 1);
         assertEq(testToken721.ownerOf(tokenId), address(vault));
         assertEq(testToken721.balanceOf(address(vault)), 1);
         assertEq(testToken721.balanceOf(address(this)), 0);
@@ -103,10 +103,10 @@ contract EnvelopeVaultIntegrationTest is Test, ERC1155Holder, ERC721Holder {
         vm.warp(block.timestamp + 25 hours);
 
         // Withdraw the deposit
-        vault.withdrawDepositSender(depositIdx);
+        vault.reclaim(depositIdx);
 
         // invariant checks
-        assertEq(vault.getDepositCount(), 1);
+        assertEq(vault.getLinkCount(), 1);
         assertEq(testToken721.ownerOf(tokenId), address(this));
         assertEq(testToken721.balanceOf(address(vault)), 0);
         assertEq(testToken721.balanceOf(address(this)), 1);
@@ -119,9 +119,9 @@ contract EnvelopeVaultIntegrationTest is Test, ERC1155Holder, ERC721Holder {
         testToken1155.mint(address(this), tokenId, amount, "");
         testToken1155.setApprovalForAll(address(vault), true);
         assertEq(testToken1155.balanceOf(address(this), tokenId), amount); // contract token balance invariant
-        uint256 depositIdx = vault.makeDeposit(address(testToken1155), 3, amount, tokenId, PUBKEY20);
+        uint256 depositIdx = vault.createLink(address(testToken1155), 3, amount, tokenId, PUBKEY20);
         assertEq(depositIdx, 0); // deposit index invariant
-        assertEq(vault.getDepositCount(), 1); // deposit count invariant
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
         assertEq(testToken1155.balanceOf(address(vault), tokenId), amount); // contract token balance invariant
         assertEq(testToken1155.balanceOf(address(this), tokenId), 0); // sender token balance invariant
 
@@ -129,8 +129,8 @@ contract EnvelopeVaultIntegrationTest is Test, ERC1155Holder, ERC721Holder {
         vm.warp(block.timestamp + 25 hours);
 
         // Withdraw the deposit
-        vault.withdrawDepositSender(depositIdx);
-        assertEq(vault.getDepositCount(), 1); // deposit count invariant
+        vault.reclaim(depositIdx);
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
         assertEq(testToken1155.balanceOf(address(vault), tokenId), 0); // contract token balance invariant
         assertEq(testToken1155.balanceOf(address(this), tokenId), amount); // sender token balance invariant
     }

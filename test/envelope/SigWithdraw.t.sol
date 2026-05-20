@@ -31,29 +31,29 @@ contract TestSigWithdrawEther is Test {
     // test sender withdrawal of ETH
     function testSigWithdrawEther(uint64 amount) public {
         vm.assume(amount > 0);
-        uint256 depositIdx = vault.makeDeposit{value: amount}(address(0), 0, amount, 0, _pubkey20);
+        uint256 depositIdx = vault.createLink{value: amount}(address(0), 0, amount, 0, _pubkey20);
 
         // Can't use withdrawDepositAsRecipient
         vm.expectRevert(EnvelopeVault.NotTheRecipient.selector);
-        vault.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureAnybody);
+        vault.claimAsBoundRecipient(depositIdx, _recipientAddress, signatureAnybody);
 
         // Anybody can withdraw
-        vault.withdrawDeposit(depositIdx, _recipientAddress, signatureAnybody);
+        vault.claim(depositIdx, _recipientAddress, signatureAnybody);
     }
 
     function testWithdrawDepositAsRecipient(uint64 amount) public {
         vm.assume(amount > 0);
-        uint256 depositIdx = vault.makeDeposit{value: amount}(address(0), 0, amount, 0, _pubkey20);
+        uint256 depositIdx = vault.createLink{value: amount}(address(0), 0, amount, 0, _pubkey20);
 
         // Can't use pure withdrawDeposit
         vm.expectRevert(EnvelopeVault.WrongSignature.selector);
-        vault.withdrawDeposit(depositIdx, _recipientAddress, signatureRecipient);
+        vault.claim(depositIdx, _recipientAddress, signatureRecipient);
 
         // Only the recipient is able to withdraw via withdrawDepositAsRecipient
         vm.expectRevert(EnvelopeVault.NotTheRecipient.selector);
-        vault.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureRecipient);
+        vault.claimAsBoundRecipient(depositIdx, _recipientAddress, signatureRecipient);
 
         vm.prank(_recipientAddress); // Withdraw!
-        vault.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureRecipient);
+        vault.claimAsBoundRecipient(depositIdx, _recipientAddress, signatureRecipient);
     }
 }

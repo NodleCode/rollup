@@ -38,7 +38,7 @@ contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
     // check invariants
     function testDepositEther(uint64 amount, address randomAddress) public {
         vm.assume(amount > 0);
-        vault.makeDeposit{value: amount}(randomAddress, 0, amount, 0, PUBKEY20);
+        vault.createLink{value: amount}(randomAddress, 0, amount, 0, PUBKEY20);
     }
 
     function testDepositERC20(uint64 amount) public {
@@ -50,7 +50,7 @@ contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
         // console log allowance and amount
         console.log("Allowance: ", testToken.allowance(address(this), address(vault)));
         console.log("Amount: ", amount);
-        vault.makeDeposit(address(testToken), 1, amount, 0, PUBKEY20);
+        vault.createLink(address(testToken), 1, amount, 0, PUBKEY20);
     }
 
     // Test for ERC721 Token
@@ -59,7 +59,7 @@ contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
         testToken721.mint(address(this), tokenId);
         // approve the contract to spend the tokens
         testToken721.approve(address(vault), tokenId);
-        vault.makeDeposit(address(testToken721), 2, 1, tokenId, PUBKEY20);
+        vault.createLink(address(testToken721), 2, 1, tokenId, PUBKEY20);
     }
 
     // Test for ERC1155 Token
@@ -69,6 +69,6 @@ contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
         testToken1155.mint(address(this), tokenId, amount, "");
         // approve the contract to spend the tokens
         testToken1155.setApprovalForAll(address(vault), true);
-        vault.makeDeposit(address(testToken1155), 3, amount, tokenId, PUBKEY20);
+        vault.createLink(address(testToken1155), 3, amount, tokenId, PUBKEY20);
     }
 }

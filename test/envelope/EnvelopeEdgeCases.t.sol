@@ -37,7 +37,7 @@ contract ReentrantToken is ERC20Mock {
         if (!attempted && address(vault) != address(0) && to == attacker) {
             attempted = true;
             // This call should revert because the outer call holds the reentrancy lock.
-            try vault.withdrawDeposit(targetIdx, attacker, targetSig) {
+            try vault.claim(targetIdx, attacker, targetSig) {
                 revert("REENTRANCY GUARD MISSING");
             } catch {
                 // expected — guard caught it
@@ -75,7 +75,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, recipient, vault.ANYONE_WITHDRAWAL_MODE()
+                    vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, recipient, vault.OPEN_CLAIM_MODE()
                 )
             )
         );
@@ -84,7 +84,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     }
 
     function _depositEth(uint256 amount) internal returns (uint256) {
-        return vault.makeDeposit{value: amount}(address(0), 0, amount, 0, LINK_PUBKEY20);
+        return vault.createLink{value: amount}(address(0), 0, amount, 0, LINK_PUBKEY20);
     }
 
     // ── EnvelopeVault deposit input validation ──────────────────────────────────
@@ -92,13 +92,13 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     function test_RevertWhen_DepositInvalidContractType() public {
         // _pullTokensViaApproval rejects contractType > 3.
         vm.expectRevert(EnvelopeVault.InvalidContractType.selector);
-        vault.makeDeposit{value: 0}(address(0), 5, 0, 0, LINK_PUBKEY20);
+        vault.createLink{value: 0}(address(0), 5, 0, 0, LINK_PUBKEY20);
     }
 
     function test_RevertWhen_DepositEthAmountMismatch() public {
         // contractType==0 requires _amount == msg.value.
         vm.expectRevert(EnvelopeVault.WrongEthAmount.selector);
-        vault.makeDeposit{value: 100}(address(0), 0, 50, 0, LINK_PUBKEY20);
+        vault.createLink{value: 100}(address(0), 0, 50, 0, LINK_PUBKEY20);
     }
 
     function test_RevertWhen_DepositErc721AmountNotOne() public {
@@ -106,24 +106,24 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         erc721.mint(address(this), 1);
         erc721.approve(address(vault), 1);
         vm.expectRevert(EnvelopeVault.Erc721AmountMustBeOne.selector);
-        vault.makeDeposit(address(erc721), 2, 2, 1, LINK_PUBKEY20);
+        vault.createLink(address(erc721), 2, 2, 1, LINK_PUBKEY20);
     }
 
     // ── EnvelopeVault withdraw input validation ─────────────────────────────────
 
     function test_RevertWhen_WithdrawIndexOutOfBounds() public {
         bytes memory sig = _signWithdrawal(99, ALICE, LINK_PRIV);
-        vm.expectRevert(EnvelopeVault.DepositIndexOutOfBounds.selector);
-        vault.withdrawDeposit(99, ALICE, sig);
+        vm.expectRevert(EnvelopeVault.LinkIndexOutOfBounds.selector);
+        vault.claim(99, ALICE, sig);
     }
 
     function test_RevertWhen_WithdrawTwice() public {
         uint256 idx = _depositEth(1 ether);
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
-        vault.withdrawDeposit(idx, ALICE, sig);
+        vault.claim(idx, ALICE, sig);
 
-        vm.expectRevert(EnvelopeVault.DepositAlreadyClaimed.selector);
-        vault.withdrawDeposit(idx, ALICE, sig);
+        vm.expectRevert(EnvelopeVault.LinkAlreadyRedeemed.selector);
+        vault.claim(idx, ALICE, sig);
     }
 
     function test_RevertWhen_WithdrawWithWrongSigner() public {
@@ -133,7 +133,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bytes memory sig = _signWithdrawal(idx, ALICE, wrongKey);
 
         vm.expectRevert(EnvelopeVault.WrongSignature.selector);
-        vault.withdrawDeposit(idx, ALICE, sig);
+        vault.claim(idx, ALICE, sig);
     }
 
     function test_RevertWhen_WithdrawAsRecipientCallerMismatch() public {
@@ -142,7 +142,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encodePacked(
-                    vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, ALICE, vault.RECIPIENT_WITHDRAWAL_MODE()
+                    vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, ALICE, vault.BOUND_CLAIM_MODE()
                 )
             )
         );
@@ -152,47 +152,47 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         // BOB tries to call on behalf of ALICE — caller must equal the recipient param.
         vm.prank(BOB);
         vm.expectRevert(EnvelopeVault.NotTheRecipient.selector);
-        vault.withdrawDepositAsRecipient(idx, ALICE, sig);
+        vault.claimAsBoundRecipient(idx, ALICE, sig);
     }
 
     function test_RevertWhen_RecipientBoundClaimedByOtherAddress() public {
         // Address-bound deposit: recipient = ALICE.
-        uint256 idx = vault.makeCustomDeposit{value: 1 ether}(
+        uint256 idx = vault.createCustomLink{value: 1 ether}(
             address(0), 0, 1 ether, 0, LINK_PUBKEY20, address(this), false, ALICE, 0
         );
         // Even with a valid pubKey signature, the contract-stored recipient blocks
         // anyone else from being the named recipient on withdrawal.
         bytes memory sig = _signWithdrawal(idx, BOB, LINK_PRIV);
         vm.expectRevert(EnvelopeVault.WrongRecipient.selector);
-        vault.withdrawDeposit(idx, BOB, sig);
+        vault.claim(idx, BOB, sig);
     }
 
     function test_RecipientBoundSenderCannotReclaimBeforeDeadline() public {
         uint40 reclaimAfter = uint40(block.timestamp + 1 days);
-        uint256 idx = vault.makeCustomDeposit{value: 1 ether}(
+        uint256 idx = vault.createCustomLink{value: 1 ether}(
             address(0), 0, 1 ether, 0, LINK_PUBKEY20, address(this), false, ALICE, reclaimAfter
         );
         vm.expectRevert(EnvelopeVault.TooEarlyToReclaim.selector);
-        vault.withdrawDepositSender(idx);
+        vault.reclaim(idx);
 
         vm.warp(reclaimAfter + 1);
-        vault.withdrawDepositSender(idx); // succeeds after the deadline
+        vault.reclaim(idx); // succeeds after the deadline
     }
 
     function test_RevertWhen_SenderReclaimNotTheSender() public {
         uint256 idx = _depositEth(1 ether);
         vm.prank(ALICE);
-        vm.expectRevert(EnvelopeVault.NotTheSender.selector);
-        vault.withdrawDepositSender(idx);
+        vm.expectRevert(EnvelopeVault.NotTheCreator.selector);
+        vault.reclaim(idx);
     }
 
     function test_RevertWhen_MFADepositWithoutMFASignature() public {
         // vault is deployed with mfaAuthorizer == address(0), so MFA-flagged
         // deposits can never be withdrawn via withdrawDeposit (REQUIRES AUTHORIZATION).
-        uint256 idx = vault.makeMFADeposit{value: 1 ether}(address(0), 0, 1 ether, 0, LINK_PUBKEY20);
+        uint256 idx = vault.createMFALink{value: 1 ether}(address(0), 0, 1 ether, 0, LINK_PUBKEY20);
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
         vm.expectRevert(EnvelopeVault.RequiresMfaAuthorization.selector);
-        vault.withdrawDeposit(idx, ALICE, sig);
+        vault.claim(idx, ALICE, sig);
     }
 
     // ── EnvelopeVault views ─────────────────────────────────────────────────────
@@ -201,20 +201,20 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         _depositEth(1);
         _depositEth(1);
         // Same sender (address(this)) made both deposits.
-        EnvelopeVault.Deposit[] memory mine = vault.getAllDepositsForAddress(address(this));
+        EnvelopeVault.Link[] memory mine = vault.getLinksCreatedBy(address(this));
         assertEq(mine.length, 2);
 
         // Different sender → empty.
-        EnvelopeVault.Deposit[] memory aliceDeposits = vault.getAllDepositsForAddress(ALICE);
+        EnvelopeVault.Link[] memory aliceDeposits = vault.getLinksCreatedBy(ALICE);
         assertEq(aliceDeposits.length, 0);
     }
 
     function test_DepositCountTracksArrayLength() public {
-        assertEq(vault.getDepositCount(), 0);
+        assertEq(vault.getLinkCount(), 0);
         _depositEth(1);
         _depositEth(1);
         _depositEth(1);
-        assertEq(vault.getDepositCount(), 3);
+        assertEq(vault.getLinkCount(), 3);
     }
 
     // ── EnvelopeVault reentrancy ────────────────────────────────────────────────
@@ -225,7 +225,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         evil.approve(address(vault), 100);
 
         // Deposit type-1 (ERC-20) so withdraw routes back through the token's transfer.
-        uint256 idx = vault.makeDeposit(address(evil), 1, 100, 0, LINK_PUBKEY20);
+        uint256 idx = vault.createLink(address(evil), 1, 100, 0, LINK_PUBKEY20);
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
 
         // Arm the token to reenter inside its _update during the outgoing safeTransfer.
@@ -233,7 +233,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
         // Outer withdraw succeeds (inner reentrant attempt caught and swallowed by try/catch);
         // the reentrancy guard ensured the inner call could not double-spend.
-        vault.withdrawDeposit(idx, ALICE, sig);
+        vault.claim(idx, ALICE, sig);
         assertEq(evil.balanceOf(ALICE), 100);
         assertTrue(evil.attempted(), "reentrancy attempt should have run");
     }
@@ -246,7 +246,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
             pubKeys[i] = LINK_PUBKEY20;
         }
         vm.expectRevert(EnvelopeVault.InvalidTotalEtherSent.selector);
-        vault.makeBatchDeposit{value: 1 ether}(address(0), 0, 1 ether, 0, pubKeys);
+        vault.createLinks{value: 1 ether}(address(0), 0, 1 ether, 0, pubKeys);
         // expected 3 * 1 ether, sent 1 ether
     }
 
@@ -260,7 +260,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bool[] memory mfa = new bool[](3); // wrong length
 
         vm.expectRevert(EnvelopeVault.ParametersLengthMismatch.selector);
-        vault.makeBatchCustomDeposit(tokens, types, amounts, ids, pks, mfa);
+        vault.createCustomLinks(tokens, types, amounts, ids, pks, mfa);
     }
 
     // makeBatchDepositNoReturn — ETH path must require exact total, non-ETH path must reject msg.value.
@@ -271,8 +271,8 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
             pubKeys[i] = LINK_PUBKEY20;
         }
 
-        vault.makeBatchDepositNoReturn{value: 3 ether}(address(0), 0, 1 ether, 0, pubKeys);
-        assertEq(vault.getDepositCount(), 3);
+        vault.createLinksNoReturn{value: 3 ether}(address(0), 0, 1 ether, 0, pubKeys);
+        assertEq(vault.getLinkCount(), 3);
     }
 
     function test_RevertWhen_BatchNoReturnEthAmountMismatch() public {
@@ -281,7 +281,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
             pubKeys[i] = LINK_PUBKEY20;
         }
         vm.expectRevert(EnvelopeVault.InvalidTotalEtherSent.selector);
-        vault.makeBatchDepositNoReturn{value: 1 ether}(address(0), 0, 1 ether, 0, pubKeys);
+        vault.createLinksNoReturn{value: 1 ether}(address(0), 0, 1 ether, 0, pubKeys);
     }
 
     function test_RevertWhen_BatchNoReturnEthSentForErc20() public {
@@ -292,21 +292,21 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         for (uint256 i = 0; i < 2; i++) {
             pubKeys[i] = LINK_PUBKEY20;
         }
-        vm.expectRevert(EnvelopeVault.EthNotAcceptedForNonEthDeposit.selector);
-        vault.makeBatchDepositNoReturn{value: 1 wei}(address(erc20), 1, 100, 0, pubKeys);
+        vm.expectRevert(EnvelopeVault.EthNotAcceptedForNonEthLink.selector);
+        vault.createLinksNoReturn{value: 1 wei}(address(erc20), 1, 100, 0, pubKeys);
     }
 
     function test_RevertWhen_BatchRaffleErc721NotSupported() public {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = 1;
         vm.expectRevert(EnvelopeVault.UnsupportedRaffleContractType.selector);
-        vault.makeBatchDepositRaffle(address(erc721), 2, amounts, LINK_PUBKEY20);
+        vault.createRaffleLinks(address(erc721), 2, amounts, LINK_PUBKEY20);
     }
 
     function test_BatchZeroLengthDepositsIsNoop() public {
         address[] memory pubKeys = new address[](0);
-        uint256[] memory ids = vault.makeBatchDeposit(address(0), 0, 0, 0, pubKeys);
+        uint256[] memory ids = vault.createLinks(address(0), 0, 0, 0, pubKeys);
         assertEq(ids.length, 0);
-        assertEq(vault.getDepositCount(), 0);
+        assertEq(vault.getLinkCount(), 0);
     }
 }

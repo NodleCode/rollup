@@ -23,14 +23,14 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     error InvalidContractType();
     error WrongEthAmount();
     error Erc721AmountMustBeOne();
-    error DepositIndexOutOfBounds();
-    error DepositAlreadyClaimed();
+    error LinkIndexOutOfBounds();
+    error LinkAlreadyRedeemed();
     error RequiresMfaAuthorization();
     error WrongMfaSignature();
     error WrongSignature();
     error WrongRecipient();
     error NotTheRecipient();
-    error NotTheSender();
+    error NotTheCreator();
     error TooEarlyToReclaim();
     error EthTransferFailed();
     error DirectTransfersNotAllowed();
@@ -41,46 +41,46 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     error FeeTokenNotConfigured();
     error ParametersLengthMismatch();
     error InvalidTotalEtherSent();
-    error EthNotAcceptedForNonEthDeposit();
+    error EthNotAcceptedForNonEthLink();
     error Erc721BatchNotSupported();
     error UnsupportedRaffleContractType();
 
     // ── Data Structures ──────────────────────────────────────────────────────────
 
-    struct Deposit {
-        address pubKey20; // (20 bytes) last 20 bytes of the hash of the public key for the deposit
+    struct Link {
+        address claimKey; // (20 bytes) address derived from the link claim private key
         uint256 amount; // (32 bytes) amount of the asset being sent
         ///// tokenAddress, contractType, tokenId, claimed & timestamp are stored in a single 32 byte word
         address tokenAddress; // (20 bytes) address of the asset being sent. 0x0 for eth
         uint8 contractType; // (1 byte) 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155
-        bool claimed; // (1 byte) has this deposit been claimed
+        bool redeemed; // (1 byte) has this link been redeemed
         bool requiresMFA; // (1 byte) is additional auth (MFA) required?
-        bool gaslessSponsored; // (1 byte) can the paymaster sponsor this deposit without a prepaid gasless fee?
-        uint40 timestamp; // ( 5 bytes) timestamp of the deposit
+        bool gaslessSponsored; // (1 byte) can the paymaster sponsor this link without a prepaid gasless fee?
+        uint40 timestamp; // ( 5 bytes) timestamp of the link creation
         /////
         uint256 tokenId; // (32 bytes) id of the token being sent (if erc721 or erc1155)
-        address senderAddress; // (20 bytes) address of the sender
+        address creator; // (20 bytes) address of the sender
         ///// slot for address-bound links data
         address recipient; // unless it's 0x00, only this address can claim the link
         uint40 reclaimableAfter; // for address-bound links, the sender is able to re-claim only after this timestamp
-        uint256 serviceFee; // backend-authorized service fee collected at deposit time
-        uint256 gaslessFee; // prepaid gas sponsorship fee collected at deposit time
+        uint256 serviceFee; // backend-authorized service fee collected at link creation
+        uint256 gaslessFee; // prepaid gas sponsorship fee collected at link creation
     } // 8 storage slots (32 byte each)
 
-    /// @notice Full deposit intent covered by a backend fee authorization.
-    struct DepositRequest {
+    /// @notice Full link intent covered by a backend fee authorization.
+    struct LinkRequest {
         address tokenAddress;
         uint8 contractType;
         uint256 amount;
         uint256 tokenId;
-        address pubKey20;
+        address claimKey;
         address onBehalfOf;
         bool withMFA;
         address recipient;
         uint40 reclaimableAfter;
     }
 
-    /// @notice Backend-signed fee bundle collected when a deposit is created.
+    /// @notice Backend-signed fee bundle collected when a link is created.
     /// @dev deadline == 0 means no expiry. Non-zero fees or sponsored gasless eligibility require
     ///      `signature` from `mfaAuthorizer`. Zero-fee authorizations with a non-empty signature are verified too.
     struct FeeAuthorization {
@@ -95,8 +95,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     // that the message signed by the user has effects only in peanut contracts.
     bytes32 public constant ENVELOPE_SALT = 0x70adbbeba9d4f0c82e28dd574f15466f75df0543b65f24460fc445813b5d94e0; // keccak256("Konrad makes tokens go woosh tadam");
 
-    bytes32 public constant ANYONE_WITHDRAWAL_MODE = 0x0000000000000000000000000000000000000000000000000000000000000000; // default. Any address can trigger the withdrawal function
-    bytes32 public constant RECIPIENT_WITHDRAWAL_MODE =
+    bytes32 public constant OPEN_CLAIM_MODE = 0x0000000000000000000000000000000000000000000000000000000000000000; // default. Any address can trigger the withdrawal function
+    bytes32 public constant BOUND_CLAIM_MODE =
         0x2bb5bef2b248d3edba501ad918c3ab524cce2aea54d4c914414e1c4401dc4ff4; // keccak256("only recipient") - only the signed recipient can trigger the withdrawal function
 
     bytes32 public DOMAIN_SEPARATOR; // initialized in the constructor
@@ -104,8 +104,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     bytes32 public constant EIP712DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
-    /// @notice Address authorized to issue MFA signatures gating withdrawMFADeposit calls.
-    /// @dev Configurable per deployment. Address(0) disables MFA — withdrawMFADeposit will revert.
+    /// @notice Address authorized to issue MFA signatures gating claimWithMFA calls.
+    /// @dev Configurable per deployment. Address(0) disables MFA — claimWithMFA will revert.
     address public immutable mfaAuthorizer;
 
     struct EIP712Domain {
@@ -115,19 +115,19 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         address verifyingContract;
     }
 
-    Deposit[] public deposits; // array of deposits
+    Link[] public links; // array of links
 
     /// @notice ERC-20 token used for Envelope service and gasless sponsorship fees (for example NODL).
     IERC20 public immutable feeToken;
 
-    /// @notice Accumulated fees per token address (address(0) for ETH; feeToken for deposit-time fees).
+    /// @notice Accumulated fees per token address (address(0) for ETH; feeToken for link-creation fees).
     mapping(address => uint256) public accumulatedFees;
 
     // events
-    event DepositEvent(
-        uint256 indexed _index, uint8 indexed _contractType, uint256 _amount, address indexed _senderAddress
+    event LinkCreated(
+        uint256 indexed _index, uint8 indexed _contractType, uint256 _amount, address indexed _creator
     );
-    event WithdrawEvent(
+    event LinkRedeemed(
         uint256 indexed _index, uint8 indexed _contractType, uint256 _amount, address indexed _recipientAddress
     );
     event FeeCollected(uint256 indexed _index, address indexed tokenAddress, uint256 serviceFee, uint256 gaslessFee);
@@ -168,60 +168,60 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
-    // Deposit Functions
+    // Link Creation Functions
     // ══════════════════════════════════════════════════════════════════════════════
 
-    function makeDeposit(
+    function createLink(
         address _tokenAddress,
         uint8 _contractType,
         uint256 _amount,
         uint256 _tokenId,
-        address _pubKey20
+        address claimKey
     ) public payable nonReentrant returns (uint256) {
         _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
-        return _storeDeposit(
-            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, msg.sender, false, address(0), 0, 0, 0, false
+        return _storeLink(
+            _tokenAddress, _contractType, _amount, _tokenId, claimKey, msg.sender, false, address(0), 0, 0, 0, false
         );
     }
 
-    function makeMFADeposit(
+    function createMFALink(
         address _tokenAddress,
         uint8 _contractType,
         uint256 _amount,
         uint256 _tokenId,
-        address _pubKey20
+        address claimKey
     ) public payable nonReentrant returns (uint256) {
         _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
-        return _storeDeposit(
-            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, msg.sender, true, address(0), 0, 0, 0, false
+        return _storeLink(
+            _tokenAddress, _contractType, _amount, _tokenId, claimKey, msg.sender, true, address(0), 0, 0, 0, false
         );
     }
 
-    function makeSelflessMFADeposit(
+    function createMFALinkFor(
         address _tokenAddress,
         uint8 _contractType,
         uint256 _amount,
         uint256 _tokenId,
-        address _pubKey20,
+        address claimKey,
         address _onBehalfOf
     ) public payable nonReentrant returns (uint256) {
         _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
-        return _storeDeposit(
-            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, _onBehalfOf, true, address(0), 0, 0, 0, false
+        return _storeLink(
+            _tokenAddress, _contractType, _amount, _tokenId, claimKey, _onBehalfOf, true, address(0), 0, 0, 0, false
         );
     }
 
-    function makeSelflessDeposit(
+    function createLinkFor(
         address _tokenAddress,
         uint8 _contractType,
         uint256 _amount,
         uint256 _tokenId,
-        address _pubKey20,
+        address claimKey,
         address _onBehalfOf
     ) public payable nonReentrant returns (uint256) {
         _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
-        return _storeDeposit(
-            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, _onBehalfOf, false, address(0), 0, 0, 0, false
+        return _storeLink(
+            _tokenAddress, _contractType, _amount, _tokenId, claimKey, _onBehalfOf, false, address(0), 0, 0, 0, false
         );
     }
 
@@ -231,31 +231,31 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
      * @param _contractType 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155
      * @param _amount amount of tokens being sent
      * @param _tokenId id of the token being sent if erc721 or erc1155
-     * @param _pubKey20 last 20 bytes of the public key of the deposit signer
+     * @param claimKey address derived from the link claim private key
      * @param _onBehalfOf who will be able to reclaim the link if the private key is lost
      * @param _withMFA whether an external authorisation is required for withdrawal
      * @param _recipient if not 0x00, only _recipient will be able to withdraw
      * @param _reclaimableAfter if _recipient is set, the sender can reclaim only after this timestamp
      * @return uint256 index of the deposit
      */
-    function makeCustomDeposit(
+    function createCustomLink(
         address _tokenAddress,
         uint8 _contractType,
         uint256 _amount,
         uint256 _tokenId,
-        address _pubKey20,
+        address claimKey,
         address _onBehalfOf,
         bool _withMFA,
         address _recipient,
         uint40 _reclaimableAfter
     ) public payable nonReentrant returns (uint256) {
         _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
-        return _storeDeposit(
+        return _storeLink(
             _tokenAddress,
             _contractType,
             _amount,
             _tokenId,
-            _pubKey20,
+            claimKey,
             _onBehalfOf,
             _withMFA,
             _recipient,
@@ -267,13 +267,13 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     }
 
     /**
-     * @notice Create a deposit and collect backend-authorized service/gasless fees up front.
+     * @notice Create a link and collect backend-authorized service/gasless fees up front.
      * @dev Non-zero fees are paid in `feeToken` by msg.sender. `gaslessFee > 0` or
-     *      `gaslessSponsored == true` marks the deposit as eligible for EnvelopePaymaster-sponsored
+     *      `gaslessSponsored == true` marks the link as eligible for EnvelopePaymaster-sponsored
      *      claim or sender reclaim. The fee authorization is signed by `mfaAuthorizer` and includes
      *      the full deposit intent plus a deadline.
      */
-    function makeCustomDepositWithFees(DepositRequest calldata _request, FeeAuthorization calldata _feeAuthorization)
+    function createLinkWithFees(LinkRequest calldata _request, FeeAuthorization calldata _feeAuthorization)
         public
         payable
         nonReentrant
@@ -283,15 +283,15 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256 amount =
             _pullTokensViaApproval(_request.tokenAddress, _request.contractType, _request.amount, _request.tokenId);
 
-        uint256 index = deposits.length;
-        _collectDepositFees(index, msg.sender, _feeAuthorization.serviceFee, _feeAuthorization.gaslessFee);
+        uint256 index = links.length;
+        _collectLinkFees(index, msg.sender, _feeAuthorization.serviceFee, _feeAuthorization.gaslessFee);
 
-        return _storeDeposit(
+        return _storeLink(
             _request.tokenAddress,
             _request.contractType,
             amount,
             _request.tokenId,
-            _request.pubKey20,
+            _request.claimKey,
             _request.onBehalfOf,
             _request.withMFA,
             _request.recipient,
@@ -302,27 +302,27 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         );
     }
 
-    /// @notice Create many same-shape deposits in one transaction.
+    /// @notice Create many same-shape links in one transaction.
     /// @dev The caller remains the recorded sender for every deposit and keeps reclaim rights.
     ///      ERC-721 is intentionally excluded here because each NFT needs a distinct tokenId.
-    function makeBatchDeposit(
+    function createLinks(
         address _tokenAddress,
         uint8 _contractType,
         uint256 _amount,
         uint256 _tokenId,
-        address[] calldata _pubKeys20
+        address[] calldata _claimKeys
     ) external payable nonReentrant returns (uint256[] memory) {
-        uint256 totalAmount = _amount * _pubKeys20.length;
+        uint256 totalAmount = _amount * _claimKeys.length;
         _pullUniformBatchAssets(msg.sender, _tokenAddress, _contractType, totalAmount, _tokenId);
 
-        uint256[] memory depositIndexes = new uint256[](_pubKeys20.length);
-        for (uint256 i = 0; i < _pubKeys20.length; ++i) {
-            depositIndexes[i] = _storeDeposit(
+        uint256[] memory linkIndexes = new uint256[](_claimKeys.length);
+        for (uint256 i = 0; i < _claimKeys.length; ++i) {
+            linkIndexes[i] = _storeLink(
                 _tokenAddress,
                 _contractType,
                 _amount,
                 _tokenId,
-                _pubKeys20[i],
+                _claimKeys[i],
                 msg.sender,
                 false,
                 address(0),
@@ -332,27 +332,27 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                 false
             );
         }
-        return depositIndexes;
+        return linkIndexes;
     }
 
-    /// @notice Same as makeBatchDeposit, but avoids allocating and returning the indexes array.
-    function makeBatchDepositNoReturn(
+    /// @notice Same as createLinks, but avoids allocating and returning the indexes array.
+    function createLinksNoReturn(
         address _tokenAddress,
         uint8 _contractType,
         uint256 _amount,
         uint256 _tokenId,
-        address[] calldata _pubKeys20
+        address[] calldata _claimKeys
     ) external payable nonReentrant {
-        uint256 totalAmount = _amount * _pubKeys20.length;
+        uint256 totalAmount = _amount * _claimKeys.length;
         _pullUniformBatchAssets(msg.sender, _tokenAddress, _contractType, totalAmount, _tokenId);
 
-        for (uint256 i = 0; i < _pubKeys20.length; ++i) {
-            _storeDeposit(
+        for (uint256 i = 0; i < _claimKeys.length; ++i) {
+            _storeLink(
                 _tokenAddress,
                 _contractType,
                 _amount,
                 _tokenId,
-                _pubKeys20[i],
+                _claimKeys[i],
                 msg.sender,
                 false,
                 address(0),
@@ -364,15 +364,15 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         }
     }
 
-    /// @notice Create a heterogeneous batch of no-fee deposits.
+    /// @notice Create a heterogeneous batch of no-fee links.
     /// @dev Supports ETH, ERC-20, ERC-721, and ERC-1155. Recipient binding is intentionally
-    ///      left to makeBatchCustomDepositWithFees via DepositRequest[].
-    function makeBatchCustomDeposit(
+    ///      left to createCustomLinksWithFees via LinkRequest[].
+    function createCustomLinks(
         address[] calldata _tokenAddresses,
         uint8[] calldata _contractTypes,
         uint256[] calldata _amounts,
         uint256[] calldata _tokenIds,
-        address[] calldata _pubKeys20,
+        address[] calldata _claimKeys,
         bool[] calldata _withMFAs
     ) external payable nonReentrant returns (uint256[] memory) {
         _validateBatchArrayLengths(
@@ -380,7 +380,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
             _contractTypes.length,
             _amounts.length,
             _tokenIds.length,
-            _pubKeys20.length,
+            _claimKeys.length,
             _withMFAs.length
         );
 
@@ -391,7 +391,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         }
         if (msg.value != expectedEther) revert InvalidTotalEtherSent();
 
-        uint256[] memory depositIndexes = new uint256[](_amounts.length);
+        uint256[] memory linkIndexes = new uint256[](_amounts.length);
         for (uint256 i = 0; i < _amounts.length; ++i) {
             uint256 amount = _pullTokensViaApprovalFrom(
                 msg.sender,
@@ -401,12 +401,12 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                 _tokenIds[i],
                 _contractTypes[i] == 0 ? _amounts[i] : 0
             );
-            depositIndexes[i] = _storeDeposit(
+            linkIndexes[i] = _storeLink(
                 _tokenAddresses[i],
                 _contractTypes[i],
                 amount,
                 _tokenIds[i],
-                _pubKeys20[i],
+                _claimKeys[i],
                 msg.sender,
                 _withMFAs[i],
                 address(0),
@@ -416,13 +416,13 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                 false
             );
         }
-        return depositIndexes;
+        return linkIndexes;
     }
 
-    /// @notice Create a heterogeneous batch of deposits with backend-authorized fees.
+    /// @notice Create a heterogeneous batch of links with backend-authorized fees.
     /// @dev Fee authorizations are signed for the real caller because batching is vault-native.
-    function makeBatchCustomDepositWithFees(
-        DepositRequest[] calldata _requests,
+    function createCustomLinksWithFees(
+        LinkRequest[] calldata _requests,
         FeeAuthorization[] calldata _feeAuthorizations
     ) external payable nonReentrant returns (uint256[] memory) {
         if (_requests.length != _feeAuthorizations.length) {
@@ -437,9 +437,9 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         }
         if (msg.value != expectedEther) revert InvalidTotalEtherSent();
 
-        uint256[] memory depositIndexes = new uint256[](_requests.length);
+        uint256[] memory linkIndexes = new uint256[](_requests.length);
         for (uint256 i = 0; i < _requests.length; ++i) {
-            DepositRequest calldata request = _requests[i];
+            LinkRequest calldata request = _requests[i];
             FeeAuthorization calldata feeAuthorization = _feeAuthorizations[i];
             uint256 amount = _pullTokensViaApprovalFrom(
                 msg.sender,
@@ -450,14 +450,14 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                 request.contractType == 0 ? request.amount : 0
             );
 
-            uint256 index = deposits.length;
-            _collectDepositFees(index, msg.sender, feeAuthorization.serviceFee, feeAuthorization.gaslessFee);
-            depositIndexes[i] = _storeDeposit(
+            uint256 index = links.length;
+            _collectLinkFees(index, msg.sender, feeAuthorization.serviceFee, feeAuthorization.gaslessFee);
+            linkIndexes[i] = _storeLink(
                 request.tokenAddress,
                 request.contractType,
                 amount,
                 request.tokenId,
-                request.pubKey20,
+                request.claimKey,
                 request.onBehalfOf,
                 request.withMFA,
                 request.recipient,
@@ -468,53 +468,53 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
             );
         }
 
-        return depositIndexes;
+        return linkIndexes;
     }
 
-    /// @notice Create raffle-style ETH or ERC-20 deposits sharing one pubKey20 and different amounts.
-    function makeBatchDepositRaffle(
+    /// @notice Create raffle-style ETH or ERC-20 links sharing one claimKey and different amounts.
+    function createRaffleLinks(
         address _tokenAddress,
         uint8 _contractType,
         uint256[] calldata _amounts,
-        address _pubKey20
+        address claimKey
     ) external payable nonReentrant returns (uint256[] memory) {
-        return _makeBatchDepositRaffle(_tokenAddress, _contractType, _amounts, _pubKey20, false);
+        return _createRaffleLinks(_tokenAddress, _contractType, _amounts, claimKey, false);
     }
 
-    /// @notice Create MFA-gated raffle-style ETH or ERC-20 deposits sharing one pubKey20.
-    function makeBatchMFADepositRaffle(
+    /// @notice Create MFA-gated raffle-style ETH or ERC-20 links sharing one claimKey.
+    function createMFARaffleLinks(
         address _tokenAddress,
         uint8 _contractType,
         uint256[] calldata _amounts,
-        address _pubKey20
+        address claimKey
     ) external payable nonReentrant returns (uint256[] memory) {
-        return _makeBatchDepositRaffle(_tokenAddress, _contractType, _amounts, _pubKey20, true);
+        return _createRaffleLinks(_tokenAddress, _contractType, _amounts, claimKey, true);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
-    // Withdrawal Functions
+    // Claim Functions
     // ══════════════════════════════════════════════════════════════════════════════
 
     /**
      * @notice Withdraw tokens. Can be called by anyone with a valid signature.
      */
-    function withdrawDeposit(uint256 _index, address _recipientAddress, bytes memory _signature)
+    function claim(uint256 _index, address _recipientAddress, bytes memory _signature)
         external
         nonReentrant
         returns (bool)
     {
-        return _withdrawDeposit(_index, _recipientAddress, ANYONE_WITHDRAWAL_MODE, _signature, false);
+        return _executeClaim(_index, _recipientAddress, OPEN_CLAIM_MODE, _signature, false);
     }
 
     /**
      * @notice Withdraw tokens with backend MFA approval.
      * @param _index deposit index
      * @param _recipientAddress address to receive the full deposit amount
-     * @param _signature withdrawal signature from the deposit's pubKey20
+     * @param _signature withdrawal signature from the link's claimKey
      * @param _MFASignature backend signature authorizing this withdrawal
      * @param _deadline backend-provided signature deadline; 0 means no expiry
      */
-    function withdrawMFADeposit(
+    function claimWithMFA(
         uint256 _index,
         address _recipientAddress,
         bytes memory _signature,
@@ -522,30 +522,30 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256 _deadline
     ) external nonReentrant returns (bool) {
         _verifyMfaSignature(_index, _recipientAddress, _deadline, _MFASignature);
-        return _withdrawDeposit(_index, _recipientAddress, ANYONE_WITHDRAWAL_MODE, _signature, true);
+        return _executeClaim(_index, _recipientAddress, OPEN_CLAIM_MODE, _signature, true);
     }
 
     /**
      * @notice Withdraw tokens. Must be called by the recipient.
      */
-    function withdrawDepositAsRecipient(uint256 _index, address _recipientAddress, bytes memory _signature)
+    function claimAsBoundRecipient(uint256 _index, address _recipientAddress, bytes memory _signature)
         external
         nonReentrant
         returns (bool)
     {
         if (_recipientAddress != msg.sender) revert NotTheRecipient();
-        return _withdrawDeposit(_index, _recipientAddress, RECIPIENT_WITHDRAWAL_MODE, _signature, false);
+        return _executeClaim(_index, _recipientAddress, BOUND_CLAIM_MODE, _signature, false);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
-    // Sender Reclaim Functions
+    // Creator Reclaim Functions
     // ══════════════════════════════════════════════════════════════════════════════
 
     /**
-     * @notice Sender reclaims their deposit directly.
+     * @notice Creator reclaims their link directly.
      */
-    function withdrawDepositSender(uint256 _index) external nonReentrant returns (bool) {
-        return _withdrawDepositSender(_index, msg.sender);
+    function reclaim(uint256 _index) external nonReentrant returns (bool) {
+        return _executeReclaim(_index, msg.sender);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -615,32 +615,32 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
 
     /// @notice Returns whether `caller` can use an EnvelopePaymaster for the encoded vault call.
     /// @dev Intended for ZkSync paymaster validation. Re-checks claim/reclaim preconditions so the
-    ///      paymaster only pays for prepaid gasless deposits that should execute successfully.
+    ///      paymaster only pays for prepaid gasless links that should execute successfully.
     function isValidGaslessOperation(address caller, bytes calldata callData) external view returns (bool) {
         if (callData.length < 4) return false;
 
         bytes4 selector = bytes4(callData[0:4]);
 
-        if (selector == this.withdrawDeposit.selector) {
+        if (selector == this.claim.selector) {
             (uint256 index, address recipient, bytes memory signature) =
                 abi.decode(callData[4:], (uint256, address, bytes));
-            return _isValidGaslessClaim(caller, index, recipient, ANYONE_WITHDRAWAL_MODE, signature, false);
+            return _isValidGaslessClaim(caller, index, recipient, OPEN_CLAIM_MODE, signature, false);
         }
 
-        if (selector == this.withdrawDepositAsRecipient.selector) {
+        if (selector == this.claimAsBoundRecipient.selector) {
             (uint256 index, address recipient, bytes memory signature) =
                 abi.decode(callData[4:], (uint256, address, bytes));
-            return _isValidGaslessClaim(caller, index, recipient, RECIPIENT_WITHDRAWAL_MODE, signature, false);
+            return _isValidGaslessClaim(caller, index, recipient, BOUND_CLAIM_MODE, signature, false);
         }
 
-        if (selector == this.withdrawMFADeposit.selector) {
+        if (selector == this.claimWithMFA.selector) {
             (uint256 index, address recipient, bytes memory signature, bytes memory mfaSignature, uint256 deadline) =
                 abi.decode(callData[4:], (uint256, address, bytes, bytes, uint256));
             if (!_isMfaSignatureValid(index, recipient, deadline, mfaSignature)) return false;
-            return _isValidGaslessClaim(caller, index, recipient, ANYONE_WITHDRAWAL_MODE, signature, true);
+            return _isValidGaslessClaim(caller, index, recipient, OPEN_CLAIM_MODE, signature, true);
         }
 
-        if (selector == this.withdrawDepositSender.selector) {
+        if (selector == this.reclaim.selector) {
             (uint256 index) = abi.decode(callData[4:], (uint256));
             return _isValidGaslessReclaim(caller, index);
         }
@@ -648,34 +648,34 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         return false;
     }
 
-    function getDepositCount() external view returns (uint256) {
-        return deposits.length;
+    function getLinkCount() external view returns (uint256) {
+        return links.length;
     }
 
-    function getDeposit(uint256 _index) external view returns (Deposit memory) {
-        return deposits[_index];
+    function getLink(uint256 _index) external view returns (Link memory) {
+        return links[_index];
     }
 
-    function getAllDeposits() external view returns (Deposit[] memory) {
-        return deposits;
+    function getAllLinks() external view returns (Link[] memory) {
+        return links;
     }
 
-    function getAllDepositsForAddress(address _address) external view returns (Deposit[] memory) {
+    function getLinksCreatedBy(address _address) external view returns (Link[] memory) {
         uint256 count = 0;
-        for (uint256 i = 0; i < deposits.length; ++i) {
-            if (deposits[i].senderAddress == _address) {
+        for (uint256 i = 0; i < links.length; ++i) {
+            if (links[i].creator == _address) {
                 count++;
             }
         }
-        Deposit[] memory _deposits = new Deposit[](count);
+        Link[] memory result = new Link[](count);
         count = 0;
-        for (uint256 i = 0; i < deposits.length; ++i) {
-            if (deposits[i].senderAddress == _address) {
-                _deposits[count] = deposits[i];
+        for (uint256 i = 0; i < links.length; ++i) {
+            if (links[i].creator == _address) {
+                result[count] = links[i];
                 count++;
             }
         }
-        return _deposits;
+        return result;
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -715,7 +715,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         return _recoverSigner(digest, _signature) == mfaAuthorizer;
     }
 
-    function _verifyFeeAuthorization(DepositRequest calldata _request, FeeAuthorization calldata _feeAuthorization)
+    function _verifyFeeAuthorization(LinkRequest calldata _request, FeeAuthorization calldata _feeAuthorization)
         internal
         view
     {
@@ -737,7 +737,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                     _request.contractType,
                     _request.amount,
                     _request.tokenId,
-                    _request.pubKey20,
+                    _request.claimKey,
                     _request.onBehalfOf,
                     _request.withMFA,
                     _request.recipient,
@@ -753,7 +753,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         if (authorizationSigner != mfaAuthorizer) revert WrongFeeAuthorizationSignature();
     }
 
-    function _collectDepositFees(uint256 _index, address _feePayer, uint256 _serviceFee, uint256 _gaslessFee) internal {
+    function _collectLinkFees(uint256 _index, address _feePayer, uint256 _serviceFee, uint256 _gaslessFee) internal {
         uint256 totalFee = _serviceFee + _gaslessFee;
         if (totalFee > 0) {
             address tokenAddress = address(feeToken);
@@ -763,12 +763,12 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         }
     }
 
-    function _storeDeposit(
+    function _storeLink(
         address _tokenAddress,
         uint8 _contractType,
         uint256 _amount,
         uint256 _tokenId,
-        address _pubKey20,
+        address claimKey,
         address _onBehalfOf,
         bool _requiresMFA,
         address _recipient,
@@ -777,15 +777,15 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256 _gaslessFee,
         bool _gaslessSponsored
     ) internal returns (uint256) {
-        deposits.push(
-            Deposit({
+        links.push(
+            Link({
                 tokenAddress: _tokenAddress,
                 contractType: _contractType,
                 amount: _amount,
                 tokenId: _tokenId,
-                claimed: false,
-                pubKey20: _pubKey20,
-                senderAddress: _onBehalfOf,
+                redeemed: false,
+                claimKey: claimKey,
+                creator: _onBehalfOf,
                 timestamp: uint40(block.timestamp),
                 requiresMFA: _requiresMFA,
                 gaslessSponsored: _gaslessSponsored,
@@ -795,8 +795,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                 gaslessFee: _gaslessFee
             })
         );
-        emit DepositEvent(deposits.length - 1, _contractType, _amount, _onBehalfOf);
-        return deposits.length - 1;
+        emit LinkCreated(links.length - 1, _contractType, _amount, _onBehalfOf);
+        return links.length - 1;
     }
 
     function _isValidGaslessClaim(
@@ -808,42 +808,42 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         bool _authorized
     ) internal view returns (bool) {
         if (_caller != _recipientAddress) return false;
-        if (_index >= deposits.length) return false;
-        Deposit storage deposit = deposits[_index];
-        if (deposit.gaslessFee == 0 && !deposit.gaslessSponsored) return false;
-        return _isValidWithdrawal(_index, _recipientAddress, _extraData, _signature, _authorized);
+        if (_index >= links.length) return false;
+        Link storage link = links[_index];
+        if (link.gaslessFee == 0 && !link.gaslessSponsored) return false;
+        return _isValidClaim(_index, _recipientAddress, _extraData, _signature, _authorized);
     }
 
-    function _isValidWithdrawal(
+    function _isValidClaim(
         uint256 _index,
         address _recipientAddress,
         bytes32 _extraData,
         bytes memory _signature,
         bool _authorized
     ) internal view returns (bool) {
-        Deposit memory deposit = deposits[_index];
-        if (deposit.claimed) return false;
+        Link memory deposit = links[_index];
+        if (deposit.redeemed) return false;
         if (deposit.requiresMFA && !_authorized) return false;
         if (deposit.recipient != address(0) && _recipientAddress != deposit.recipient) return false;
 
-        if (deposit.pubKey20 != address(0)) {
-            bytes32 recipientAddressHash = MessageHashUtils.toEthSignedMessageHash(
+        if (deposit.claimKey != address(0)) {
+            bytes32 _claimHash = MessageHashUtils.toEthSignedMessageHash(
                 keccak256(
                     abi.encodePacked(ENVELOPE_SALT, block.chainid, address(this), _index, _recipientAddress, _extraData)
                 )
             );
-            if (_recoverSigner(recipientAddressHash, _signature) != deposit.pubKey20) return false;
+            if (_recoverSigner(_claimHash, _signature) != deposit.claimKey) return false;
         }
 
         return true;
     }
 
     function _isValidGaslessReclaim(address _caller, uint256 _index) internal view returns (bool) {
-        if (_index >= deposits.length) return false;
-        Deposit memory deposit = deposits[_index];
+        if (_index >= links.length) return false;
+        Link memory deposit = links[_index];
         if (deposit.gaslessFee == 0 && !deposit.gaslessSponsored) return false;
-        if (deposit.claimed) return false;
-        if (deposit.senderAddress != _caller) return false;
+        if (deposit.redeemed) return false;
+        if (deposit.creator != _caller) return false;
         if (deposit.recipient != address(0) && block.timestamp <= deposit.reclaimableAfter) return false;
         return true;
     }
@@ -859,13 +859,13 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256 _contractTypesLength,
         uint256 _amountsLength,
         uint256 _tokenIdsLength,
-        uint256 _pubKeys20Length,
+        uint256 _claimKeysLength,
         uint256 _withMFAsLength
     ) internal pure {
         if (
-            _tokenAddressesLength != _pubKeys20Length || _contractTypesLength != _pubKeys20Length
-                || _amountsLength != _pubKeys20Length || _tokenIdsLength != _pubKeys20Length
-                || _withMFAsLength != _pubKeys20Length
+            _tokenAddressesLength != _claimKeysLength || _contractTypesLength != _claimKeysLength
+                || _amountsLength != _claimKeysLength || _tokenIdsLength != _claimKeysLength
+                || _withMFAsLength != _claimKeysLength
         ) revert ParametersLengthMismatch();
     }
 
@@ -880,7 +880,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
             if (msg.value != _totalAmount) revert InvalidTotalEtherSent();
             return;
         }
-        if (msg.value != 0) revert EthNotAcceptedForNonEthDeposit();
+        if (msg.value != 0) revert EthNotAcceptedForNonEthLink();
 
         if (_contractType == 1) {
             if (_totalAmount > 0) IERC20(_tokenAddress).safeTransferFrom(_from, address(this), _totalAmount);
@@ -895,11 +895,11 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         }
     }
 
-    function _makeBatchDepositRaffle(
+    function _createRaffleLinks(
         address _tokenAddress,
         uint8 _contractType,
         uint256[] calldata _amounts,
-        address _pubKey20,
+        address claimKey,
         bool _requiresMFA
     ) internal returns (uint256[] memory) {
         if (_contractType != 0 && _contractType != 1) {
@@ -914,18 +914,18 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         if (_contractType == 0) {
             if (msg.value != totalAmount) revert InvalidTotalEtherSent();
         } else {
-            if (msg.value != 0) revert EthNotAcceptedForNonEthDeposit();
+            if (msg.value != 0) revert EthNotAcceptedForNonEthLink();
             if (totalAmount > 0) IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), totalAmount);
         }
 
-        uint256[] memory depositIndexes = new uint256[](_amounts.length);
+        uint256[] memory linkIndexes = new uint256[](_amounts.length);
         for (uint256 i = 0; i < _amounts.length; ++i) {
-            depositIndexes[i] = _storeDeposit(
+            linkIndexes[i] = _storeLink(
                 _tokenAddress,
                 _contractType,
                 _amounts[i],
                 0,
-                _pubKey20,
+                claimKey,
                 msg.sender,
                 _requiresMFA,
                 address(0),
@@ -935,7 +935,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                 false
             );
         }
-        return depositIndexes;
+        return linkIndexes;
     }
 
     function _pullTokensViaApproval(address _tokenAddress, uint8 _contractType, uint256 _amount, uint256 _tokenId)
@@ -969,70 +969,70 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         return _amount;
     }
 
-    function _withdrawDeposit(
+    function _executeClaim(
         uint256 _index,
         address _recipientAddress,
         bytes32 _extraData,
         bytes memory _signature,
         bool _authorized
     ) internal returns (bool) {
-        if (_index >= deposits.length) revert DepositIndexOutOfBounds();
-        Deposit memory _deposit = deposits[_index];
-        if (_deposit.claimed) revert DepositAlreadyClaimed();
+        if (_index >= links.length) revert LinkIndexOutOfBounds();
+        Link memory link = links[_index];
+        if (link.redeemed) revert LinkAlreadyRedeemed();
 
-        address depositSigner;
+        address claimSigner;
         if (_signature.length > 0) {
-            bytes32 _recipientAddressHash = MessageHashUtils.toEthSignedMessageHash(
+            bytes32 _claimHash = MessageHashUtils.toEthSignedMessageHash(
                 keccak256(
                     abi.encodePacked(ENVELOPE_SALT, block.chainid, address(this), _index, _recipientAddress, _extraData)
                 )
             );
-            depositSigner = getSigner(_recipientAddressHash, _signature);
+            claimSigner = getSigner(_claimHash, _signature);
         }
-        if (_deposit.requiresMFA && !_authorized) revert RequiresMfaAuthorization();
-        if (_deposit.pubKey20 != address(0) && depositSigner != _deposit.pubKey20) revert WrongSignature();
-        if (_deposit.recipient != address(0) && _recipientAddress != _deposit.recipient) revert WrongRecipient();
+        if (link.requiresMFA && !_authorized) revert RequiresMfaAuthorization();
+        if (link.claimKey != address(0) && claimSigner != link.claimKey) revert WrongSignature();
+        if (link.recipient != address(0) && _recipientAddress != link.recipient) revert WrongRecipient();
 
-        emit WithdrawEvent(_index, _deposit.contractType, _deposit.amount, _recipientAddress);
-        deposits[_index].claimed = true;
+        emit LinkRedeemed(_index, link.contractType, link.amount, _recipientAddress);
+        links[_index].redeemed = true;
 
-        if (_deposit.contractType == 0) {
-            (bool success,) = _recipientAddress.call{value: _deposit.amount}("");
+        if (link.contractType == 0) {
+            (bool success,) = _recipientAddress.call{value: link.amount}("");
             if (!success) revert EthTransferFailed();
-        } else if (_deposit.contractType == 1) {
-            IERC20(_deposit.tokenAddress).safeTransfer(_recipientAddress, _deposit.amount);
-        } else if (_deposit.contractType == 2) {
-            IERC721(_deposit.tokenAddress).safeTransferFrom(address(this), _recipientAddress, _deposit.tokenId);
-        } else if (_deposit.contractType == 3) {
-            IERC1155(_deposit.tokenAddress)
-                .safeTransferFrom(address(this), _recipientAddress, _deposit.tokenId, _deposit.amount, "");
+        } else if (link.contractType == 1) {
+            IERC20(link.tokenAddress).safeTransfer(_recipientAddress, link.amount);
+        } else if (link.contractType == 2) {
+            IERC721(link.tokenAddress).safeTransferFrom(address(this), _recipientAddress, link.tokenId);
+        } else if (link.contractType == 3) {
+            IERC1155(link.tokenAddress)
+                .safeTransferFrom(address(this), _recipientAddress, link.tokenId, link.amount, "");
         }
 
         return true;
     }
 
-    function _withdrawDepositSender(uint256 _index, address _senderAddress) internal returns (bool) {
-        if (_index >= deposits.length) revert DepositIndexOutOfBounds();
-        Deposit memory _deposit = deposits[_index];
-        if (_deposit.claimed) revert DepositAlreadyClaimed();
-        if (_deposit.senderAddress != _senderAddress) revert NotTheSender();
-        if (_deposit.recipient != address(0)) {
-            if (block.timestamp <= _deposit.reclaimableAfter) revert TooEarlyToReclaim();
+    function _executeReclaim(uint256 _index, address _creator) internal returns (bool) {
+        if (_index >= links.length) revert LinkIndexOutOfBounds();
+        Link memory link = links[_index];
+        if (link.redeemed) revert LinkAlreadyRedeemed();
+        if (link.creator != _creator) revert NotTheCreator();
+        if (link.recipient != address(0)) {
+            if (block.timestamp <= link.reclaimableAfter) revert TooEarlyToReclaim();
         }
 
-        emit WithdrawEvent(_index, _deposit.contractType, _deposit.amount, _deposit.senderAddress);
-        deposits[_index].claimed = true;
+        emit LinkRedeemed(_index, link.contractType, link.amount, link.creator);
+        links[_index].redeemed = true;
 
-        if (_deposit.contractType == 0) {
-            (bool success,) = payable(_deposit.senderAddress).call{value: _deposit.amount}("");
+        if (link.contractType == 0) {
+            (bool success,) = payable(link.creator).call{value: link.amount}("");
             if (!success) revert EthTransferFailed();
-        } else if (_deposit.contractType == 1) {
-            IERC20(_deposit.tokenAddress).safeTransfer(_deposit.senderAddress, _deposit.amount);
-        } else if (_deposit.contractType == 2) {
-            IERC721(_deposit.tokenAddress).safeTransferFrom(address(this), _deposit.senderAddress, _deposit.tokenId);
-        } else if (_deposit.contractType == 3) {
-            IERC1155(_deposit.tokenAddress)
-                .safeTransferFrom(address(this), _deposit.senderAddress, _deposit.tokenId, _deposit.amount, "");
+        } else if (link.contractType == 1) {
+            IERC20(link.tokenAddress).safeTransfer(link.creator, link.amount);
+        } else if (link.contractType == 2) {
+            IERC721(link.tokenAddress).safeTransferFrom(address(this), link.creator, link.tokenId);
+        } else if (link.contractType == 3) {
+            IERC1155(link.tokenAddress)
+                .safeTransferFrom(address(this), link.creator, link.tokenId, link.amount, "");
         }
 
         return true;

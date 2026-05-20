@@ -16,7 +16,7 @@ dotenv.config({ path: ".env-test" });
  *
  * Optional environment variables:
  *   - ENVELOPE_MFA_AUTHORIZER: Address authorized to sign MFA withdraw approvals.
- *                            Defaults to 0x0 (MFA disabled — withdrawMFADeposit reverts).
+ *                            Defaults to 0x0 (MFA disabled — claimWithMFA reverts).
  *                            Set to your backend signer for production MFA/fee authorizations.
  *   - ENVELOPE_OWNER:          Owner/fee withdrawer. Defaults to deployer.
  *   - ENVELOPE_FEE_TOKEN:      ERC20 token used for service/gasless fees (e.g. NODL).
@@ -115,7 +115,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   if (mfaAuthorizer === ZERO) {
     console.log("");
     console.log(
-      "NOTE: ENVELOPE_MFA_AUTHORIZER is 0x0 — withdrawMFADeposit will always revert. Set it before allowing MFA-flagged deposits in production.",
+      "NOTE: ENVELOPE_MFA_AUTHORIZER is 0x0 — claimWithMFA will always revert. Set it before allowing MFA-flagged links in production.",
     );
   }
 };

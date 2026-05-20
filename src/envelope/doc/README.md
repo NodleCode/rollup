@@ -1,31 +1,31 @@
 # Envelope contracts
 
-The Envelope flow on Nodle is built on top of modified Peanut Protocol V4.4 contracts. Senders deposit assets against a per-link public key; recipients claim with the matching private key. Nodle-specific additions include address-bound links, backend MFA, deposit-time service fees, app-wallet batching on ZkSync smart accounts, and ZkSync paymaster support for prepaid or backend-sponsored gasless claims and reclaims.
+The Envelope flow on Nodle is built on top of modified Peanut Protocol V4.4 contracts. Senders create claimable links by escrowing assets against a per-link claim key; recipients claim with the matching private key. Nodle-specific additions include address-bound links, backend MFA, link-creation-time service fees, app-wallet batching on ZkSync smart accounts, and ZkSync paymaster support for prepaid or backend-sponsored gasless claims and reclaims.
 
 ## Layout
 
 | Contract            | Source                                 | Spec                                           |
 | ------------------- | -------------------------------------- | ---------------------------------------------- |
-| `EnvelopeVault`     | `src/envelope/EnvelopeVault.sol`    | [EnvelopeVault.md](./EnvelopeVault.md)         |
+| `EnvelopeVault`     | `src/envelope/EnvelopeVault.sol`       | [EnvelopeVault.md](./EnvelopeVault.md)         |
 | `EnvelopePaymaster` | `src/paymasters/EnvelopePaymaster.sol` | [EnvelopePaymaster.md](./EnvelopePaymaster.md) |
 
 Interfaces:
 
-| Interface                   | Source                                            | Used by                                                                                    |
-| --------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Interface                   | Source                                       | Used by                                                                                    |
+| --------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `IEnvelopeGaslessValidator` | `src/envelope/IEnvelopeGaslessValidator.sol` | `EnvelopePaymaster` queries `EnvelopeVault.isValidGaslessOperation` before sponsoring gas. |
 
 ## License notice
 
 This subtree mixes licenses; the repo-root `LICENSE` (Clear BSD) does not apply uniformly here.
 
-| Files                                             | License              | Notes                                                                                                                                                                           |
-| ------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/envelope/EnvelopeVault.sol`               | **GPL-3.0-or-later** | Modified copy of upstream Peanut Protocol V4.4. Full GPL v3 text is bundled at `src/envelope/LICENSE-GPL`. |
-| `src/envelope/IEnvelopeGaslessValidator.sol` | **GPL-3.0-or-later** | Minimal interface for the GPL vault validation surface.                                                                                                                         |
-| `test/envelope/**/*.t.sol`                        | **GPL-3.0-or-later** | Test files that import GPL-licensed contracts are relicensed for compatibility.                                                                                                 |
-| `test/envelope/mocks/**/*.sol`                    | **MIT / UNLICENSED** | Vendored test mocks, original SPDX retained.                                                                                                                                    |
-| All other repo files                              | unchanged            | Whatever they were.                                                                                                                                                             |
+| Files                                        | License              | Notes                                                                                                      |
+| -------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `src/envelope/EnvelopeVault.sol`             | **GPL-3.0-or-later** | Modified copy of upstream Peanut Protocol V4.4. Full GPL v3 text is bundled at `src/envelope/LICENSE-GPL`. |
+| `src/envelope/IEnvelopeGaslessValidator.sol` | **GPL-3.0-or-later** | Minimal interface for the GPL vault validation surface.                                                    |
+| `test/envelope/**/*.t.sol`                   | **GPL-3.0-or-later** | Test files that import GPL-licensed contracts are relicensed for compatibility.                            |
+| `test/envelope/mocks/**/*.sol`               | **MIT / UNLICENSED** | Vendored test mocks, original SPDX retained.                                                               |
+| All other repo files                         | unchanged            | Whatever they were.                                                                                        |
 
 The GPL is "viral" only across `import` boundaries; non-importing files in the same repository remain under their own licenses under the OSI's "mere aggregation" interpretation.
 

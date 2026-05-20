@@ -75,7 +75,7 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         uint256 depositPrivKey = uint256(keccak256("nodle.vault.deposit-key"));
         address depositSigner = vm.addr(depositPrivKey);
 
-        uint256 idx = nodleVault.makeSelflessMFADeposit{value: 1 wei}(address(0), 0, 1, 0, depositSigner, address(this));
+        uint256 idx = nodleVault.createMFALinkFor{value: 1 wei}(address(0), 0, 1, 0, depositSigner, address(this));
 
         // withdrawal signature (signed by deposit pubkey)
         bytes32 wdHash = MessageHashUtilsLite.toEthSignedMessageHash(
@@ -86,7 +86,7 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
                     address(nodleVault),
                     idx,
                     address(this),
-                    nodleVault.ANYONE_WITHDRAWAL_MODE()
+                    nodleVault.OPEN_CLAIM_MODE()
                 )
             )
         );
@@ -105,7 +105,7 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         (uint8 mv, bytes32 mr, bytes32 ms) = vm.sign(mfaPrivKey, mfaHash);
         bytes memory mfaSig = abi.encodePacked(mr, ms, mv);
 
-        nodleVault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig, deadline);
+        nodleVault.claimWithMFA(idx, address(this), wdSig, mfaSig, deadline);
     }
 
     function test_T2_zeroMfaAuthorizerRejectsAllMfaWithdrawals() public {
@@ -113,13 +113,13 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         uint256 depositPrivKey = uint256(keccak256("dep"));
         address depositSigner = vm.addr(depositPrivKey);
 
-        uint256 idx = vault.makeSelflessMFADeposit{value: 1 wei}(address(0), 0, 1, 0, depositSigner, address(this));
+        uint256 idx = vault.createMFALinkFor{value: 1 wei}(address(0), 0, 1, 0, depositSigner, address(this));
 
         // empty/garbage MFA sig must not pass when authorizer is 0
         bytes memory wdSig = hex"00";
         bytes memory mfaSig = hex"00";
         vm.expectRevert();
-        vault.withdrawMFADeposit(idx, address(this), wdSig, mfaSig, 0);
+        vault.claimWithMFA(idx, address(this), wdSig, mfaSig, 0);
     }
 }
 
