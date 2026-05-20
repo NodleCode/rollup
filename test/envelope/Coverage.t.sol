@@ -1652,9 +1652,9 @@ contract EnvelopeCoverageTest is Test {
     // ══════════════════════════════════════════════════════════════════════════════
 
     function test_createCustomLinks_ethAndErc1155() public {
-        address[] memory addrs = new address[](2);
-        addrs[0] = address(0);
-        addrs[1] = address(erc1155);
+        address[] memory tokenAddresses = new address[](2);
+        tokenAddresses[0] = address(0);
+        tokenAddresses[1] = address(erc1155);
 
         uint8[] memory types = new uint8[](2);
         types[0] = 0;
@@ -1677,7 +1677,9 @@ contract EnvelopeCoverageTest is Test {
         mfas[1] = false;
 
         vm.prank(SENDER);
-        uint256[] memory indexes = vault.createCustomLinks{value: 0.5 ether}(addrs, types, amounts, tokenIds, keys, mfas);
+        uint256[] memory indexes = vault.createCustomLinks{value: 0.5 ether}(
+            tokenAddresses, types, amounts, tokenIds, keys, mfas
+        );
 
         assertEq(indexes.length, 2);
         assertEq(vault.getLinkAsset(indexes[0]).contractType, 0);

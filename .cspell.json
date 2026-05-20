@@ -74,6 +74,7 @@
     "SLOAD",
     "Bitmask",
     "mstore",
+    "mload",
     "MBOND",
     "USCA",
     "USNY",

@@ -65,6 +65,7 @@ The vault no longer contains an internal paymaster callback, and the EIP-3009 ga
 | Script                             | Purpose                                                     |
 | ---------------------------------- | ----------------------------------------------------------- |
 | `hardhat-deploy/DeployEnvelope.ts` | Deploys `EnvelopeLinks` and optionally `EnvelopePaymaster`. |
+| `script/DeployEnvelopeZkSync.s.sol` | Forge deployment script for `EnvelopeLinks` and optional `EnvelopePaymaster` on ZkSync Era. |
 
 Important environment variables:
 
@@ -76,6 +77,12 @@ Important environment variables:
 | `ENVELOPE_DEPLOY_PAYMASTER`     | Set to `true` to deploy `EnvelopePaymaster`.                               |
 | `ENVELOPE_PAYMASTER_ADMIN`      | Optional paymaster admin; defaults to deployer.                            |
 | `ENVELOPE_PAYMASTER_WITHDRAWER` | Optional paymaster ETH withdrawer; defaults to deployer.                   |
+
+Verification note:
+
+- Hardhat deployments can use `hre.run("verify:verify", ...)` on supported public ZkSync networks.
+- Forge deployments should NOT use `forge script --verify` or `forge verify-contract` directly on ZkSync.
+- Use `ops/verify_zksync_contracts.py` against the Forge broadcast JSON so imports are rewritten into the format the ZkSync verifier accepts.
 
 ## Test coverage
 
