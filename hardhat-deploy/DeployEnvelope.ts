@@ -57,7 +57,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   console.log("");
 
   // 1. Vault — required.
-  const vault = await deployContract(deployer, "EnvelopeVault", [
+  const vault = await deployContract(deployer, "EnvelopeLinks", [
     mfaAuthorizer,
     envelopeOwner,
     feeToken,
@@ -77,17 +77,17 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
 
   console.log("");
   console.log("=== Deployment Complete ===");
-  console.log("EnvelopeVault:        ", vaultAddr);
+  console.log("EnvelopeLinks:        ", vaultAddr);
   if (paymasterAddr) console.log("EnvelopePaymaster: ", paymasterAddr);
   console.log("");
 
   // Verification
   console.log("=== Verifying Contracts ===");
   try {
-    console.log("Verifying EnvelopeVault...");
+    console.log("Verifying EnvelopeLinks...");
     await hre.run("verify:verify", {
       address: vaultAddr,
-      contract: "src/envelope/EnvelopeVault.sol:EnvelopeVault",
+      contract: "src/envelope/EnvelopeLinks.sol:EnvelopeLinks",
       constructorArguments: [mfaAuthorizer, envelopeOwner, feeToken],
     });
   } catch (e: any) {

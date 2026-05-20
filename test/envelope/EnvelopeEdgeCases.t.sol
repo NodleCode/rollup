@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.26;
 
-// Edge-case coverage for EnvelopeVault behavior the happy-path tests don't exercise directly.
+// Edge-case coverage for EnvelopeLinks behavior the happy-path tests don't exercise directly.
 // Names follow the repo's test_RevertWhen_* / test_*
 // convention. Each test is single-purpose; comments explain the *why*, not the *what*.
 
 import {Test} from "forge-std/Test.sol";
-import {EnvelopeVault} from "../../src/envelope/EnvelopeVault.sol";
+import {EnvelopeLinks} from "../../src/envelope/EnvelopeLinks.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";
@@ -15,16 +15,16 @@ import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Hol
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
 /// @dev Reentrancy probe: tries to call back into `vault.withdrawDeposit` from inside
-/// `safeTransfer`. Guarded by EnvelopeVault's `nonReentrant` modifier, so the inner call
+/// `safeTransfer`. Guarded by EnvelopeLinks's `nonReentrant` modifier, so the inner call
 /// reverts and the outer flow surfaces the inner revert reason ("REENTRANCY").
 contract ReentrantToken is ERC20Mock {
-    EnvelopeVault public vault;
+    EnvelopeLinks public vault;
     uint256 public targetIdx;
     bytes public targetSig;
     address public attacker;
     bool public attempted;
 
-    function arm(EnvelopeVault p, uint256 idx, bytes calldata sig, address atk) external {
+    function arm(EnvelopeLinks p, uint256 idx, bytes calldata sig, address atk) external {
         vault = p;
         targetIdx = idx;
         targetSig = sig;
@@ -47,7 +47,7 @@ contract ReentrantToken is ERC20Mock {
 }
 
 contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
-    EnvelopeVault public vault;
+    EnvelopeLinks public vault;
     ERC20Mock public erc20;
     ERC721Mock public erc721;
     ERC1155Mock public erc1155;
@@ -61,7 +61,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
     function setUp() public {
         LINK_PUBKEY20 = vm.addr(LINK_PRIV);
-        vault = new EnvelopeVault(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0), address(this), address(0));
         erc20 = new ERC20Mock();
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
@@ -87,17 +87,17 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         return vault.createLink{value: amount}(address(0), 0, amount, 0, LINK_PUBKEY20);
     }
 
-    // ── EnvelopeVault deposit input validation ──────────────────────────────────
+    // ── EnvelopeLinks deposit input validation ──────────────────────────────────
 
     function test_RevertWhen_DepositInvalidContractType() public {
         // _pullTokensViaApproval rejects contractType > 3.
-        vm.expectRevert(EnvelopeVault.InvalidContractType.selector);
+        vm.expectRevert(EnvelopeLinks.InvalidContractType.selector);
         vault.createLink{value: 0}(address(0), 5, 0, 0, LINK_PUBKEY20);
     }
 
     function test_RevertWhen_DepositEthAmountMismatch() public {
         // contractType==0 requires _amount == msg.value.
-        vm.expectRevert(EnvelopeVault.WrongEthAmount.selector);
+        vm.expectRevert(EnvelopeLinks.WrongEthAmount.selector);
         vault.createLink{value: 100}(address(0), 0, 50, 0, LINK_PUBKEY20);
     }
 
@@ -105,15 +105,15 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         // contractType==2 requires _amount == 1.
         erc721.mint(address(this), 1);
         erc721.approve(address(vault), 1);
-        vm.expectRevert(EnvelopeVault.Erc721AmountMustBeOne.selector);
+        vm.expectRevert(EnvelopeLinks.Erc721AmountMustBeOne.selector);
         vault.createLink(address(erc721), 2, 2, 1, LINK_PUBKEY20);
     }
 
-    // ── EnvelopeVault withdraw input validation ─────────────────────────────────
+    // ── EnvelopeLinks withdraw input validation ─────────────────────────────────
 
     function test_RevertWhen_WithdrawIndexOutOfBounds() public {
         bytes memory sig = _signWithdrawal(99, ALICE, LINK_PRIV);
-        vm.expectRevert(EnvelopeVault.LinkIndexOutOfBounds.selector);
+        vm.expectRevert(EnvelopeLinks.LinkIndexOutOfBounds.selector);
         vault.claim(99, ALICE, sig);
     }
 
@@ -122,7 +122,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
         vault.claim(idx, ALICE, sig);
 
-        vm.expectRevert(EnvelopeVault.LinkAlreadyRedeemed.selector);
+        vm.expectRevert(EnvelopeLinks.LinkAlreadyRedeemed.selector);
         vault.claim(idx, ALICE, sig);
     }
 
@@ -132,7 +132,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         uint256 wrongKey = uint256(keccak256("wrong-signer"));
         bytes memory sig = _signWithdrawal(idx, ALICE, wrongKey);
 
-        vm.expectRevert(EnvelopeVault.WrongSignature.selector);
+        vm.expectRevert(EnvelopeLinks.WrongSignature.selector);
         vault.claim(idx, ALICE, sig);
     }
 
@@ -151,7 +151,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
         // BOB tries to call on behalf of ALICE — caller must equal the recipient param.
         vm.prank(BOB);
-        vm.expectRevert(EnvelopeVault.NotTheRecipient.selector);
+        vm.expectRevert(EnvelopeLinks.NotTheRecipient.selector);
         vault.claimAsBoundRecipient(idx, ALICE, sig);
     }
 
@@ -163,7 +163,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         // Even with a valid pubKey signature, the contract-stored recipient blocks
         // anyone else from being the named recipient on withdrawal.
         bytes memory sig = _signWithdrawal(idx, BOB, LINK_PRIV);
-        vm.expectRevert(EnvelopeVault.WrongRecipient.selector);
+        vm.expectRevert(EnvelopeLinks.WrongRecipient.selector);
         vault.claim(idx, BOB, sig);
     }
 
@@ -172,7 +172,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         uint256 idx = vault.createCustomLink{value: 1 ether}(
             address(0), 0, 1 ether, 0, LINK_PUBKEY20, address(this), false, ALICE, reclaimAfter
         );
-        vm.expectRevert(EnvelopeVault.TooEarlyToReclaim.selector);
+        vm.expectRevert(EnvelopeLinks.TooEarlyToReclaim.selector);
         vault.reclaim(idx);
 
         vm.warp(reclaimAfter + 1);
@@ -182,7 +182,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     function test_RevertWhen_SenderReclaimNotTheSender() public {
         uint256 idx = _depositEth(1 ether);
         vm.prank(ALICE);
-        vm.expectRevert(EnvelopeVault.NotTheCreator.selector);
+        vm.expectRevert(EnvelopeLinks.NotTheCreator.selector);
         vault.reclaim(idx);
     }
 
@@ -191,21 +191,21 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         // deposits can never be withdrawn via withdrawDeposit (REQUIRES AUTHORIZATION).
         uint256 idx = vault.createMFALink{value: 1 ether}(address(0), 0, 1 ether, 0, LINK_PUBKEY20);
         bytes memory sig = _signWithdrawal(idx, ALICE, LINK_PRIV);
-        vm.expectRevert(EnvelopeVault.RequiresMfaAuthorization.selector);
+        vm.expectRevert(EnvelopeLinks.RequiresMfaAuthorization.selector);
         vault.claim(idx, ALICE, sig);
     }
 
-    // ── EnvelopeVault views ─────────────────────────────────────────────────────
+    // ── EnvelopeLinks views ─────────────────────────────────────────────────────
 
     function test_GetAllDepositsForAddressFiltersBySender() public {
         _depositEth(1);
         _depositEth(1);
         // Same sender (address(this)) made both deposits.
-        EnvelopeVault.Link[] memory mine = vault.getLinksCreatedBy(address(this));
+        EnvelopeLinks.Link[] memory mine = vault.getLinksCreatedBy(address(this));
         assertEq(mine.length, 2);
 
         // Different sender → empty.
-        EnvelopeVault.Link[] memory aliceDeposits = vault.getLinksCreatedBy(ALICE);
+        EnvelopeLinks.Link[] memory aliceDeposits = vault.getLinksCreatedBy(ALICE);
         assertEq(aliceDeposits.length, 0);
     }
 
@@ -217,7 +217,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         assertEq(vault.getLinkCount(), 3);
     }
 
-    // ── EnvelopeVault reentrancy ────────────────────────────────────────────────
+    // ── EnvelopeLinks reentrancy ────────────────────────────────────────────────
 
     function test_NonReentrantBlocksReentryFromMaliciousToken() public {
         ReentrantToken evil = new ReentrantToken();
@@ -245,7 +245,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         for (uint256 i = 0; i < 3; i++) {
             pubKeys[i] = LINK_PUBKEY20;
         }
-        vm.expectRevert(EnvelopeVault.InvalidTotalEtherSent.selector);
+        vm.expectRevert(EnvelopeLinks.InvalidTotalEtherSent.selector);
         vault.createLinks{value: 1 ether}(address(0), 0, 1 ether, 0, pubKeys);
         // expected 3 * 1 ether, sent 1 ether
     }
@@ -259,7 +259,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         address[] memory pks = new address[](2);
         bool[] memory mfa = new bool[](3); // wrong length
 
-        vm.expectRevert(EnvelopeVault.ParametersLengthMismatch.selector);
+        vm.expectRevert(EnvelopeLinks.ParametersLengthMismatch.selector);
         vault.createCustomLinks(tokens, types, amounts, ids, pks, mfa);
     }
 
@@ -280,7 +280,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         for (uint256 i = 0; i < 3; i++) {
             pubKeys[i] = LINK_PUBKEY20;
         }
-        vm.expectRevert(EnvelopeVault.InvalidTotalEtherSent.selector);
+        vm.expectRevert(EnvelopeLinks.InvalidTotalEtherSent.selector);
         vault.createLinksNoReturn{value: 1 ether}(address(0), 0, 1 ether, 0, pubKeys);
     }
 
@@ -292,14 +292,14 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         for (uint256 i = 0; i < 2; i++) {
             pubKeys[i] = LINK_PUBKEY20;
         }
-        vm.expectRevert(EnvelopeVault.EthNotAcceptedForNonEthLink.selector);
+        vm.expectRevert(EnvelopeLinks.EthNotAcceptedForNonEthLink.selector);
         vault.createLinksNoReturn{value: 1 wei}(address(erc20), 1, 100, 0, pubKeys);
     }
 
     function test_RevertWhen_BatchRaffleErc721NotSupported() public {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = 1;
-        vm.expectRevert(EnvelopeVault.UnsupportedRaffleContractType.selector);
+        vm.expectRevert(EnvelopeLinks.UnsupportedRaffleContractType.selector);
         vault.createRaffleLinks(address(erc721), 2, amounts, LINK_PUBKEY20);
     }
 

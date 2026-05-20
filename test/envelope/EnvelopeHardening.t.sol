@@ -7,7 +7,7 @@ pragma solidity 0.8.26;
 //   T2 — mfaAuthorizer is now a per-deploy constructor arg (fix for S3 hardcoded key)
 
 import {Test} from "forge-std/Test.sol";
-import {EnvelopeVault} from "../../src/envelope/EnvelopeVault.sol";
+import {EnvelopeLinks} from "../../src/envelope/EnvelopeLinks.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";
@@ -15,7 +15,7 @@ import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Hol
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
 contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
-    EnvelopeVault public vault;
+    EnvelopeLinks public vault;
     ERC721Mock public erc721;
     ERC1155Mock public erc1155;
 
@@ -23,7 +23,7 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
     address constant PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
 
     function setUp() public {
-        vault = new EnvelopeVault(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0), address(this), address(0));
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
     }
@@ -31,19 +31,19 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
     receive() external payable {}
 
     // ── T1 ─────────────────────────────────────────────────────────────────
-    // Direct safeTransferFrom into EnvelopeVault must revert (S1). Previously the
+    // Direct safeTransferFrom into EnvelopeLinks must revert (S1). Previously the
     // receiver hooks fell off the end and returned bytes4(0); some token
     // implementations would treat that as accepted, leaving tokens stuck.
 
     function test_T1_directERC721TransferReverts() public {
         erc721.mint(address(this), 42);
-        vm.expectRevert(EnvelopeVault.DirectTransfersNotAllowed.selector);
+        vm.expectRevert(EnvelopeLinks.DirectTransfersNotAllowed.selector);
         erc721.safeTransferFrom(address(this), address(vault), 42);
     }
 
     function test_T1_directERC1155TransferReverts() public {
         erc1155.mint(address(this), 7, 1, "");
-        vm.expectRevert(EnvelopeVault.DirectTransfersNotAllowed.selector);
+        vm.expectRevert(EnvelopeLinks.DirectTransfersNotAllowed.selector);
         erc1155.safeTransferFrom(address(this), address(vault), 7, 1, "");
     }
 
@@ -56,19 +56,19 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         amounts[1] = 1;
         erc1155.mint(address(this), 1, 1, "");
         erc1155.mint(address(this), 2, 1, "");
-        vm.expectRevert(EnvelopeVault.DirectTransfersNotAllowed.selector);
+        vm.expectRevert(EnvelopeLinks.DirectTransfersNotAllowed.selector);
         erc1155.safeBatchTransferFrom(address(this), address(vault), ids, amounts, "");
     }
 
     // ── T2 ─────────────────────────────────────────────────────────────────
-    // mfaAuthorizer is now per-deploy. Prove a freshly-deployed EnvelopeVault
+    // mfaAuthorizer is now per-deploy. Prove a freshly-deployed EnvelopeLinks
     // accepts MFA signatures from a *test* signer rather than the upstream key.
 
     function test_T2_customMfaAuthorizerAcceptsItsSignature() public {
         uint256 mfaPrivKey = uint256(keccak256("nodle.vault.mfa-test-signer"));
         address mfaSigner = vm.addr(mfaPrivKey);
 
-        EnvelopeVault nodleVault = new EnvelopeVault(mfaSigner, address(this), address(0));
+        EnvelopeLinks nodleVault = new EnvelopeLinks(mfaSigner, address(this), address(0));
         assertEq(nodleVault.mfaAuthorizer(), mfaSigner, "constructor arg ignored");
 
         // make an MFA-gated deposit, then craft both signatures with our test keys.

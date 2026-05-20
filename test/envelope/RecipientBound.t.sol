@@ -2,13 +2,13 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-import "../../src/envelope/EnvelopeVault.sol";
+import "../../src/envelope/EnvelopeLinks.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
 
 contract RecipientBoundTest is Test {
-    EnvelopeVault public vault;
+    EnvelopeLinks public vault;
     ERC20Mock public testToken;
     ERC721Mock public testToken721;
     ERC1155Mock public testToken1155;
@@ -22,7 +22,7 @@ contract RecipientBoundTest is Test {
     function setUp() public {
         console.log("Setting up test");
         testToken = new ERC20Mock();
-        vault = new EnvelopeVault(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0), address(this), address(0));
         testToken.mint(address(this), 1000);
         testToken.approve(address(vault), 1000);
     }
@@ -43,7 +43,7 @@ contract RecipientBoundTest is Test {
         require(testToken.balanceOf(SAMPLE_ADDRESS) == 0, "SAMPLE_ADDRESS MUST NOT HAVE TOKENS AT START!");
 
         // Should not be able to withdraw to anybody except SAMPLE_ADDRESS
-        vm.expectRevert(EnvelopeVault.WrongRecipient.selector);
+        vm.expectRevert(EnvelopeLinks.WrongRecipient.selector);
         vault.claim(depositIndex, address(this), bytes(""));
 
         vault.claim(depositIndex, SAMPLE_ADDRESS, bytes(""));
@@ -68,7 +68,7 @@ contract RecipientBoundTest is Test {
         require(testToken.balanceOf(address(this)) == 0, "TOKEN WAS NOT CHARGED!");
 
         // Try to reclaim, but it's too early
-        vm.expectRevert(EnvelopeVault.TooEarlyToReclaim.selector);
+        vm.expectRevert(EnvelopeLinks.TooEarlyToReclaim.selector);
         vault.reclaim(depositIndex);
 
         vm.warp(block.timestamp + 11); // advance past reclaimableAfter

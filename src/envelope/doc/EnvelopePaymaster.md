@@ -4,19 +4,19 @@
 
 ## Purpose
 
-`EnvelopePaymaster` is the ZkSync paymaster for EnvelopeVault gasless operations. It pays ETH for claims and sender reclaims only when the target `EnvelopeVault` says the operation is valid and either prepaid (`gaslessFee > 0`) or backend-sponsored (`gaslessSponsored == true`).
+`EnvelopePaymaster` is the ZkSync paymaster for EnvelopeLinks gasless operations. It pays ETH for claims and sender reclaims only when the target `EnvelopeLinks` says the operation is valid and either prepaid (`gaslessFee > 0`) or backend-sponsored (`gaslessSponsored == true`).
 
 ## Constructor
 
 ```solidity
-constructor(address admin, address withdrawer, address envelopeVault)
+constructor(address admin, address withdrawer, address envelopeLinks)
 ```
 
 | Param           | Purpose                                                    |
 | --------------- | ---------------------------------------------------------- |
 | `admin`         | Default admin for `BasePaymaster` roles.                   |
 | `withdrawer`    | Address allowed to withdraw excess ETH from the paymaster. |
-| `envelopeVault` | The only vault destination this paymaster will sponsor.    |
+| `envelopeLinks` | The only vault destination this paymaster will sponsor.    |
 
 ## Validation Flow
 
@@ -24,18 +24,18 @@ The paymaster supports ZkSync general flow only.
 
 1. ZkSync bootloader calls `validateAndPayForPaymasterTransaction` on `BasePaymaster`.
 2. `BasePaymaster` forwards `from`, `to`, `requiredETH`, and `transaction.data` to `_validateAndPayGeneralFlow`.
-3. `EnvelopePaymaster` requires `to == envelopeVault`.
-4. It calls `EnvelopeVault.isValidGaslessOperation(from, transaction.data)`.
+3. `EnvelopePaymaster` requires `to == envelopeLinks`.
+4. It calls `EnvelopeLinks.isValidGaslessOperation(from, transaction.data)`.
 5. It verifies it has enough ETH for `requiredETH`.
 6. `BasePaymaster` pays the bootloader.
 
-The paymaster does not keep per-gift state and does not price fees. Fee pricing, prepaid gasless amounts, and backend-sponsored eligibility are recorded in `EnvelopeVault` at deposit creation.
+The paymaster does not keep per-gift state and does not price fees. Fee pricing, prepaid gasless amounts, and backend-sponsored eligibility are recorded in `EnvelopeLinks` at deposit creation.
 
 ## Sponsored Selectors
 
 The paymaster delegates selector checks to the vault. The currently accepted operations are:
 
-- `withdrawDeposit`
+- `claim`
 - `claimWithMFA`
 - `claimAsBoundRecipient`
 - `reclaim`

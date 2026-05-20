@@ -2,10 +2,10 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-import "../../src/envelope/EnvelopeVault.sol";
+import "../../src/envelope/EnvelopeLinks.sol";
 
-contract EnvelopeVaultMFATest is Test {
-    EnvelopeVault public vault;
+contract EnvelopeLinksMFATest is Test {
+    EnvelopeLinks public vault;
 
     address public constant SAMPLE_ADDRESS = address(0x8fd379246834eac74B8419FfdA202CF8051F7A03);
     bytes32 public constant SAMPLE_PRIVKEY = 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
@@ -15,7 +15,7 @@ contract EnvelopeVaultMFATest is Test {
 
     function setUp() public {
         MFA_AUTHORIZER = vm.addr(MFA_PRIVKEY);
-        vault = new EnvelopeVault(MFA_AUTHORIZER, address(this), address(0));
+        vault = new EnvelopeLinks(MFA_AUTHORIZER, address(this), address(0));
     }
 
     function _signMfa(uint256 depositIndex, address recipient, uint256 deadline) internal view returns (bytes memory) {
@@ -53,10 +53,10 @@ contract EnvelopeVaultMFATest is Test {
 
         bytes memory withdrawalSig = _signWithdrawal(depositIndex, address(this));
 
-        vm.expectRevert(EnvelopeVault.RequiresMfaAuthorization.selector);
+        vm.expectRevert(EnvelopeLinks.RequiresMfaAuthorization.selector);
         vault.claim(depositIndex, address(this), withdrawalSig);
 
-        vm.expectRevert(EnvelopeVault.WrongMfaSignature.selector);
+        vm.expectRevert(EnvelopeLinks.WrongMfaSignature.selector);
         vault.claimWithMFA(depositIndex, address(this), withdrawalSig, withdrawalSig, 0);
 
         bytes memory mfaSig = _signMfa(depositIndex, address(this), 0);
@@ -84,7 +84,7 @@ contract EnvelopeVaultMFATest is Test {
 
         vm.warp(deadline + 1);
 
-        vm.expectRevert(EnvelopeVault.MfaSignatureExpired.selector);
+        vm.expectRevert(EnvelopeLinks.MfaSignatureExpired.selector);
         vault.claimWithMFA(depositIndex, address(this), withdrawalSig, mfaSig, deadline);
     }
 

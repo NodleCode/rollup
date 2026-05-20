@@ -15,7 +15,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ownable2Step {
+contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ownable2Step {
     using SafeERC20 for IERC20;
 
     // ── Custom Errors ────────────────────────────────────────────────────────────

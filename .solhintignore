@@ -12,4 +12,4 @@
 
 # is NOT in this list and remains lint-clean.
 
-src/envelope/EnvelopeVault.sol
+src/envelope/EnvelopeLinks.sol

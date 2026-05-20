@@ -2,13 +2,13 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-import "../../src/envelope/EnvelopeVault.sol";
+import "../../src/envelope/EnvelopeLinks.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
 
-contract EnvelopeVaultTest is Test {
-    EnvelopeVault public vault;
+contract EnvelopeLinksTest is Test {
+    EnvelopeLinks public vault;
     ERC20Mock public testToken;
     ERC721Mock public testToken721;
     ERC1155Mock public testToken1155;
@@ -30,13 +30,13 @@ contract EnvelopeVaultTest is Test {
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();
-        vault = new EnvelopeVault(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0), address(this), address(0));
 
         // Mint tokens for test accounts
         testToken.mint(address(this), 1000);
         testToken721.mint(address(this), 1);
 
-        // Approve EnvelopeVault to spend tokens
+        // Approve EnvelopeLinks to spend tokens
         testToken.approve(address(vault), 1000);
         testToken721.setApprovalForAll(address(vault), true);
     }
@@ -61,7 +61,7 @@ contract EnvelopeVaultTest is Test {
         uint256 depositIndex = vault.createLinkFor(address(testToken), 1, amount, 0, PUBKEY20, SAMPLE_ADDRESS);
 
         // Deposit was made on behalf of other address, so we can't withdraw
-        vm.expectRevert(EnvelopeVault.NotTheCreator.selector);
+        vm.expectRevert(EnvelopeLinks.NotTheCreator.selector);
         vault.reclaim(depositIndex);
 
         vm.prank(SAMPLE_ADDRESS); // selfless deposit's owner can reclaim

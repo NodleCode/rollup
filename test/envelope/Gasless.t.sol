@@ -2,11 +2,11 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-import "../../src/envelope/EnvelopeVault.sol";
+import "../../src/envelope/EnvelopeLinks.sol";
 import "./mocks/ERC20Mock.sol";
 
-contract EnvelopeVaultGaslessTest is Test {
-    EnvelopeVault public vault;
+contract EnvelopeLinksGaslessTest is Test {
+    EnvelopeLinks public vault;
     ERC20Mock public feeToken;
 
     uint256 public constant LINK_PRIVKEY = uint256(keccak256("link-key"));
@@ -23,7 +23,7 @@ contract EnvelopeVaultGaslessTest is Test {
         BACKEND_AUTHORIZER = vm.addr(BACKEND_PRIVKEY);
 
         feeToken = new ERC20Mock();
-        vault = new EnvelopeVault(BACKEND_AUTHORIZER, address(this), address(feeToken));
+        vault = new EnvelopeLinks(BACKEND_AUTHORIZER, address(this), address(feeToken));
 
         vm.deal(SENDER, 10 ether);
         feeToken.mint(SENDER, 1_000 ether);
@@ -35,9 +35,9 @@ contract EnvelopeVaultGaslessTest is Test {
     function _request(uint256 amount, bool withMFA, address recipient, uint40 reclaimableAfter)
         internal
         view
-        returns (EnvelopeVault.LinkRequest memory)
+        returns (EnvelopeLinks.LinkRequest memory)
     {
-        return EnvelopeVault.LinkRequest({
+        return EnvelopeLinks.LinkRequest({
             tokenAddress: address(0),
             contractType: 0,
             amount: amount,
@@ -51,7 +51,7 @@ contract EnvelopeVaultGaslessTest is Test {
     }
 
     function _signFeeAuthorization(
-        EnvelopeVault.LinkRequest memory request,
+        EnvelopeLinks.LinkRequest memory request,
         address feePayer,
         uint256 serviceFee,
         uint256 gaslessFee,
@@ -61,7 +61,7 @@ contract EnvelopeVaultGaslessTest is Test {
     }
 
     function _signFeeAuthorization(
-        EnvelopeVault.LinkRequest memory request,
+        EnvelopeLinks.LinkRequest memory request,
         address feePayer,
         uint256 serviceFee,
         uint256 gaslessFee,
@@ -96,22 +96,22 @@ contract EnvelopeVaultGaslessTest is Test {
     }
 
     function _feeAuthorization(
-        EnvelopeVault.LinkRequest memory request,
+        EnvelopeLinks.LinkRequest memory request,
         uint256 serviceFee,
         uint256 gaslessFee,
         uint256 deadline
-    ) internal view returns (EnvelopeVault.FeeAuthorization memory) {
+    ) internal view returns (EnvelopeLinks.FeeAuthorization memory) {
         return _feeAuthorization(request, serviceFee, gaslessFee, false, deadline);
     }
 
     function _feeAuthorization(
-        EnvelopeVault.LinkRequest memory request,
+        EnvelopeLinks.LinkRequest memory request,
         uint256 serviceFee,
         uint256 gaslessFee,
         bool gaslessSponsored,
         uint256 deadline
-    ) internal view returns (EnvelopeVault.FeeAuthorization memory) {
-        return EnvelopeVault.FeeAuthorization({
+    ) internal view returns (EnvelopeLinks.FeeAuthorization memory) {
+        return EnvelopeLinks.FeeAuthorization({
             serviceFee: serviceFee,
             gaslessFee: gaslessFee,
             gaslessSponsored: gaslessSponsored,
@@ -150,8 +150,8 @@ contract EnvelopeVaultGaslessTest is Test {
         internal
         returns (uint256)
     {
-        EnvelopeVault.LinkRequest memory request = _request(amount, withMFA, recipient, reclaimableAfter);
-        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0.01 ether, 0.02 ether, 0);
+        EnvelopeLinks.LinkRequest memory request = _request(amount, withMFA, recipient, reclaimableAfter);
+        EnvelopeLinks.FeeAuthorization memory authorization = _feeAuthorization(request, 0.01 ether, 0.02 ether, 0);
 
         vm.prank(SENDER);
         return vault.createLinkWithFees{value: amount}(request, authorization);
@@ -161,13 +161,13 @@ contract EnvelopeVaultGaslessTest is Test {
         uint256 amount = 1 ether;
         uint256 serviceFee = 0.01 ether;
         uint256 gaslessFee = 0.02 ether;
-        EnvelopeVault.LinkRequest memory request = _request(amount, true, address(0), 0);
-        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, serviceFee, gaslessFee, 0);
+        EnvelopeLinks.LinkRequest memory request = _request(amount, true, address(0), 0);
+        EnvelopeLinks.FeeAuthorization memory authorization = _feeAuthorization(request, serviceFee, gaslessFee, 0);
 
         vm.prank(SENDER);
         uint256 index = vault.createLinkWithFees{value: amount}(request, authorization);
 
-        EnvelopeVault.Link memory deposit = vault.getLink(index);
+        EnvelopeLinks.Link memory deposit = vault.getLink(index);
         assertEq(deposit.amount, amount);
         assertEq(deposit.serviceFee, serviceFee);
         assertEq(deposit.gaslessFee, gaslessFee);
@@ -177,25 +177,25 @@ contract EnvelopeVaultGaslessTest is Test {
     }
 
     function test_SponsoredGaslessAuthorizationApprovesPaymasterWithoutGaslessFee() public {
-        EnvelopeVault.LinkRequest memory request = _request(1 ether, false, address(0), 0);
-        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, true, 0);
+        EnvelopeLinks.LinkRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeLinks.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, true, 0);
 
         vm.prank(SENDER);
         uint256 index = vault.createLinkWithFees{value: 1 ether}(request, authorization);
 
-        EnvelopeVault.Link memory deposit = vault.getLink(index);
+        EnvelopeLinks.Link memory deposit = vault.getLink(index);
         assertEq(deposit.gaslessFee, 0);
         assertTrue(deposit.gaslessSponsored);
         assertEq(feeToken.balanceOf(address(vault)), 0);
 
         bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT, vault.OPEN_CLAIM_MODE());
-        bytes memory callData = abi.encodeCall(EnvelopeVault.claim, (index, RECIPIENT, withdrawalSig));
+        bytes memory callData = abi.encodeCall(EnvelopeLinks.claim, (index, RECIPIENT, withdrawalSig));
         assertTrue(vault.isValidGaslessOperation(RECIPIENT, callData));
     }
 
     function test_SponsoredGaslessMfaClaimIsApprovedWithoutCollectedGaslessFee() public {
-        EnvelopeVault.LinkRequest memory request = _request(1 ether, true, address(0), 0);
-        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, true, 0);
+        EnvelopeLinks.LinkRequest memory request = _request(1 ether, true, address(0), 0);
+        EnvelopeLinks.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, true, 0);
 
         vm.prank(SENDER);
         uint256 index = vault.createLinkWithFees{value: 1 ether}(request, authorization);
@@ -204,21 +204,21 @@ contract EnvelopeVaultGaslessTest is Test {
         bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT, vault.OPEN_CLAIM_MODE());
         bytes memory mfaSig = _signMfa(index, RECIPIENT, deadline);
         bytes memory callData =
-            abi.encodeCall(EnvelopeVault.claimWithMFA, (index, RECIPIENT, withdrawalSig, mfaSig, deadline));
+            abi.encodeCall(EnvelopeLinks.claimWithMFA, (index, RECIPIENT, withdrawalSig, mfaSig, deadline));
 
         assertTrue(vault.isValidGaslessOperation(RECIPIENT, callData));
         assertEq(feeToken.balanceOf(address(vault)), 0);
     }
 
     function test_ZeroFeeAuthorizationWithBackendSignatureIsAccepted() public {
-        EnvelopeVault.LinkRequest memory request =
+        EnvelopeLinks.LinkRequest memory request =
             _request(1 ether, true, RECIPIENT, uint40(block.timestamp + 1 days));
-        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, 0);
+        EnvelopeLinks.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, 0);
 
         vm.prank(SENDER);
         uint256 index = vault.createLinkWithFees{value: 1 ether}(request, authorization);
 
-        EnvelopeVault.Link memory deposit = vault.getLink(index);
+        EnvelopeLinks.Link memory deposit = vault.getLink(index);
         assertEq(deposit.serviceFee, 0);
         assertEq(deposit.gaslessFee, 0);
         assertFalse(deposit.gaslessSponsored);
@@ -227,22 +227,22 @@ contract EnvelopeVaultGaslessTest is Test {
     }
 
     function test_ZeroFeeAuthorizationWithoutSignatureRemainsOpen() public {
-        EnvelopeVault.LinkRequest memory request = _request(1 ether, false, address(0), 0);
-        EnvelopeVault.FeeAuthorization memory authorization = EnvelopeVault.FeeAuthorization({
+        EnvelopeLinks.LinkRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeLinks.FeeAuthorization memory authorization = EnvelopeLinks.FeeAuthorization({
             serviceFee: 0, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: ""
         });
 
         vm.prank(SENDER);
         uint256 index = vault.createLinkWithFees{value: 1 ether}(request, authorization);
 
-        EnvelopeVault.Link memory deposit = vault.getLink(index);
+        EnvelopeLinks.Link memory deposit = vault.getLink(index);
         assertEq(deposit.serviceFee, 0);
         assertEq(deposit.gaslessFee, 0);
     }
 
     function test_RevertIf_ZeroFeeAuthorizationSignatureWrong() public {
-        EnvelopeVault.LinkRequest memory request = _request(1 ether, false, address(0), 0);
-        EnvelopeVault.FeeAuthorization memory authorization = EnvelopeVault.FeeAuthorization({
+        EnvelopeLinks.LinkRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeLinks.FeeAuthorization memory authorization = EnvelopeLinks.FeeAuthorization({
             serviceFee: 0,
             gaslessFee: 0,
             gaslessSponsored: false,
@@ -251,56 +251,56 @@ contract EnvelopeVaultGaslessTest is Test {
         });
 
         vm.prank(SENDER);
-        vm.expectRevert(EnvelopeVault.WrongFeeAuthorizationSignature.selector);
+        vm.expectRevert(EnvelopeLinks.WrongFeeAuthorizationSignature.selector);
         vault.createLinkWithFees{value: 1 ether}(request, authorization);
     }
 
     function test_RevertIf_SponsoredGaslessFlagTampered() public {
-        EnvelopeVault.LinkRequest memory request = _request(1 ether, false, address(0), 0);
-        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, false, 0);
+        EnvelopeLinks.LinkRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeLinks.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, false, 0);
         authorization.gaslessSponsored = true;
 
         vm.prank(SENDER);
-        vm.expectRevert(EnvelopeVault.WrongFeeAuthorizationSignature.selector);
+        vm.expectRevert(EnvelopeLinks.WrongFeeAuthorizationSignature.selector);
         vault.createLinkWithFees{value: 1 ether}(request, authorization);
     }
 
     function test_RevertIf_FeeTokenNotConfigured() public {
-        EnvelopeVault vaultWithoutFeeToken = new EnvelopeVault(BACKEND_AUTHORIZER, address(this), address(0));
-        EnvelopeVault.LinkRequest memory request = _request(1 ether, false, address(0), 0);
-        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0.01 ether, 0);
+        EnvelopeLinks vaultWithoutFeeToken = new EnvelopeLinks(BACKEND_AUTHORIZER, address(this), address(0));
+        EnvelopeLinks.LinkRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeLinks.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0.01 ether, 0);
 
         vm.prank(SENDER);
-        vm.expectRevert(EnvelopeVault.FeeTokenNotConfigured.selector);
+        vm.expectRevert(EnvelopeLinks.FeeTokenNotConfigured.selector);
         vaultWithoutFeeToken.createLinkWithFees{value: 1 ether}(request, authorization);
     }
 
     function test_RevertIf_FeeAuthorizationExpired() public {
-        EnvelopeVault.LinkRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeLinks.LinkRequest memory request = _request(1 ether, false, address(0), 0);
         uint256 deadline = block.timestamp + 1 hours;
-        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0.01 ether, deadline);
+        EnvelopeLinks.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0.01 ether, deadline);
 
         vm.warp(deadline + 1);
 
         vm.prank(SENDER);
-        vm.expectRevert(EnvelopeVault.FeeAuthorizationExpired.selector);
+        vm.expectRevert(EnvelopeLinks.FeeAuthorizationExpired.selector);
         vault.createLinkWithFees{value: 1 ether}(request, authorization);
     }
 
     function test_RevertIf_WrongFeeAuthorizationSignature() public {
-        EnvelopeVault.LinkRequest memory request = _request(1 ether, false, address(0), 0);
-        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0.01 ether, 0);
+        EnvelopeLinks.LinkRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeLinks.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0.01 ether, 0);
         authorization.gaslessFee = 0.02 ether;
 
         vm.prank(SENDER);
-        vm.expectRevert(EnvelopeVault.WrongFeeAuthorizationSignature.selector);
+        vm.expectRevert(EnvelopeLinks.WrongFeeAuthorizationSignature.selector);
         vault.createLinkWithFees{value: 1 ether}(request, authorization);
     }
 
     function test_IsValidGaslessClaim() public {
         uint256 index = _makeGaslessDeposit(1 ether, false, address(0), 0);
         bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT, vault.OPEN_CLAIM_MODE());
-        bytes memory callData = abi.encodeCall(EnvelopeVault.claim, (index, RECIPIENT, withdrawalSig));
+        bytes memory callData = abi.encodeCall(EnvelopeLinks.claim, (index, RECIPIENT, withdrawalSig));
 
         assertTrue(vault.isValidGaslessOperation(RECIPIENT, callData));
         assertFalse(vault.isValidGaslessOperation(SENDER, callData));
@@ -312,7 +312,7 @@ contract EnvelopeVaultGaslessTest is Test {
         bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT, vault.OPEN_CLAIM_MODE());
         bytes memory mfaSig = _signMfa(index, RECIPIENT, deadline);
         bytes memory callData =
-            abi.encodeCall(EnvelopeVault.claimWithMFA, (index, RECIPIENT, withdrawalSig, mfaSig, deadline));
+            abi.encodeCall(EnvelopeLinks.claimWithMFA, (index, RECIPIENT, withdrawalSig, mfaSig, deadline));
 
         assertTrue(vault.isValidGaslessOperation(RECIPIENT, callData));
 
@@ -323,7 +323,7 @@ contract EnvelopeVaultGaslessTest is Test {
     function test_IsValidGaslessRecipientBoundClaim() public {
         uint256 index = _makeGaslessDeposit(1 ether, false, RECIPIENT, uint40(block.timestamp + 1 days));
         bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT, vault.OPEN_CLAIM_MODE());
-        bytes memory callData = abi.encodeCall(EnvelopeVault.claim, (index, RECIPIENT, withdrawalSig));
+        bytes memory callData = abi.encodeCall(EnvelopeLinks.claim, (index, RECIPIENT, withdrawalSig));
 
         assertTrue(vault.isValidGaslessOperation(RECIPIENT, callData));
         assertFalse(vault.isValidGaslessOperation(address(0xCAFE), callData));
@@ -332,7 +332,7 @@ contract EnvelopeVaultGaslessTest is Test {
     function test_IsValidGaslessReclaimAfterDelay() public {
         uint40 reclaimableAfter = uint40(block.timestamp + 1 days);
         uint256 index = _makeGaslessDeposit(1 ether, false, RECIPIENT, reclaimableAfter);
-        bytes memory callData = abi.encodeCall(EnvelopeVault.reclaim, (index));
+        bytes memory callData = abi.encodeCall(EnvelopeLinks.reclaim, (index));
 
         assertFalse(vault.isValidGaslessOperation(SENDER, callData));
 
@@ -342,14 +342,14 @@ contract EnvelopeVaultGaslessTest is Test {
     }
 
     function test_ZeroGaslessFeeDoesNotApprovePaymaster() public {
-        EnvelopeVault.LinkRequest memory request = _request(1 ether, false, address(0), 0);
-        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0.01 ether, 0, 0);
+        EnvelopeLinks.LinkRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeLinks.FeeAuthorization memory authorization = _feeAuthorization(request, 0.01 ether, 0, 0);
 
         vm.prank(SENDER);
         uint256 index = vault.createLinkWithFees{value: 1 ether}(request, authorization);
 
         bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT, vault.OPEN_CLAIM_MODE());
-        bytes memory callData = abi.encodeCall(EnvelopeVault.claim, (index, RECIPIENT, withdrawalSig));
+        bytes memory callData = abi.encodeCall(EnvelopeLinks.claim, (index, RECIPIENT, withdrawalSig));
 
         assertFalse(vault.isValidGaslessOperation(RECIPIENT, callData));
     }

@@ -2,19 +2,19 @@
 pragma solidity ^0.8.19;
 
 //////////////////////////////
-// A few integration tests for the EnvelopeVault contract
+// A few integration tests for the EnvelopeLinks contract
 //////////////////////////////
 
 import "forge-std/Test.sol";
-import "../../src/envelope/EnvelopeVault.sol";
+import "../../src/envelope/EnvelopeLinks.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
-contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
-    EnvelopeVault public vault;
+contract EnvelopeLinksDepositTest is Test, ERC1155Holder, ERC721Holder {
+    EnvelopeLinks public vault;
     ERC20Mock public testToken;
     ERC721Mock public testToken721;
     ERC1155Mock public testToken1155;
@@ -25,7 +25,7 @@ contract EnvelopeVaultDepositTest is Test, ERC1155Holder, ERC721Holder {
 
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0), address(this), address(0));
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();

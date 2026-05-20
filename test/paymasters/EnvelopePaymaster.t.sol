@@ -7,12 +7,12 @@ import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interface
 import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
 import {BasePaymaster, BOOTLOADER_FORMAL_ADDRESS} from "../../src/paymasters/BasePaymaster.sol";
 import {EnvelopePaymaster} from "../../src/paymasters/EnvelopePaymaster.sol";
-import {EnvelopeVault} from "../../src/envelope/EnvelopeVault.sol";
+import {EnvelopeLinks} from "../../src/envelope/EnvelopeLinks.sol";
 import {ERC20Mock} from "../envelope/mocks/ERC20Mock.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 contract EnvelopePaymasterTest is Test {
-    EnvelopeVault public vault;
+    EnvelopeLinks public vault;
     EnvelopePaymaster public paymaster;
     ERC20Mock public feeToken;
 
@@ -32,7 +32,7 @@ contract EnvelopePaymasterTest is Test {
         BACKEND_AUTHORIZER = vm.addr(BACKEND_PRIVKEY);
 
         feeToken = new ERC20Mock();
-        vault = new EnvelopeVault(BACKEND_AUTHORIZER, address(this), address(feeToken));
+        vault = new EnvelopeLinks(BACKEND_AUTHORIZER, address(this), address(feeToken));
         paymaster = new EnvelopePaymaster(ADMIN, WITHDRAWER, address(vault));
 
         vm.deal(SENDER, 10 ether);
@@ -43,8 +43,8 @@ contract EnvelopePaymasterTest is Test {
         feeToken.approve(address(vault), type(uint256).max);
     }
 
-    function _request(uint256 amount) internal view returns (EnvelopeVault.LinkRequest memory) {
-        return EnvelopeVault.LinkRequest({
+    function _request(uint256 amount) internal view returns (EnvelopeLinks.LinkRequest memory) {
+        return EnvelopeLinks.LinkRequest({
             tokenAddress: address(0),
             contractType: 0,
             amount: amount,
@@ -58,7 +58,7 @@ contract EnvelopePaymasterTest is Test {
     }
 
     function _signFeeAuthorization(
-        EnvelopeVault.LinkRequest memory request,
+        EnvelopeLinks.LinkRequest memory request,
         uint256 serviceFee,
         uint256 gaslessFee,
         uint256 deadline
@@ -67,7 +67,7 @@ contract EnvelopePaymasterTest is Test {
     }
 
     function _signFeeAuthorization(
-        EnvelopeVault.LinkRequest memory request,
+        EnvelopeLinks.LinkRequest memory request,
         uint256 serviceFee,
         uint256 gaslessFee,
         bool gaslessSponsored,
@@ -101,8 +101,8 @@ contract EnvelopePaymasterTest is Test {
     }
 
     function _makeGaslessDeposit(uint256 amount) internal returns (uint256) {
-        EnvelopeVault.LinkRequest memory request = _request(amount);
-        EnvelopeVault.FeeAuthorization memory authorization = EnvelopeVault.FeeAuthorization({
+        EnvelopeLinks.LinkRequest memory request = _request(amount);
+        EnvelopeLinks.FeeAuthorization memory authorization = EnvelopeLinks.FeeAuthorization({
             serviceFee: 0,
             gaslessFee: 0.01 ether,
             gaslessSponsored: false,
@@ -149,7 +149,7 @@ contract EnvelopePaymasterTest is Test {
     function test_ValidateAndPayForGaslessEnvelopeClaim() public {
         uint256 index = _makeGaslessDeposit(1 ether);
         bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT);
-        bytes memory data = abi.encodeCall(EnvelopeVault.claim, (index, RECIPIENT, withdrawalSig));
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claim, (index, RECIPIENT, withdrawalSig));
 
         uint256 gasLimit = 100_000;
         uint256 maxFeePerGas = 1 gwei;
@@ -165,14 +165,14 @@ contract EnvelopePaymasterTest is Test {
         assertEq(BOOTLOADER_FORMAL_ADDRESS.balance, bootloaderBalBefore + requiredETH);
     }
 
-    function test_RevertIf_DestinationIsNotEnvelopeVault() public {
+    function test_RevertIf_DestinationIsNotEnvelopeLinks() public {
         uint256 index = _makeGaslessDeposit(1 ether);
         bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT);
-        bytes memory data = abi.encodeCall(EnvelopeVault.claim, (index, RECIPIENT, withdrawalSig));
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claim, (index, RECIPIENT, withdrawalSig));
         Transaction memory txn = _buildTransaction(RECIPIENT, address(feeToken), data, 100_000, 1 gwei);
 
         vm.prank(BOOTLOADER_FORMAL_ADDRESS);
-        vm.expectRevert(EnvelopePaymaster.DestinationIsNotEnvelopeVault.selector);
+        vm.expectRevert(EnvelopePaymaster.DestinationIsNotEnvelopeLinks.selector);
         paymaster.validateAndPayForPaymasterTransaction(bytes32(0), bytes32(0), txn);
     }
 
@@ -181,7 +181,7 @@ contract EnvelopePaymasterTest is Test {
         uint256 index = vault.createLink{value: 1 ether}(address(0), 0, 1 ether, 0, LINK_PUBKEY);
 
         bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT);
-        bytes memory data = abi.encodeCall(EnvelopeVault.claim, (index, RECIPIENT, withdrawalSig));
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claim, (index, RECIPIENT, withdrawalSig));
         Transaction memory txn = _buildTransaction(RECIPIENT, address(vault), data, 100_000, 1 gwei);
 
         vm.prank(BOOTLOADER_FORMAL_ADDRESS);
@@ -192,7 +192,7 @@ contract EnvelopePaymasterTest is Test {
     function test_RevertIf_PaymasterBalanceTooLow() public {
         uint256 index = _makeGaslessDeposit(1 ether);
         bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT);
-        bytes memory data = abi.encodeCall(EnvelopeVault.claim, (index, RECIPIENT, withdrawalSig));
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claim, (index, RECIPIENT, withdrawalSig));
         Transaction memory txn = _buildTransaction(RECIPIENT, address(vault), data, 2 ether, 1);
 
         vm.prank(BOOTLOADER_FORMAL_ADDRESS);

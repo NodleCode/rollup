@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../../src/envelope/EnvelopeVault.sol";
+import "../../src/envelope/EnvelopeLinks.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 contract TestSenderWithdrawEther is Test {
-    EnvelopeVault public vault;
+    EnvelopeLinks public vault;
     // a dummy private/public keypair to test withdrawals
     address public constant PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
     bytes32 public constant PRIVKEY = 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
@@ -19,7 +19,7 @@ contract TestSenderWithdrawEther is Test {
 
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0), address(this), address(0));
     }
 
     function testSenderWithdrawEther(uint64 amount) public {
@@ -32,7 +32,7 @@ contract TestSenderWithdrawEther is Test {
 }
 
 contract TestSenderWithdrawErc20 is Test {
-    EnvelopeVault public vault;
+    EnvelopeLinks public vault;
     ERC20Mock public testToken;
 
     // a dummy private/public keypair to test withdrawals
@@ -44,7 +44,7 @@ contract TestSenderWithdrawErc20 is Test {
     // apparently not possible to fuzz test in setUp() function?
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0), address(this), address(0));
         testToken = new ERC20Mock(); // contractType 1
 
         // Mint tokens for test accounts (larger than uint128)
@@ -65,7 +65,7 @@ contract TestSenderWithdrawErc20 is Test {
 }
 
 contract TestSenderWithdrawErc721 is Test, ERC721Holder {
-    EnvelopeVault public vault;
+    EnvelopeLinks public vault;
     ERC721Mock public testToken;
 
     // a dummy private/public keypair to test withdrawals
@@ -78,7 +78,7 @@ contract TestSenderWithdrawErc721 is Test, ERC721Holder {
     // apparently not possible to fuzz test in setUp() function?
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0), address(this), address(0));
         testToken = new ERC721Mock(); // contractType 2
 
         // Mint token for test
@@ -98,7 +98,7 @@ contract TestSenderWithdrawErc721 is Test, ERC721Holder {
 }
 
 contract TestSenderWithdrawErc1155 is Test, ERC1155Holder {
-    EnvelopeVault public vault;
+    EnvelopeLinks public vault;
     ERC1155Mock public testToken;
 
     // a dummy private/public keypair to test withdrawals
@@ -110,7 +110,7 @@ contract TestSenderWithdrawErc1155 is Test, ERC1155Holder {
 
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0), address(this), address(0));
         testToken = new ERC1155Mock();
 
         // Mint tokens

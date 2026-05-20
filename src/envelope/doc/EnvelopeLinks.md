@@ -1,10 +1,10 @@
-# EnvelopeVault
+# EnvelopeLinks
 
-`src/envelope/EnvelopeVault.sol`
+`src/envelope/EnvelopeLinks.sol`
 
 ## Purpose
 
-`EnvelopeVault` is a link-based asset vault for ETH, ERC-20, ERC-721, and ERC-1155 gifts. A sender deposits an asset against a per-link claim key; the recipient claims by presenting a signature from the matching private key. The vault supports open links, address-bound links, optional backend MFA, sender reclaim, link-creation-time service fees, and prepaid or backend-sponsored gasless claim/reclaim eligibility for ZkSync paymasters.
+`EnvelopeLinks` is a link-based asset vault for ETH, ERC-20, ERC-721, and ERC-1155 gifts. A sender deposits an asset against a per-link claim key; the recipient claims by presenting a signature from the matching private key. The vault supports open links, address-bound links, optional backend MFA, sender reclaim, link-creation-time service fees, and prepaid or backend-sponsored gasless claim/reclaim eligibility for ZkSync paymasters.
 
 ## Actors And Architecture
 
@@ -16,15 +16,15 @@ The core product actors are:
 | Backend / Atlas   | Prices the service and gasless portions, signs `FeeAuthorization`, and optionally signs MFA approvals at claim time. Atlas can also sponsor gasless eligibility with `gaslessSponsored=true`. |
 | Receiver / Remy   | Opens the link and claims the gift. Remy may be explicitly recipient-bound, or the link may be open to whoever has the link key.                                                              |
 | App Wallet        | A ZkSync smart account controlled by the app. It batches approvals plus the vault call into one user confirmation.                                                                            |
-| EnvelopeVault     | Custodies gifts, validates backend fee authorization, stores gasless eligibility, and executes claims/reclaims.                                                                               |
-| EnvelopePaymaster | Pays ZkSync claim/reclaim gas only when `EnvelopeVault.isValidGaslessOperation` approves the calldata.                                                                                        |
+| EnvelopeLinks     | Custodies gifts, validates backend fee authorization, stores gasless eligibility, and executes claims/reclaims.                                                                               |
+| EnvelopePaymaster | Pays ZkSync claim/reclaim gas only when `EnvelopeLinks.isValidGaslessOperation` approves the calldata.                                                                                        |
 
 ```mermaid
 flowchart LR
     Sender[Sender / Nina] --> AppWallet[App Wallet\nZkSync smart account]
     AppWallet -->|approve gift token if needed| GiftToken[Gift token\nETH / ERC20 / ERC721 / ERC1155]
     AppWallet -->|approve fee token if needed| FeeToken[NODL fee token]
-    AppWallet -->|deposit call| Vault[EnvelopeVault]
+    AppWallet -->|deposit call| Vault[EnvelopeLinks]
     Backend[Backend / Atlas\nMFA + fee signer] -->|FeeAuthorization| AppWallet
     Backend -->|MFA signature| Receiver[Receiver / Remy]
     Receiver -->|claim tx| Vault
@@ -95,7 +95,7 @@ if (feeAuthorization.serviceFee + feeAuthorization.gaslessFee > 0 && nodlAllowan
 calls.push(Call({
     to: address(vault),
     value: request.contractType == 0 ? request.amount : 0,
-    data: abi.encodeCall(EnvelopeVault.createLinkWithFees, (request, feeAuthorization))
+    data: abi.encodeCall(EnvelopeLinks.createLinkWithFees, (request, feeAuthorization))
 }));
 
 appWallet.executeBatch(calls, paymasterParams);
@@ -107,30 +107,30 @@ For ERC-721, use `approve(vault, tokenId)` before the vault call if the vault is
 
 ### No MFA, No Gasless P2P Gift
 
-In this flow **no backend is involved**. The link secret is an ephemeral ECDSA private key generated entirely on the sender's device. The shareable link encodes: `chainId`, vault address, link index, and the raw private key. The recipient's app extracts the private key, signs the recipient's own address, and calls `withdrawDeposit`. Because no `FeeAuthorization` is submitted, the vault stores zero fees, no gasless eligibility, and no MFA requirement.
+In this flow **no backend is involved**. The link secret is an ephemeral ECDSA private key generated entirely on the sender's device. The shareable link encodes: `chainId`, vault address, link index, and the raw private key. The recipient's app extracts the private key, signs the recipient's own address, and calls `claim`. Because no `FeeAuthorization` is submitted, the vault stores zero fees, no gasless eligibility, and no MFA requirement.
 
 ```mermaid
 sequenceDiagram
     participant Nina as Sender / Nina
     participant Wallet as App Wallet
-    participant Vault as EnvelopeVault
+    participant Vault as EnvelopeLinks
     participant Remy as Receiver / Remy
 
     Note over Nina,Wallet: Client-side only — no backend needed
     Nina->>Wallet: Generate ephemeral ECDSA keypair (linkPrivKey, claimKey)
     Wallet->>Wallet: Approve gift token if ERC-20/721/1155 (AA batch)
-    Wallet->>Vault: makeDeposit(token, type, amount, tokenId, claimKey)
-    Vault-->>Wallet: depositIndex stored (no fees, no MFA)
-    Nina->>Nina: Encode link = chainId + vault + depositIndex + linkPrivKey
+    Wallet->>Vault: createLink(token, type, amount, tokenId, claimKey)
+    Vault-->>Wallet: linkIndex stored (no fees, no MFA)
+    Nina->>Nina: Encode link = chainId + vault + linkIndex + linkPrivKey
     Nina-->>Remy: Share link out of band (QR, messenger, NFC, etc.)
-    Remy->>Remy: Decode link → extract linkPrivKey and depositIndex
+    Remy->>Remy: Decode link → extract linkPrivKey and linkIndex
     Remy->>Remy: Sign own address with linkPrivKey → linkSignature
-    Remy->>Vault: withdrawDeposit(depositIndex, remyAddress, linkSignature)
+    Remy->>Vault: claim(linkIndex, remyAddress, linkSignature)
     Vault->>Vault: ecrecover(linkSignature) == deposit.claimKey ✓
     Vault-->>Remy: Transfer full gift amount
 ```
 
-If Remy is recipient-bound, the sender uses `makeCustomDeposit(..., recipient=Remy, reclaimableAfter=...)`, and Remy can call either `withdrawDeposit` with Remy as recipient or the stricter `claimAsBoundRecipient` path. The paymaster will only sponsor recipient-bound claims when the caller is the bound recipient and gasless eligibility exists.
+If Remy is recipient-bound, the sender uses `createCustomLink(..., recipient=Remy, reclaimableAfter=...)`, and Remy can call either `claim` with Remy as recipient or the stricter `claimAsBoundRecipient` path. The paymaster will only sponsor recipient-bound claims when the caller is the bound recipient and gasless eligibility exists.
 
 ### MFA Without Gasless Claim
 
@@ -140,7 +140,7 @@ sequenceDiagram
     participant Wallet as App Wallet
     participant Atlas as Backend / Atlas
     participant FeeToken as NODL Fee Token
-    participant Vault as EnvelopeVault
+    participant Vault as EnvelopeLinks
     participant Remy as Receiver / Remy
 
     Nina->>Wallet: Configure MFA gift
@@ -167,7 +167,7 @@ sequenceDiagram
     participant Wallet as App Wallet
     participant Atlas as Backend / Atlas
     participant FeeToken as NODL Fee Token
-    participant Vault as EnvelopeVault
+    participant Vault as EnvelopeLinks
     participant Remy as Receiver / Remy
     participant Paymaster as EnvelopePaymaster
     participant Bootloader as ZkSync Bootloader
@@ -235,18 +235,18 @@ struct Deposit {
 
 | Function                                                      | Flow                                                                                                                                                                                           |
 | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `makeDeposit(token, type, amount, tokenId, claimKey)`         | Basic open link. No MFA, no fees, no gasless sponsorship.                                                                                                                                      |
+| `createLink(token, type, amount, tokenId, claimKey)`         | Basic open link. No MFA, no fees, no gasless sponsorship.                                                                                                                                      |
 | `createMFALink(...)`                                         | Basic open link that requires backend MFA at claim time. No link-creation-time fees unless using `createLinkWithFees`.                                                                        |
 | `createLinkFor(..., onBehalfOf)`                        | Creates a link whose reclaim rights belong to `onBehalfOf`. Used by batch flows.                                                                                                               |
 | `createMFALinkFor(..., onBehalfOf)`                     | Selfless deposit plus MFA requirement.                                                                                                                                                         |
-| `makeCustomDeposit(...)`                                      | Canonical no-fee entry point with MFA flag, optional recipient binding, and optional reclaim delay.                                                                                            |
+| `createCustomLink(...)`                                      | Canonical no-fee entry point with MFA flag, optional recipient binding, and optional reclaim delay.                                                                                            |
 | `createLinkWithFees(request, feeAuthorization)`        | Canonical paid-service entry point. Pulls the gift asset, verifies backend-signed fees, collects `feeToken`, and records gasless eligibility when `gaslessFee > 0` or `gaslessSponsored=true`. |
 | `createLinks(...)`                                       | Creates many same-shape no-fee deposits in one transaction. ETH, ERC-20, and ERC-1155 are supported; ERC-721 uses the heterogeneous batch path.                                                |
 | `createLinksNoReturn(...)`                               | Same as `createLinks` but skips allocating/returning the link indexes array.                                                                                                           |
 | `createCustomLinks(...)`                                 | Creates a heterogeneous no-fee batch and supports ETH, ERC-20, ERC-721, and ERC-1155.                                                                                                          |
 | `createCustomLinksWithFees(requests, feeAuthorizations)` | Creates a heterogeneous paid/gasless-ready batch using the same `LinkRequest` and `FeeAuthorization` structs as the single-deposit flow.                                                    |
 | `createLinksRaffle(...)`                                 | Creates ETH or ERC-20 raffle-style deposits with different amounts and one shared `claimKey`.                                                                                                  |
-| `makeBatchMFADepositRaffle(...)`                              | Same as raffle batching, but every deposit requires MFA at claim time.                                                                                                                         |
+| `createMFARaffleLinks(...)`                              | Same as raffle batching, but every deposit requires MFA at claim time.                                                                                                                         |
 
 ```solidity
 struct FeeAuthorization {
@@ -262,7 +262,7 @@ struct FeeAuthorization {
 
 ## Vault-Native Batching
 
-Batching is implemented directly in `EnvelopeVault` rather than a separate companion contract. This keeps the real sender as `msg.sender`, so reclaim rights and backend fee signatures use the same identity as single deposits. It also removes the extra custody hop where a batcher temporarily holds tokens before forwarding them to the vault.
+Batching is implemented directly in `EnvelopeLinks` rather than a separate companion contract. This keeps the real sender as `msg.sender`, so reclaim rights and backend fee signatures use the same identity as single deposits. It also removes the extra custody hop where a batcher temporarily holds tokens before forwarding them to the vault.
 
 The batching functions share the same storage and events as single deposits. Same-shape batches aggregate ERC-20/ERC-1155 pulls for efficiency; heterogeneous batches pull each asset separately and can include ERC-721 token IDs. Batched fee authorizations are signed for the caller of the vault, not an intermediate contract.
 
@@ -270,7 +270,7 @@ The batching functions share the same storage and events as single deposits. Sam
 
 | Function                                                                  | Caller                                   | Authorization                                                                                                 |
 | ------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `withdrawDeposit(index, recipient, signature)`                            | Anyone, or a recipient using a paymaster | Link key signs `(salt, chainId, vault, index, recipient, OPEN_CLAIM_MODE)`.                            |
+| `claim(index, recipient, signature)`                            | Anyone, or a recipient using a paymaster | Link key signs `(salt, chainId, vault, index, recipient, OPEN_CLAIM_MODE)`.                            |
 | `claimWithMFA(index, recipient, signature, mfaSignature, deadline)` | Anyone, or a recipient using a paymaster | Link signature plus backend MFA signature over `(salt, chainId, vault, index, recipient, deadline)`.          |
 | `claimAsBoundRecipient(index, recipient, signature)`                 | Must be `recipient`                      | Link key signs using `BOUND_CLAIM_MODE`.                                                             |
 | `reclaim(index)`                                            | Original `senderAddress`                 | Sender reclaim. If the deposit is recipient-bound, `block.timestamp` must be greater than `reclaimableAfter`. |
@@ -283,7 +283,7 @@ Gasless operation is handled by ZkSync paymasters, not by an internal vault call
 
 1. Sender creates a deposit through `createLinkWithFees` with `gaslessFee > 0` or `gaslessSponsored=true`.
 2. The vault collects any non-zero gasless sponsorship fee immediately in `feeToken` and records gasless eligibility on the deposit.
-3. A receiver submits a ZkSync transaction to `withdrawDeposit`, `claimWithMFA`, or `claimAsBoundRecipient` using `EnvelopePaymaster`.
+3. A receiver submits a ZkSync transaction to `claim`, `claimWithMFA`, or `claimAsBoundRecipient` using `EnvelopePaymaster`.
 4. ZkSync calls the paymaster before execution. The paymaster checks the transaction targets this vault and calls `isValidGaslessOperation(from, transaction.data)`.
 5. The vault re-checks the deposit state, gasless eligibility, recipient/sender identity, signatures, MFA deadline, and reclaim delay.
 6. If validation passes, the paymaster pays ETH to the bootloader. The vault function then executes normally.
@@ -298,7 +298,7 @@ function isValidGaslessOperation(address caller, bytes calldata callData) extern
 
 This function is intended for paymaster validation. It accepts only these selectors:
 
-- `withdrawDeposit`
+- `claim`
 - `claimWithMFA`
 - `claimAsBoundRecipient`
 - `reclaim`
@@ -322,8 +322,8 @@ The previous EIP-3009 deposit and gasless reclaim paths were removed. ERC-20 dep
 ## Events
 
 ```solidity
-event DepositEvent(uint256 indexed index, uint8 indexed contractType, uint256 amount, address indexed senderAddress);
-event WithdrawEvent(uint256 indexed index, uint8 indexed contractType, uint256 amount, address indexed recipientAddress);
+event LinkCreated(uint256 indexed index, uint8 indexed contractType, uint256 amount, address indexed senderAddress);
+event LinkRedeemed(uint256 indexed index, uint8 indexed contractType, uint256 amount, address indexed recipientAddress);
 event FeeCollected(uint256 indexed index, address indexed tokenAddress, uint256 serviceFee, uint256 gaslessFee);
 event FeesWithdrawn(address indexed tokenAddress, uint256 amount);
 ```
@@ -331,3 +331,92 @@ event FeesWithdrawn(address indexed tokenAddress, uint256 amount);
 ## Test Coverage
 
 Core coverage lives in `test/envelope/`. Gasless fee and vault-side paymaster eligibility tests live in `test/envelope/Gasless.t.sol`; ZkSync paymaster validation tests live in `test/paymasters/EnvelopePaymaster.t.sol`.
+
+## Post-Deployment Smoke Tests (cast)
+
+After deploying `EnvelopeLinks`, verify the critical flows using `cast`. Replace placeholders with real values.
+
+```bash
+# ── Variables ──────────────────────────────────────────────────────────────────
+LINKS=<deployed EnvelopeLinks address>
+RPC=<rpc url, e.g. https://mainnet.era.zksync.io>
+SENDER_PK=<sender private key>
+SENDER=$(cast wallet address $SENDER_PK)
+RECIPIENT=<recipient address>
+
+# Generate an ephemeral link keypair
+LINK_PK=$(cast wallet new --json | jq -r '.[0].private_key')
+LINK_ADDR=$(cast wallet address $LINK_PK)
+```
+
+### 1. Create a simple ETH link (no fees, no MFA)
+
+```bash
+cast send $LINKS \
+  "createLink(address,uint8,uint256,uint256,address)" \
+  0x0000000000000000000000000000000000000000 0 0 0 $LINK_ADDR \
+  --value 0.001ether --private-key $SENDER_PK --rpc-url $RPC
+```
+
+### 2. Read back the link
+
+```bash
+LINK_COUNT=$(cast call $LINKS "getLinkCount()(uint256)" --rpc-url $RPC)
+echo "Total links: $LINK_COUNT"
+
+# Fetch last created link (index = count - 1)
+IDX=$((LINK_COUNT - 1))
+cast call $LINKS "getLink(uint256)" $IDX --rpc-url $RPC
+```
+
+### 3. Claim the link
+
+```bash
+# Build the claim message and sign with the link key
+SALT=$(cast call $LINKS "ENVELOPE_SALT()(bytes32)" --rpc-url $RPC)
+CHAIN=$(cast chain-id --rpc-url $RPC)
+OPEN_MODE=$(cast call $LINKS "OPEN_CLAIM_MODE()(bytes32)" --rpc-url $RPC)
+
+# The vault expects: keccak256(abi.encodePacked(SALT, chainId, vault, idx, recipient, OPEN_CLAIM_MODE))
+MSG=$(cast keccak256 $(cast abi-encode "f(bytes32,uint256,address,uint256,address,bytes32)" \
+  $SALT $CHAIN $LINKS $IDX $RECIPIENT $OPEN_MODE))
+
+SIG=$(cast wallet sign --no-hash $MSG --private-key $LINK_PK)
+
+cast send $LINKS "claim(uint256,address,bytes)" \
+  $IDX $RECIPIENT $SIG \
+  --private-key $SENDER_PK --rpc-url $RPC
+```
+
+### 4. Reclaim (sender takes back an unclaimed link)
+
+```bash
+# Create another link first
+LINK_PK2=$(cast wallet new --json | jq -r '.[0].private_key')
+LINK_ADDR2=$(cast wallet address $LINK_PK2)
+
+cast send $LINKS \
+  "createLink(address,uint8,uint256,uint256,address)" \
+  0x0000000000000000000000000000000000000000 0 0 0 $LINK_ADDR2 \
+  --value 0.001ether --private-key $SENDER_PK --rpc-url $RPC
+
+RECLAIM_IDX=$(($(cast call $LINKS "getLinkCount()(uint256)" --rpc-url $RPC) - 1))
+
+cast send $LINKS "reclaim(uint256)" $RECLAIM_IDX \
+  --private-key $SENDER_PK --rpc-url $RPC
+```
+
+### 5. Quick health checks
+
+```bash
+# Contract is alive
+cast call $LINKS "getLinkCount()(uint256)" --rpc-url $RPC
+
+# Check accumulated fees (if fee token is set)
+FEE_TOKEN=<fee token address>
+cast call $LINKS "accumulatedFees(address)(uint256)" $FEE_TOKEN --rpc-url $RPC
+
+# Paymaster points to correct contract
+PAYMASTER=<paymaster address>
+cast call $PAYMASTER "envelopeLinks()(address)" --rpc-url $RPC
+```

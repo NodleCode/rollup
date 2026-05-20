@@ -5,18 +5,18 @@ pragma solidity ^0.8.26;
 import {BasePaymaster} from "./BasePaymaster.sol";
 import {IEnvelopeGaslessValidator} from "../envelope/IEnvelopeGaslessValidator.sol";
 
-/// @notice ZkSync paymaster that sponsors eligible gasless EnvelopeVault claims and reclaims.
-/// @dev The EnvelopeVault remains the source of truth for whether a call is valid and prepaid or sponsored.
+/// @notice ZkSync paymaster that sponsors eligible gasless EnvelopeLinks claims and reclaims.
+/// @dev The EnvelopeLinks remains the source of truth for whether a call is valid and prepaid or sponsored.
 ///      This paymaster only accepts general-flow transactions targeting that vault.
 contract EnvelopePaymaster is BasePaymaster {
-    IEnvelopeGaslessValidator public immutable envelopeVault;
+    IEnvelopeGaslessValidator public immutable envelopeLinks;
 
-    error DestinationIsNotEnvelopeVault();
+    error DestinationIsNotEnvelopeLinks();
     error EnvelopeGaslessOperationNotApproved();
     error PaymasterBalanceTooLow();
 
-    constructor(address admin, address withdrawer, address envelopeVault_) BasePaymaster(admin, withdrawer) {
-        envelopeVault = IEnvelopeGaslessValidator(envelopeVault_);
+    constructor(address admin, address withdrawer, address envelopeLinks_) BasePaymaster(admin, withdrawer) {
+        envelopeLinks = IEnvelopeGaslessValidator(envelopeLinks_);
     }
 
     function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH, bytes memory transactionData)
@@ -24,10 +24,10 @@ contract EnvelopePaymaster is BasePaymaster {
         view
         override
     {
-        if (to != address(envelopeVault)) revert DestinationIsNotEnvelopeVault();
+        if (to != address(envelopeLinks)) revert DestinationIsNotEnvelopeLinks();
 
         bool approved;
-        try envelopeVault.isValidGaslessOperation(from, transactionData) returns (bool valid) {
+        try envelopeLinks.isValidGaslessOperation(from, transactionData) returns (bool valid) {
             approved = valid;
         } catch {
             approved = false;

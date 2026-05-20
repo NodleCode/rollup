@@ -6,14 +6,14 @@ The Envelope flow on Nodle is built on top of modified Peanut Protocol V4.4 cont
 
 | Contract            | Source                                 | Spec                                           |
 | ------------------- | -------------------------------------- | ---------------------------------------------- |
-| `EnvelopeVault`     | `src/envelope/EnvelopeVault.sol`       | [EnvelopeVault.md](./EnvelopeVault.md)         |
+| `EnvelopeLinks`     | `src/envelope/EnvelopeLinks.sol`       | [EnvelopeLinks.md](./EnvelopeLinks.md)         |
 | `EnvelopePaymaster` | `src/paymasters/EnvelopePaymaster.sol` | [EnvelopePaymaster.md](./EnvelopePaymaster.md) |
 
 Interfaces:
 
 | Interface                   | Source                                       | Used by                                                                                    |
 | --------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `IEnvelopeGaslessValidator` | `src/envelope/IEnvelopeGaslessValidator.sol` | `EnvelopePaymaster` queries `EnvelopeVault.isValidGaslessOperation` before sponsoring gas. |
+| `IEnvelopeGaslessValidator` | `src/envelope/IEnvelopeGaslessValidator.sol` | `EnvelopePaymaster` queries `EnvelopeLinks.isValidGaslessOperation` before sponsoring gas. |
 
 ## License notice
 
@@ -21,7 +21,7 @@ This subtree mixes licenses; the repo-root `LICENSE` (Clear BSD) does not apply 
 
 | Files                                        | License              | Notes                                                                                                      |
 | -------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `src/envelope/EnvelopeVault.sol`             | **GPL-3.0-or-later** | Modified copy of upstream Peanut Protocol V4.4. Full GPL v3 text is bundled at `src/envelope/LICENSE-GPL`. |
+| `src/envelope/EnvelopeLinks.sol`             | **GPL-3.0-or-later** | Modified copy of upstream Peanut Protocol V4.4. Full GPL v3 text is bundled at `src/envelope/LICENSE-GPL`. |
 | `src/envelope/IEnvelopeGaslessValidator.sol` | **GPL-3.0-or-later** | Minimal interface for the GPL vault validation surface.                                                    |
 | `test/envelope/**/*.t.sol`                   | **GPL-3.0-or-later** | Test files that import GPL-licensed contracts are relicensed for compatibility.                            |
 | `test/envelope/mocks/**/*.sol`               | **MIT / UNLICENSED** | Vendored test mocks, original SPDX retained.                                                               |
@@ -31,29 +31,29 @@ The GPL is "viral" only across `import` boundaries; non-importing files in the s
 
 ## Naming convention
 
-- **Source files** carry the Envelope brand (`EnvelopeVault.sol`); upstream lineage is preserved via a one-line attribution comment, bundled `LICENSE-GPL`, and git history.
-- **Contract symbols** use the Envelope brand: `EnvelopeVault`, `EnvelopePaymaster`.
+- **Source files** carry the Envelope brand (`EnvelopeLinks.sol`); upstream lineage is preserved via a one-line attribution comment, bundled `LICENSE-GPL`, and git history.
+- **Contract symbols** use the Envelope brand: `EnvelopeLinks`, `EnvelopePaymaster`.
 - **On-chain hashed constants** keep upstream-compatible values where changing them would alter signature digests.
 
 ## Main flows
 
-| Flow                          | Entry point                                                                                    | Summary                                                                                                                                                                     |
-| ----------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Basic deposit                 | `EnvelopeVault.makeDeposit` / `makeCustomDeposit`                                              | Sender transfers ETH/ERC-20/ERC-721/ERC-1155 into the vault and receives a link key off-chain.                                                                              |
-| Paid or gasless-ready deposit | `EnvelopeVault.makeCustomDepositWithFees`                                                      | Sender supplies a backend-signed `FeeAuthorization`; the vault collects `serviceFee` and/or `gaslessFee` in `feeToken` and records optional `gaslessSponsored` eligibility. |
-| Batch deposit                 | `EnvelopeVault.makeBatchDeposit` / `makeBatchCustomDeposit` / `makeBatchCustomDepositWithFees` | Sender creates many deposits in one transaction without a separate batcher contract. Fee signatures are signed for the actual caller.                                       |
-| Open claim                    | `EnvelopeVault.withdrawDeposit`                                                                | Link key signs the claim. Any transaction sender can submit it, but paymaster-sponsored submissions require `caller == recipient`.                                          |
-| MFA claim                     | `EnvelopeVault.withdrawMFADeposit`                                                             | Link key signs the claim and backend signs `(vault, index, recipient, deadline)`. Claim-time fees are not collected.                                                        |
-| Recipient-bound claim         | `EnvelopeVault.withdrawDepositAsRecipient`                                                     | Only the bound recipient can submit the transaction.                                                                                                                        |
-| Sender reclaim                | `EnvelopeVault.withdrawDepositSender`                                                          | Original sender reclaims unclaimed deposits; recipient-bound deposits also enforce `reclaimableAfter`.                                                                      |
-| Gasless validation            | `EnvelopeVault.isValidGaslessOperation`                                                        | View helper used by `EnvelopePaymaster` to validate prepaid or backend-sponsored claim/reclaim calldata before the paymaster pays gas.                                      |
+| Flow                          | Entry point                                                                             | Summary                                                                                                                                                                     |
+| ----------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Basic link                    | `EnvelopeLinks.createLink` / `createCustomLink`                                         | Sender transfers ETH/ERC-20/ERC-721/ERC-1155 into the vault and receives a link key off-chain.                                                                              |
+| Paid or gasless-ready link    | `EnvelopeLinks.createLinkWithFees`                                                      | Sender supplies a backend-signed `FeeAuthorization`; the vault collects `serviceFee` and/or `gaslessFee` in `feeToken` and records optional `gaslessSponsored` eligibility. |
+| Batch link creation           | `EnvelopeLinks.createLinks` / `createCustomLinks` / `createCustomLinksWithFees`         | Sender creates many links in one transaction without a separate batcher contract. Fee signatures are signed for the actual caller.                                           |
+| Open claim                    | `EnvelopeLinks.claim`                                                                   | Link key signs the claim. Any transaction sender can submit it, but paymaster-sponsored submissions require `caller == recipient`.                                          |
+| MFA claim                     | `EnvelopeLinks.claimWithMFA`                                                            | Link key signs the claim and backend signs `(vault, index, recipient, deadline)`. Claim-time fees are not collected.                                                        |
+| Recipient-bound claim         | `EnvelopeLinks.claimAsBoundRecipient`                                                   | Only the bound recipient can submit the transaction.                                                                                                                        |
+| Sender reclaim                | `EnvelopeLinks.reclaim`                                                                 | Original sender reclaims unclaimed links; recipient-bound links also enforce `reclaimableAfter`.                                                                            |
+| Gasless validation            | `EnvelopeLinks.isValidGaslessOperation`                                                 | View helper used by `EnvelopePaymaster` to validate prepaid or backend-sponsored claim/reclaim calldata before the paymaster pays gas.                                      |
 
 ## ZkSync gasless model
 
 Gasless operations are paymaster-native:
 
-1. Backend prices optional `serviceFee`, `gaslessFee`, and `gaslessSponsored` off-chain and signs the full deposit intent for the app-wallet address that will call the vault.
-2. Sender creates the envelope with `makeCustomDepositWithFees`; the app wallet can batch gift approval, NODL fee approval, and the vault call into one ZkSync smart-account transaction.
+1. Backend prices optional `serviceFee`, `gaslessFee`, and `gaslessSponsored` off-chain and signs the full link-creation intent for the app-wallet address that will call the vault.
+2. Sender creates the envelope with `createLinkWithFees`; the app wallet can batch gift approval, NODL fee approval, and the vault call into one ZkSync smart-account transaction.
 3. A recipient or sender submits a supported claim/reclaim call through `EnvelopePaymaster`.
 4. Before execution, the paymaster checks the destination and calls `isValidGaslessOperation` on the vault.
 5. If the vault approves and the paymaster has enough ETH, the paymaster pays the ZkSync bootloader and the vault call executes normally.
@@ -64,7 +64,7 @@ The vault no longer contains an internal paymaster callback, and the EIP-3009 ga
 
 | Script                             | Purpose                                                     |
 | ---------------------------------- | ----------------------------------------------------------- |
-| `hardhat-deploy/DeployEnvelope.ts` | Deploys `EnvelopeVault` and optionally `EnvelopePaymaster`. |
+| `hardhat-deploy/DeployEnvelope.ts` | Deploys `EnvelopeLinks` and optionally `EnvelopePaymaster`. |
 
 Important environment variables:
 

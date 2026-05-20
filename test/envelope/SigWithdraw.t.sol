@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../../src/envelope/EnvelopeVault.sol";
+import "../../src/envelope/EnvelopeLinks.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 contract TestSigWithdrawEther is Test {
-    EnvelopeVault public vault;
+    EnvelopeLinks public vault;
 
     // sample inputs
     address _pubkey20 = 0x8fd379246834eac74B8419FfdA202CF8051F7A03;
@@ -25,7 +25,7 @@ contract TestSigWithdrawEther is Test {
 
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeVault(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0), address(this), address(0));
     }
 
     // test sender withdrawal of ETH
@@ -34,7 +34,7 @@ contract TestSigWithdrawEther is Test {
         uint256 depositIdx = vault.createLink{value: amount}(address(0), 0, amount, 0, _pubkey20);
 
         // Can't use withdrawDepositAsRecipient
-        vm.expectRevert(EnvelopeVault.NotTheRecipient.selector);
+        vm.expectRevert(EnvelopeLinks.NotTheRecipient.selector);
         vault.claimAsBoundRecipient(depositIdx, _recipientAddress, signatureAnybody);
 
         // Anybody can withdraw
@@ -46,11 +46,11 @@ contract TestSigWithdrawEther is Test {
         uint256 depositIdx = vault.createLink{value: amount}(address(0), 0, amount, 0, _pubkey20);
 
         // Can't use pure withdrawDeposit
-        vm.expectRevert(EnvelopeVault.WrongSignature.selector);
+        vm.expectRevert(EnvelopeLinks.WrongSignature.selector);
         vault.claim(depositIdx, _recipientAddress, signatureRecipient);
 
         // Only the recipient is able to withdraw via withdrawDepositAsRecipient
-        vm.expectRevert(EnvelopeVault.NotTheRecipient.selector);
+        vm.expectRevert(EnvelopeLinks.NotTheRecipient.selector);
         vault.claimAsBoundRecipient(depositIdx, _recipientAddress, signatureRecipient);
 
         vm.prank(_recipientAddress); // Withdraw!
