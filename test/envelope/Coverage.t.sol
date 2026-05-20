@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 import "../../src/envelope/EnvelopeLinks.sol";
+import {EnvelopeFeeAuthTestUtils} from "./EnvelopeFeeAuthTestUtils.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
@@ -28,6 +29,8 @@ contract EnvelopeCoverageTest is Test {
     address public constant SENDER = address(0xA11CE);
     address public constant RECIPIENT = address(0xB0B);
     address public constant OTHER = address(0xCAFE);
+
+    receive() external payable {}
 
     function setUp() public {
         LINK_PUBKEY = vm.addr(LINK_PRIVKEY);
@@ -107,28 +110,8 @@ contract EnvelopeCoverageTest is Test {
         bool gaslessSponsored,
         uint256 deadline
     ) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encode(
-                    vault.ENVELOPE_SALT(),
-                    block.chainid,
-                    vaultAddr,
-                    feePayer,
-                    req.tokenAddress,
-                    req.contractType,
-                    req.amount,
-                    req.tokenId,
-                    req.claimKey,
-                    req.onBehalfOf,
-                    req.withMFA,
-                    req.recipient,
-                    req.reclaimableAfter,
-                    serviceFee,
-                    gaslessFee,
-                    gaslessSponsored,
-                    deadline
-                )
-            )
+        bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
+            vault.ENVELOPE_SALT(), vaultAddr, req, feePayer, serviceFee, gaslessFee, gaslessSponsored, deadline
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BACKEND_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
@@ -151,7 +134,7 @@ contract EnvelopeCoverageTest is Test {
         vault.claim(idx, RECIPIENT, sig);
 
         assertEq(erc721.ownerOf(1), RECIPIENT);
-        assertTrue(vault.getLink(idx).redeemed);
+        assertTrue(vault.getLinkStatus(idx).redeemed);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -166,7 +149,7 @@ contract EnvelopeCoverageTest is Test {
         vault.claim(idx, RECIPIENT, sig);
 
         assertEq(erc1155.balanceOf(RECIPIENT, 1), 10);
-        assertTrue(vault.getLink(idx).redeemed);
+        assertTrue(vault.getLinkStatus(idx).redeemed);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -177,9 +160,10 @@ contract EnvelopeCoverageTest is Test {
         vm.prank(SENDER);
         uint256 idx = vault.createLinkFor{value: 1 ether}(address(0), 0, 1 ether, 0, LINK_PUBKEY, OTHER);
 
-        EnvelopeLinks.Link memory link = vault.getLink(idx);
-        assertEq(link.creator, OTHER);
-        assertFalse(link.requiresMFA);
+        EnvelopeLinks.LinkParties memory parties = vault.getLinkParties(idx);
+        EnvelopeLinks.LinkStatus memory status = vault.getLinkStatus(idx);
+        assertEq(parties.creator, OTHER);
+        assertFalse(status.requiresMFA);
     }
 
     function test_createLinkFor_reclaimByOnBehalfOf() public {
@@ -203,9 +187,9 @@ contract EnvelopeCoverageTest is Test {
             address(0), 0, 1 ether, 0, LINK_PUBKEY, SENDER, false, RECIPIENT, uint40(block.timestamp + 1 days)
         );
 
-        EnvelopeLinks.Link memory link = vault.getLink(idx);
-        assertEq(link.recipient, RECIPIENT);
-        assertEq(link.reclaimableAfter, uint40(block.timestamp + 1 days));
+        EnvelopeLinks.LinkParties memory parties = vault.getLinkParties(idx);
+        assertEq(parties.recipient, RECIPIENT);
+        assertEq(parties.reclaimableAfter, uint40(block.timestamp + 1 days));
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -244,20 +228,15 @@ contract EnvelopeCoverageTest is Test {
     // ══════════════════════════════════════════════════════════════════════════════
 
     function test_withdrawFees_eth() public {
-        // Manually seed fees: use accumulatedFees mapping by sending ETH via a link that gets service fee
-        // The vault doesn't accumulate ETH fees through normal paths directly — it accumulates feeToken fees.
-        // But withdrawFees supports address(0) for ETH. Let's verify the ETH path:
-        // We can forge the state directly.
-        vm.store(
-            address(vault),
-            keccak256(abi.encode(address(0), uint256(4))), // slot of accumulatedFees mapping (slot 4 assumed)
-            bytes32(uint256(0.5 ether))
-        );
-        // Also seed the vault with ETH
+        // Seed accumulatedFees[address(0)] with ETH balance
+        bytes32 slot = keccak256(abi.encode(address(0), uint256(5)));
+        vm.store(address(vault), slot, bytes32(uint256(0.5 ether)));
         vm.deal(address(vault), 0.5 ether);
 
-        // Find the actual slot by reading accumulatedFees
-        // Actually let's just check the revert path first (it's deterministic)
+        uint256 ownerBalBefore = address(this).balance;
+        vault.withdrawFees(address(0));
+        assertEq(address(this).balance, ownerBalBefore + 0.5 ether);
+        assertEq(vault.accumulatedFees(address(0)), 0);
     }
 
     function test_RevertIf_withdrawFees_noFees() public {
@@ -493,9 +472,9 @@ contract EnvelopeCoverageTest is Test {
         uint256[] memory indexes = vault.createCustomLinks{value: 0.5 ether}(tokens, types, amounts, tokenIds, keys, mfas);
 
         assertEq(indexes.length, 2);
-        assertEq(vault.getLink(indexes[0]).amount, 0.5 ether);
-        assertEq(vault.getLink(indexes[1]).amount, 100);
-        assertEq(vault.getLink(indexes[1]).tokenAddress, address(erc20));
+        assertEq(vault.getLinkAsset(indexes[0]).amount, 0.5 ether);
+        assertEq(vault.getLinkAsset(indexes[1]).amount, 100);
+        assertEq(vault.getLinkAsset(indexes[1]).tokenAddress, address(erc20));
     }
 
     function test_RevertIf_createCustomLinks_invalidContractType() public {
@@ -563,9 +542,9 @@ contract EnvelopeCoverageTest is Test {
         uint256[] memory indexes = vault.createCustomLinksWithFees{value: 1 ether}(reqs, auths);
 
         assertEq(indexes.length, 2);
-        assertEq(vault.getLink(indexes[0]).amount, 1 ether);
-        assertEq(vault.getLink(indexes[1]).amount, 50);
-        assertEq(vault.getLink(indexes[1]).recipient, RECIPIENT);
+        assertEq(vault.getLinkAsset(indexes[0]).amount, 1 ether);
+        assertEq(vault.getLinkAsset(indexes[1]).amount, 50);
+        assertEq(vault.getLinkParties(indexes[1]).recipient, RECIPIENT);
         assertEq(vault.accumulatedFees(address(feeToken)), 0.04 ether);
     }
 
@@ -734,9 +713,10 @@ contract EnvelopeCoverageTest is Test {
         vm.prank(SENDER);
         uint256 idx = vault.createMFALink(address(erc20), 1, 100, 0, LINK_PUBKEY);
 
-        EnvelopeLinks.Link memory link = vault.getLink(idx);
-        assertTrue(link.requiresMFA);
-        assertEq(link.amount, 100);
+        EnvelopeLinks.LinkStatus memory status = vault.getLinkStatus(idx);
+        EnvelopeLinks.LinkAsset memory asset = vault.getLinkAsset(idx);
+        assertTrue(status.requiresMFA);
+        assertEq(asset.amount, 100);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -814,25 +794,25 @@ contract EnvelopeCoverageTest is Test {
     // View functions
     // ══════════════════════════════════════════════════════════════════════════════
 
-    function test_getAllLinks() public {
+    function test_getAllLinkIndexes() public {
         _makeEthLink(1 ether);
         _makeEthLink(2 ether);
 
-        EnvelopeLinks.Link[] memory all = vault.getAllLinks();
-        assertEq(all.length, 2);
-        assertEq(all[0].amount, 1 ether);
-        assertEq(all[1].amount, 2 ether);
+        uint256[] memory indexes = vault.getAllLinkIndexes();
+        assertEq(indexes.length, 2);
+        assertEq(vault.getLinkAsset(indexes[0]).amount, 1 ether);
+        assertEq(vault.getLinkAsset(indexes[1]).amount, 2 ether);
     }
 
-    function test_getLinksCreatedBy() public {
+    function test_getLinkIndexesCreatedBy() public {
         _makeEthLink(1 ether); // by SENDER
         vm.deal(OTHER, 5 ether);
         vm.prank(OTHER);
         vault.createLink{value: 2 ether}(address(0), 0, 2 ether, 0, LINK_PUBKEY2);
 
-        EnvelopeLinks.Link[] memory senderLinks = vault.getLinksCreatedBy(SENDER);
+        uint256[] memory senderLinks = vault.getLinkIndexesCreatedBy(SENDER);
         assertEq(senderLinks.length, 1);
-        assertEq(senderLinks[0].amount, 1 ether);
+        assertEq(vault.getLinkAsset(senderLinks[0]).amount, 1 ether);
     }
 
     function test_getLinkCount() public {
@@ -883,8 +863,8 @@ contract EnvelopeCoverageTest is Test {
         uint256[] memory indexes = vault.createMFARaffleLinks{value: 0.6 ether}(address(0), 0, amounts, LINK_PUBKEY);
 
         assertEq(indexes.length, 3);
-        assertTrue(vault.getLink(indexes[0]).requiresMFA);
-        assertTrue(vault.getLink(indexes[2]).requiresMFA);
+        assertTrue(vault.getLinkStatus(indexes[0]).requiresMFA);
+        assertTrue(vault.getLinkStatus(indexes[2]).requiresMFA);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -921,7 +901,7 @@ contract EnvelopeCoverageTest is Test {
     function test_createLink_erc20_zeroAmount() public {
         vm.prank(SENDER);
         uint256 idx = vault.createLink(address(erc20), 1, 0, 0, LINK_PUBKEY);
-        assertEq(vault.getLink(idx).amount, 0);
+        assertEq(vault.getLinkAsset(idx).amount, 0);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -1005,7 +985,7 @@ contract EnvelopeCoverageTest is Test {
         vm.prank(SENDER);
         uint256[] memory indexes = vault.createCustomLinks(tokens, types, amounts, tokenIds, keys, mfas);
         assertEq(indexes.length, 1);
-        assertEq(vault.getLink(indexes[0]).tokenId, 2);
+        assertEq(vault.getLinkAsset(indexes[0]).tokenId, 2);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -1081,6 +1061,642 @@ contract EnvelopeCoverageTest is Test {
         });
         vm.prank(SENDER);
         return vault.createLinkWithFees{value: amount}(req, auth);
+    }
+
+    function _makeGaslessSponsoredEthLink(uint256 amount) internal returns (uint256) {
+        EnvelopeLinks.LinkRequest memory req = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(0),
+            contractType: 0,
+            amount: amount,
+            tokenId: 0,
+            claimKey: LINK_PUBKEY,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+        bytes memory authSig = _signFeeAuth(req, SENDER, 0, 0, true, 0);
+        EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0,
+            gaslessFee: 0,
+            gaslessSponsored: true,
+            deadline: 0,
+            signature: authSig
+        });
+        vm.prank(SENDER);
+        return vault.createLinkWithFees{value: amount}(req, auth);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // withdrawFees — ETH path where owner contract rejects the transfer
+    // Scenario: Owner is a multisig/governance contract that cannot receive ETH
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_RevertIf_withdrawFees_ethRejected() public {
+        // Deploy a vault owned by a contract that rejects ETH
+        EthRejecter rejecter = new EthRejecter();
+        EnvelopeLinks rejVault = new EnvelopeLinks(BACKEND_AUTHORIZER, address(rejecter), address(feeToken));
+
+        // Create a link with ETH service fees so that ETH accumulates in the vault
+        // Since fees are ERC-20 (feeToken), we need to get ETH into accumulatedFees.
+        // withdrawFees(address(0)) withdraws ETH accumulated fees.
+        // Seed directly: we can call withdrawFees with ETH balance.
+        vm.deal(address(rejVault), 1 ether);
+        // Write to the accumulatedFees[address(0)] storage slot
+        // accumulatedFees is at storage slot 5 in the contract layout
+        bytes32 slot = keccak256(abi.encode(address(0), uint256(5)));
+        vm.store(address(rejVault), slot, bytes32(uint256(1 ether)));
+
+        vm.prank(address(rejecter));
+        vm.expectRevert(EnvelopeLinks.EthTransferFailed.selector);
+        rejVault.withdrawFees(address(0));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Claim ERC-721 and ERC-1155 via createCustomLinksWithFees
+    // Scenario: Backend-authorized fee links for NFTs — full lifecycle
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_claimERC721_createdWithFees() public {
+        EnvelopeLinks.LinkRequest memory req = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(erc721),
+            contractType: 2,
+            amount: 1,
+            tokenId: 2,
+            claimKey: LINK_PUBKEY,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+        bytes memory authSig = _signFeeAuth(req, SENDER, 0.05 ether, 0, false, 0);
+        EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0.05 ether,
+            gaslessFee: 0,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: authSig
+        });
+
+        vm.prank(SENDER);
+        uint256 idx = vault.createLinkWithFees(req, auth);
+
+        bytes memory sig = _signClaim(LINK_PRIVKEY, idx, RECIPIENT, vault.OPEN_CLAIM_MODE());
+        vault.claim(idx, RECIPIENT, sig);
+
+        assertEq(erc721.ownerOf(2), RECIPIENT);
+        assertTrue(vault.getLinkStatus(idx).redeemed);
+    }
+
+    function test_claimERC1155_createdWithFees() public {
+        EnvelopeLinks.LinkRequest memory req = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(erc1155),
+            contractType: 3,
+            amount: 30,
+            tokenId: 1,
+            claimKey: LINK_PUBKEY,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+        bytes memory authSig = _signFeeAuth(req, SENDER, 0.02 ether, 0, false, 0);
+        EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0.02 ether,
+            gaslessFee: 0,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: authSig
+        });
+
+        vm.prank(SENDER);
+        uint256 idx = vault.createLinkWithFees(req, auth);
+
+        bytes memory sig = _signClaim(LINK_PRIVKEY, idx, RECIPIENT, vault.OPEN_CLAIM_MODE());
+        vault.claim(idx, RECIPIENT, sig);
+
+        assertEq(erc1155.balanceOf(RECIPIENT, 1), 30);
+        assertTrue(vault.getLinkStatus(idx).redeemed);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // createCustomLinksWithFees — heterogeneous batch including ERC-721
+    // Scenario: A single transaction creates ETH + ERC-20 + ERC-721 links
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_createCustomLinksWithFees_withERC721() public {
+        EnvelopeLinks.LinkRequest[] memory reqs = new EnvelopeLinks.LinkRequest[](2);
+        reqs[0] = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(0),
+            contractType: 0,
+            amount: 0.5 ether,
+            tokenId: 0,
+            claimKey: LINK_PUBKEY,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+        reqs[1] = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(erc721),
+            contractType: 2,
+            amount: 1,
+            tokenId: 3,
+            claimKey: LINK_PUBKEY2,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+
+        EnvelopeLinks.FeeAuthorization[] memory auths = new EnvelopeLinks.FeeAuthorization[](2);
+        auths[0] = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0,
+            gaslessFee: 0,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: _signFeeAuth(reqs[0], SENDER, 0, 0, false, 0)
+        });
+        auths[1] = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0,
+            gaslessFee: 0,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: _signFeeAuth(reqs[1], SENDER, 0, 0, false, 0)
+        });
+
+        vm.prank(SENDER);
+        uint256[] memory indexes = vault.createCustomLinksWithFees{value: 0.5 ether}(reqs, auths);
+
+        assertEq(indexes.length, 2);
+        assertEq(vault.getLinkAsset(indexes[0]).amount, 0.5 ether);
+        assertEq(erc721.ownerOf(3), address(vault));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Reclaim ERC-20 link — creator takes back their deposited ERC-20 tokens
+    // Scenario: A sender creates an ERC-20 link, then reclaims before anyone claims
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_reclaim_erc20() public {
+        vm.prank(SENDER);
+        uint256 idx = vault.createLink(address(erc20), 1, 50 ether, 0, LINK_PUBKEY);
+
+        uint256 balBefore = erc20.balanceOf(SENDER);
+        vm.prank(SENDER);
+        vault.reclaim(idx);
+
+        assertEq(erc20.balanceOf(SENDER), balBefore + 50 ether);
+        assertTrue(vault.getLinkStatus(idx).redeemed);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Gasless validation — sponsored link (gaslessSponsored=true, gaslessFee=0)
+    // Scenario: Backend pre-approves gas sponsorship without requiring a prepaid fee
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_isValidGaslessOperation_sponsoredLink_claim() public {
+        uint256 idx = _makeGaslessSponsoredEthLink(1 ether);
+
+        bytes memory sig = _signClaim(LINK_PRIVKEY, idx, RECIPIENT, vault.OPEN_CLAIM_MODE());
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claim, (idx, RECIPIENT, sig));
+        assertTrue(vault.isValidGaslessOperation(RECIPIENT, data));
+    }
+
+    function test_isValidGaslessOperation_sponsoredLink_reclaim() public {
+        uint256 idx = _makeGaslessSponsoredEthLink(1 ether);
+
+        bytes memory data = abi.encodeCall(EnvelopeLinks.reclaim, (idx));
+        assertTrue(vault.isValidGaslessOperation(SENDER, data));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Gasless validation — MFA link requires authorization but gasless check has none
+    // Scenario: A gasless link requires MFA but claimWithMFA is called without valid MFA sig
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_isValidGaslessOperation_claimWithMFA_invalidMfaSignature() public {
+        uint256 idx = _makeGaslessEthLink_mfa(1 ether);
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory claimSig = _signClaim(LINK_PRIVKEY, idx, RECIPIENT, vault.OPEN_CLAIM_MODE());
+        // Use a wrong signature (signed by LINK_PRIVKEY instead of BACKEND)
+        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
+            keccak256(abi.encodePacked(vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, RECIPIENT, deadline))
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIVKEY, digest);
+        bytes memory wrongMfaSig = abi.encodePacked(r, s, v);
+
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claimWithMFA, (idx, RECIPIENT, claimSig, wrongMfaSig, deadline));
+        assertFalse(vault.isValidGaslessOperation(RECIPIENT, data));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Gasless validation — claim with wrong signature for claimKey
+    // Scenario: Someone tries to use the gasless paymaster with an invalid claim signature
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_isValidGaslessOperation_claim_wrongClaimSignature() public {
+        uint256 idx = _makeGaslessEthLink(1 ether);
+        // Sign with the wrong private key
+        bytes memory wrongSig = _signClaim(LINK_PRIVKEY2, idx, RECIPIENT, vault.OPEN_CLAIM_MODE());
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claim, (idx, RECIPIENT, wrongSig));
+        assertFalse(vault.isValidGaslessOperation(RECIPIENT, data));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Gasless validation — claim for already-redeemed link
+    // Scenario: Paymaster is queried for an already-claimed link
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_isValidGaslessOperation_claim_alreadyRedeemed() public {
+        uint256 idx = _makeGaslessEthLink(1 ether);
+        bytes memory sig = _signClaim(LINK_PRIVKEY, idx, RECIPIENT, vault.OPEN_CLAIM_MODE());
+
+        // Claim the link first
+        vm.prank(RECIPIENT);
+        vault.claim(idx, RECIPIENT, sig);
+
+        // Now check gasless validation — should be false
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claim, (idx, RECIPIENT, sig));
+        assertFalse(vault.isValidGaslessOperation(RECIPIENT, data));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Gasless validation — MFA-gated link checked via plain claim (no MFA auth)
+    // Scenario: Link requires MFA but caller uses `claim()` not `claimWithMFA()`
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_isValidGaslessOperation_claim_mfaRequiredButNotAuthorized() public {
+        uint256 idx = _makeGaslessEthLink_mfa(1 ether);
+        bytes memory sig = _signClaim(LINK_PRIVKEY, idx, RECIPIENT, vault.OPEN_CLAIM_MODE());
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claim, (idx, RECIPIENT, sig));
+        // claim() sets _authorized=false, but the link requiresMFA → invalid
+        assertFalse(vault.isValidGaslessOperation(RECIPIENT, data));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Gasless validation — bound recipient claim where caller is wrong
+    // Scenario: claimAsBoundRecipient called with a non-matching caller
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_isValidGaslessOperation_claimAsBoundRecipient_wrongCaller() public {
+        EnvelopeLinks.LinkRequest memory req = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(0),
+            contractType: 0,
+            amount: 1 ether,
+            tokenId: 0,
+            claimKey: LINK_PUBKEY,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: RECIPIENT,
+            reclaimableAfter: uint40(block.timestamp + 1 days)
+        });
+        bytes memory authSig = _signFeeAuth(req, SENDER, 0, 0.01 ether, false, 0);
+        EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0,
+            gaslessFee: 0.01 ether,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: authSig
+        });
+        vm.prank(SENDER);
+        uint256 idx = vault.createLinkWithFees{value: 1 ether}(req, auth);
+
+        bytes memory sig = _signClaim(LINK_PRIVKEY, idx, OTHER, vault.BOUND_CLAIM_MODE());
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claimAsBoundRecipient, (idx, OTHER, sig));
+        // OTHER != RECIPIENT → gasless validation fails at _isValidClaim (recipient mismatch)
+        assertFalse(vault.isValidGaslessOperation(OTHER, data));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // createLinksNoReturn — batch deposit without index array allocation
+    // Scenario: High-volume distributor uses gas-efficient batch with no return
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_createLinksNoReturn_erc20() public {
+        address[] memory keys = new address[](3);
+        keys[0] = LINK_PUBKEY;
+        keys[1] = LINK_PUBKEY2;
+        keys[2] = vm.addr(uint256(keccak256("third-key")));
+
+        uint256 balBefore = erc20.balanceOf(SENDER);
+        vm.prank(SENDER);
+        vault.createLinksNoReturn(address(erc20), 1, 10 ether, 0, keys);
+
+        assertEq(erc20.balanceOf(SENDER), balBefore - 30 ether);
+        assertEq(vault.getLinkCount(), 3);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // getLinkIndexesCreatedBy — filtering by creator across multiple creators
+    // Scenario: Multiple creators deposit links; query filters correctly
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_getLinkIndexesCreatedBy_multipleCreators() public {
+        // SENDER creates two links
+        vm.startPrank(SENDER);
+        vault.createLink{value: 1 ether}(address(0), 0, 1 ether, 0, LINK_PUBKEY);
+        vault.createLink{value: 2 ether}(address(0), 0, 2 ether, 0, LINK_PUBKEY2);
+        vm.stopPrank();
+
+        // OTHER creates one link
+        vm.deal(OTHER, 5 ether);
+        vm.prank(OTHER);
+        vault.createLink{value: 0.5 ether}(address(0), 0, 0.5 ether, 0, LINK_PUBKEY);
+
+        uint256[] memory senderLinks = vault.getLinkIndexesCreatedBy(SENDER);
+        uint256[] memory otherLinks = vault.getLinkIndexesCreatedBy(OTHER);
+
+        assertEq(senderLinks.length, 2);
+        assertEq(otherLinks.length, 1);
+        assertEq(vault.getLinkAsset(otherLinks[0]).amount, 0.5 ether);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Gasless reclaim — reclaim validation for a recipient-bound sponsored link
+    // Scenario: Creator tries to reclaim a recipient-bound link after the deadline
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_isValidGaslessOperation_reclaim_sponsoredAfterDeadline() public {
+        EnvelopeLinks.LinkRequest memory req = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(0),
+            contractType: 0,
+            amount: 1 ether,
+            tokenId: 0,
+            claimKey: LINK_PUBKEY,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: RECIPIENT,
+            reclaimableAfter: uint40(block.timestamp + 1 days)
+        });
+        bytes memory authSig = _signFeeAuth(req, SENDER, 0, 0, true, 0);
+        EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0,
+            gaslessFee: 0,
+            gaslessSponsored: true,
+            deadline: 0,
+            signature: authSig
+        });
+        vm.prank(SENDER);
+        uint256 idx = vault.createLinkWithFees{value: 1 ether}(req, auth);
+
+        // Before deadline: reclaim should be invalid
+        bytes memory data = abi.encodeCall(EnvelopeLinks.reclaim, (idx));
+        assertFalse(vault.isValidGaslessOperation(SENDER, data));
+
+        // After deadline: reclaim should be valid
+        vm.warp(block.timestamp + 1 days + 1);
+        assertTrue(vault.isValidGaslessOperation(SENDER, data));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Reclaim via createCustomLinksWithFees — ERC-721 reclaim lifecycle
+    // Scenario: Creator deposits an NFT with fees, then reclaims when unclaimed
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_reclaim_erc721_createdWithFees() public {
+        EnvelopeLinks.LinkRequest memory req = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(erc721),
+            contractType: 2,
+            amount: 1,
+            tokenId: 2,
+            claimKey: LINK_PUBKEY,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+        bytes memory authSig = _signFeeAuth(req, SENDER, 0.01 ether, 0, false, 0);
+        EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0.01 ether,
+            gaslessFee: 0,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: authSig
+        });
+
+        vm.prank(SENDER);
+        uint256 idx = vault.createLinkWithFees(req, auth);
+        assertEq(erc721.ownerOf(2), address(vault));
+
+        vm.prank(SENDER);
+        vault.reclaim(idx);
+        assertEq(erc721.ownerOf(2), SENDER);
+    }
+
+    function test_reclaim_erc1155_createdWithFees() public {
+        EnvelopeLinks.LinkRequest memory req = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(erc1155),
+            contractType: 3,
+            amount: 25,
+            tokenId: 2,
+            claimKey: LINK_PUBKEY,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+        bytes memory authSig = _signFeeAuth(req, SENDER, 0.01 ether, 0, false, 0);
+        EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0.01 ether,
+            gaslessFee: 0,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: authSig
+        });
+
+        vm.prank(SENDER);
+        uint256 idx = vault.createLinkWithFees(req, auth);
+
+        vm.prank(SENDER);
+        vault.reclaim(idx);
+        assertEq(erc1155.balanceOf(SENDER, 2), 50); // had 50, deposited 25, reclaimed 25
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Reclaim recipient-bound link after deadline
+    // Scenario: Creator waits for reclaimableAfter before reclaiming an unclaimed link
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_reclaim_recipientBound_erc20_afterDeadline() public {
+        vm.prank(SENDER);
+        uint256 idx = vault.createCustomLink(
+            address(erc20), 1, 100 ether, 0, LINK_PUBKEY, SENDER, false, RECIPIENT, uint40(block.timestamp + 7 days)
+        );
+
+        // Before deadline: should revert
+        vm.prank(SENDER);
+        vm.expectRevert(EnvelopeLinks.TooEarlyToReclaim.selector);
+        vault.reclaim(idx);
+
+        // After deadline: should succeed
+        vm.warp(block.timestamp + 7 days + 1);
+        vm.prank(SENDER);
+        vault.reclaim(idx);
+        assertTrue(vault.getLinkStatus(idx).redeemed);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Claim ERC-20 created via createCustomLinksWithFees batch
+    // Scenario: Batch link creation with fees, then individual claims
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_claimERC20_fromCustomLinksWithFeesBatch() public {
+        EnvelopeLinks.LinkRequest[] memory reqs = new EnvelopeLinks.LinkRequest[](2);
+        reqs[0] = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(erc20),
+            contractType: 1,
+            amount: 100 ether,
+            tokenId: 0,
+            claimKey: LINK_PUBKEY,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+        reqs[1] = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(erc20),
+            contractType: 1,
+            amount: 50 ether,
+            tokenId: 0,
+            claimKey: LINK_PUBKEY2,
+            onBehalfOf: SENDER,
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+
+        EnvelopeLinks.FeeAuthorization[] memory auths = new EnvelopeLinks.FeeAuthorization[](2);
+        auths[0] = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0.01 ether,
+            gaslessFee: 0,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: _signFeeAuth(reqs[0], SENDER, 0.01 ether, 0, false, 0)
+        });
+        auths[1] = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0.01 ether,
+            gaslessFee: 0,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: _signFeeAuth(reqs[1], SENDER, 0.01 ether, 0, false, 0)
+        });
+
+        vm.prank(SENDER);
+        uint256[] memory indexes = vault.createCustomLinksWithFees(reqs, auths);
+
+        // Claim first link
+        bytes memory sig = _signClaim(LINK_PRIVKEY, indexes[0], RECIPIENT, vault.OPEN_CLAIM_MODE());
+        vault.claim(indexes[0], RECIPIENT, sig);
+        assertEq(erc20.balanceOf(RECIPIENT), 100 ether);
+
+        // Claim second link
+        bytes memory sig2 = _signClaim(LINK_PRIVKEY2, indexes[1], OTHER, vault.OPEN_CLAIM_MODE());
+        vault.claim(indexes[1], OTHER, sig2);
+        assertEq(erc20.balanceOf(OTHER), 50 ether);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Gasless validation — claim with out-of-bounds index
+    // Scenario: Paymaster is queried for a non-existent link index
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_isValidGaslessOperation_claim_indexOutOfBounds() public view {
+        bytes memory sig = _signClaim(LINK_PRIVKEY, 999, RECIPIENT, vault.OPEN_CLAIM_MODE());
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claim, (999, RECIPIENT, sig));
+        assertFalse(vault.isValidGaslessOperation(RECIPIENT, data));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Gasless reclaim — link is redeemed but has gasless fee (should fail)
+    // Scenario: Double-reclaim attempt via paymaster after already reclaimed
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_isValidGaslessOperation_reclaim_redeemedGaslessLink() public {
+        uint256 idx = _makeGaslessEthLink(1 ether);
+
+        // Reclaim the link
+        vm.prank(SENDER);
+        vault.reclaim(idx);
+
+        // Now query gasless reclaim validation — should return false (redeemed)
+        bytes memory data = abi.encodeCall(EnvelopeLinks.reclaim, (idx));
+        assertFalse(vault.isValidGaslessOperation(SENDER, data));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // Raffle links — ERC-20 raffle distributing different amounts to one claimKey
+    // Scenario: Airdrop with randomized amounts using a single shared claimKey
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_createRaffleLinks_erc20() public {
+        uint256[] memory amounts = new uint256[](3);
+        amounts[0] = 10 ether;
+        amounts[1] = 20 ether;
+        amounts[2] = 5 ether;
+
+        vm.prank(SENDER);
+        uint256[] memory indexes = vault.createRaffleLinks(address(erc20), 1, amounts, LINK_PUBKEY);
+
+        assertEq(indexes.length, 3);
+        assertEq(vault.getLinkAsset(indexes[0]).amount, 10 ether);
+        assertEq(vault.getLinkAsset(indexes[1]).amount, 20 ether);
+        assertEq(vault.getLinkAsset(indexes[2]).amount, 5 ether);
+        // Total 35 ether transferred from sender
+        assertEq(erc20.balanceOf(address(vault)), 35 ether);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // createCustomLinks — ERC-1155 in a heterogeneous batch (no fees)
+    // Scenario: One-shot batch deposits across ETH and ERC-1155
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_createCustomLinks_ethAndErc1155() public {
+        address[] memory addrs = new address[](2);
+        addrs[0] = address(0);
+        addrs[1] = address(erc1155);
+
+        uint8[] memory types = new uint8[](2);
+        types[0] = 0;
+        types[1] = 3;
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 0.5 ether;
+        amounts[1] = 10;
+
+        uint256[] memory tokenIds = new uint256[](2);
+        tokenIds[0] = 0;
+        tokenIds[1] = 1;
+
+        address[] memory keys = new address[](2);
+        keys[0] = LINK_PUBKEY;
+        keys[1] = LINK_PUBKEY2;
+
+        bool[] memory mfas = new bool[](2);
+        mfas[0] = false;
+        mfas[1] = false;
+
+        vm.prank(SENDER);
+        uint256[] memory indexes = vault.createCustomLinks{value: 0.5 ether}(addrs, types, amounts, tokenIds, keys, mfas);
+
+        assertEq(indexes.length, 2);
+        assertEq(vault.getLinkAsset(indexes[0]).contractType, 0);
+        assertEq(vault.getLinkAsset(indexes[1]).contractType, 3);
+        assertEq(erc1155.balanceOf(address(vault), 1), 10);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // ERC-1155 batch receive hook — internal batch transfers succeed
+    // Scenario: The vault itself performs a batch transfer in (triggered by ERC-1155 deposit)
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    function test_onERC1155BatchReceived_internalTransfer() public {
+        // The onERC1155BatchReceived success path is only reachable when operator == vault address.
+        // We can call it directly to verify the selector is returned.
+        bytes4 result = vault.onERC1155BatchReceived(
+            address(vault), SENDER, new uint256[](1), new uint256[](1), ""
+        );
+        assertEq(result, vault.onERC1155BatchReceived.selector);
     }
 }
 

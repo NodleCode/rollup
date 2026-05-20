@@ -9,6 +9,7 @@ import {BasePaymaster, BOOTLOADER_FORMAL_ADDRESS} from "../../src/paymasters/Bas
 import {EnvelopePaymaster} from "../../src/paymasters/EnvelopePaymaster.sol";
 import {EnvelopeLinks} from "../../src/envelope/EnvelopeLinks.sol";
 import {ERC20Mock} from "../envelope/mocks/ERC20Mock.sol";
+import {EnvelopeFeeAuthTestUtils} from "../envelope/EnvelopeFeeAuthTestUtils.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 contract EnvelopePaymasterTest is Test {
@@ -73,28 +74,15 @@ contract EnvelopePaymasterTest is Test {
         bool gaslessSponsored,
         uint256 deadline
     ) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encode(
-                    vault.ENVELOPE_SALT(),
-                    block.chainid,
-                    address(vault),
-                    SENDER,
-                    request.tokenAddress,
-                    request.contractType,
-                    request.amount,
-                    request.tokenId,
-                    request.claimKey,
-                    request.onBehalfOf,
-                    request.withMFA,
-                    request.recipient,
-                    request.reclaimableAfter,
-                    serviceFee,
-                    gaslessFee,
-                    gaslessSponsored,
-                    deadline
-                )
-            )
+        bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
+            vault.ENVELOPE_SALT(),
+            address(vault),
+            request,
+            SENDER,
+            serviceFee,
+            gaslessFee,
+            gaslessSponsored,
+            deadline
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BACKEND_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
@@ -210,6 +198,20 @@ contract EnvelopePaymasterTest is Test {
 
         vm.prank(BOOTLOADER_FORMAL_ADDRESS);
         vm.expectRevert(BasePaymaster.PaymasterFlowNotSupported.selector);
+        paymaster.validateAndPayForPaymasterTransaction(bytes32(0), bytes32(0), txn);
+    }
+
+    /// @dev When the vault's isValidGaslessOperation reverts (e.g. malformed calldata
+    ///      that causes an ABI decode error), the paymaster catches the revert and
+    ///      treats it as "not approved" rather than bubbling up the revert.
+    function test_RevertIf_EnvelopeOperationRevertsInternally() public {
+        // Build a transaction with a valid selector but truncated calldata
+        // that will cause abi.decode inside isValidGaslessOperation to revert
+        bytes memory malformedData = abi.encodePacked(EnvelopeLinks.claim.selector, bytes28(0));
+        Transaction memory txn = _buildTransaction(RECIPIENT, address(vault), malformedData, 100_000, 1 gwei);
+
+        vm.prank(BOOTLOADER_FORMAL_ADDRESS);
+        vm.expectRevert(EnvelopePaymaster.EnvelopeGaslessOperationNotApproved.selector);
         paymaster.validateAndPayForPaymasterTransaction(bytes32(0), bytes32(0), txn);
     }
 }

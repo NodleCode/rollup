@@ -47,24 +47,37 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
 
     // ── Data Structures ──────────────────────────────────────────────────────────
 
-    struct Link {
-        address claimKey; // (20 bytes) address derived from the link claim private key
-        uint256 amount; // (32 bytes) amount of the asset being sent
-        ///// tokenAddress, contractType, tokenId, claimed & timestamp are stored in a single 32 byte word
-        address tokenAddress; // (20 bytes) address of the asset being sent. 0x0 for eth
-        uint8 contractType; // (1 byte) 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155
-        bool redeemed; // (1 byte) has this link been redeemed
-        bool requiresMFA; // (1 byte) is additional auth (MFA) required?
-        bool gaslessSponsored; // (1 byte) can the paymaster sponsor this link without a prepaid gasless fee?
-        uint40 timestamp; // ( 5 bytes) timestamp of the link creation
-        /////
-        uint256 tokenId; // (32 bytes) id of the token being sent (if erc721 or erc1155)
-        address creator; // (20 bytes) address of the sender
-        ///// slot for address-bound links data
+    struct LinkStatus {
+        address claimKey; // address derived from the link claim private key
+        bool redeemed; // has this link been redeemed
+        bool requiresMFA; // is additional auth (MFA) required?
+        bool gaslessSponsored; // can the paymaster sponsor this link without a prepaid gasless fee?
+        uint40 timestamp; // timestamp of the link creation
+    }
+
+    struct LinkAsset {
+        address tokenAddress; // address of the asset being sent. 0x0 for eth
+        uint8 contractType; // 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155
+        uint256 amount; // amount of the asset being sent
+        uint256 tokenId; // id of the token being sent (if erc721 or erc1155)
+    }
+
+    struct LinkParties {
+        address creator; // address of the sender or delegated creator
         address recipient; // unless it's 0x00, only this address can claim the link
-        uint40 reclaimableAfter; // for address-bound links, the sender is able to re-claim only after this timestamp
+        uint40 reclaimableAfter; // for address-bound links, the sender can reclaim only after this timestamp
+    }
+
+    struct LinkFees {
         uint256 serviceFee; // backend-authorized service fee collected at link creation
         uint256 gaslessFee; // prepaid gas sponsorship fee collected at link creation
+    }
+
+    struct Link {
+        LinkStatus status;
+        LinkAsset asset;
+        LinkParties parties;
+        LinkFees fees;
     } // 8 storage slots (32 byte each)
 
     /// @notice Full link intent covered by a backend fee authorization.
@@ -96,8 +109,7 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     bytes32 public constant ENVELOPE_SALT = 0x70adbbeba9d4f0c82e28dd574f15466f75df0543b65f24460fc445813b5d94e0; // keccak256("Konrad makes tokens go woosh tadam");
 
     bytes32 public constant OPEN_CLAIM_MODE = 0x0000000000000000000000000000000000000000000000000000000000000000; // default. Any address can trigger the withdrawal function
-    bytes32 public constant BOUND_CLAIM_MODE =
-        0x2bb5bef2b248d3edba501ad918c3ab524cce2aea54d4c914414e1c4401dc4ff4; // keccak256("only recipient") - only the signed recipient can trigger the withdrawal function
+    bytes32 public constant BOUND_CLAIM_MODE = 0x2bb5bef2b248d3edba501ad918c3ab524cce2aea54d4c914414e1c4401dc4ff4; // keccak256("only recipient") - only the signed recipient can trigger the withdrawal function
 
     bytes32 public DOMAIN_SEPARATOR; // initialized in the constructor
 
@@ -124,9 +136,7 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     mapping(address => uint256) public accumulatedFees;
 
     // events
-    event LinkCreated(
-        uint256 indexed _index, uint8 indexed _contractType, uint256 _amount, address indexed _creator
-    );
+    event LinkCreated(uint256 indexed _index, uint8 indexed _contractType, uint256 _amount, address indexed _creator);
     event LinkRedeemed(
         uint256 indexed _index, uint8 indexed _contractType, uint256 _amount, address indexed _recipientAddress
     );
@@ -171,13 +181,12 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     // Link Creation Functions
     // ══════════════════════════════════════════════════════════════════════════════
 
-    function createLink(
-        address _tokenAddress,
-        uint8 _contractType,
-        uint256 _amount,
-        uint256 _tokenId,
-        address claimKey
-    ) public payable nonReentrant returns (uint256) {
+    function createLink(address _tokenAddress, uint8 _contractType, uint256 _amount, uint256 _tokenId, address claimKey)
+        public
+        payable
+        nonReentrant
+        returns (uint256)
+    {
         _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
         return _storeLink(
             _tokenAddress, _contractType, _amount, _tokenId, claimKey, msg.sender, false, address(0), 0, 0, 0, false
@@ -384,36 +393,12 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
             _withMFAs.length
         );
 
-        uint256 expectedEther;
-        for (uint256 i = 0; i < _amounts.length; ++i) {
-            if (_contractTypes[i] > 3) revert InvalidContractType();
-            if (_contractTypes[i] == 0) expectedEther += _amounts[i];
-        }
-        if (msg.value != expectedEther) revert InvalidTotalEtherSent();
+        _validateCustomLinksPayment(_contractTypes, _amounts);
 
         uint256[] memory linkIndexes = new uint256[](_amounts.length);
         for (uint256 i = 0; i < _amounts.length; ++i) {
-            uint256 amount = _pullTokensViaApprovalFrom(
-                msg.sender,
-                _tokenAddresses[i],
-                _contractTypes[i],
-                _amounts[i],
-                _tokenIds[i],
-                _contractTypes[i] == 0 ? _amounts[i] : 0
-            );
-            linkIndexes[i] = _storeLink(
-                _tokenAddresses[i],
-                _contractTypes[i],
-                amount,
-                _tokenIds[i],
-                _claimKeys[i],
-                msg.sender,
-                _withMFAs[i],
-                address(0),
-                0,
-                0,
-                0,
-                false
+            linkIndexes[i] = _createNoFeeCustomLink(
+                _tokenAddresses[i], _contractTypes[i], _amounts[i], _tokenIds[i], _claimKeys[i], _withMFAs[i]
             );
         }
         return linkIndexes;
@@ -421,10 +406,12 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
 
     /// @notice Create a heterogeneous batch of links with backend-authorized fees.
     /// @dev Fee authorizations are signed for the real caller because batching is vault-native.
-    function createCustomLinksWithFees(
-        LinkRequest[] calldata _requests,
-        FeeAuthorization[] calldata _feeAuthorizations
-    ) external payable nonReentrant returns (uint256[] memory) {
+    function createCustomLinksWithFees(LinkRequest[] calldata _requests, FeeAuthorization[] calldata _feeAuthorizations)
+        external
+        payable
+        nonReentrant
+        returns (uint256[] memory)
+    {
         if (_requests.length != _feeAuthorizations.length) {
             revert ParametersLengthMismatch();
         }
@@ -439,33 +426,7 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
 
         uint256[] memory linkIndexes = new uint256[](_requests.length);
         for (uint256 i = 0; i < _requests.length; ++i) {
-            LinkRequest calldata request = _requests[i];
-            FeeAuthorization calldata feeAuthorization = _feeAuthorizations[i];
-            uint256 amount = _pullTokensViaApprovalFrom(
-                msg.sender,
-                request.tokenAddress,
-                request.contractType,
-                request.amount,
-                request.tokenId,
-                request.contractType == 0 ? request.amount : 0
-            );
-
-            uint256 index = links.length;
-            _collectLinkFees(index, msg.sender, feeAuthorization.serviceFee, feeAuthorization.gaslessFee);
-            linkIndexes[i] = _storeLink(
-                request.tokenAddress,
-                request.contractType,
-                amount,
-                request.tokenId,
-                request.claimKey,
-                request.onBehalfOf,
-                request.withMFA,
-                request.recipient,
-                request.reclaimableAfter,
-                feeAuthorization.serviceFee,
-                feeAuthorization.gaslessFee,
-                feeAuthorization.gaslessSponsored
-            );
+            linkIndexes[i] = _createCustomLinkWithFees(_requests[i], _feeAuthorizations[i]);
         }
 
         return linkIndexes;
@@ -652,26 +613,42 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         return links.length;
     }
 
-    function getLink(uint256 _index) external view returns (Link memory) {
-        return links[_index];
+    function getLinkStatus(uint256 _index) external view returns (LinkStatus memory) {
+        return links[_index].status;
     }
 
-    function getAllLinks() external view returns (Link[] memory) {
-        return links;
+    function getLinkAsset(uint256 _index) external view returns (LinkAsset memory) {
+        return links[_index].asset;
     }
 
-    function getLinksCreatedBy(address _address) external view returns (Link[] memory) {
+    function getLinkParties(uint256 _index) external view returns (LinkParties memory) {
+        return links[_index].parties;
+    }
+
+    function getLinkFees(uint256 _index) external view returns (LinkFees memory) {
+        return links[_index].fees;
+    }
+
+    function getAllLinkIndexes() external view returns (uint256[] memory) {
+        uint256[] memory result = new uint256[](links.length);
+        for (uint256 i = 0; i < links.length; ++i) {
+            result[i] = i;
+        }
+        return result;
+    }
+
+    function getLinkIndexesCreatedBy(address _address) external view returns (uint256[] memory) {
         uint256 count = 0;
         for (uint256 i = 0; i < links.length; ++i) {
-            if (links[i].creator == _address) {
+            if (links[i].parties.creator == _address) {
                 count++;
             }
         }
-        Link[] memory result = new Link[](count);
+        uint256[] memory result = new uint256[](count);
         count = 0;
         for (uint256 i = 0; i < links.length; ++i) {
-            if (links[i].creator == _address) {
-                result[count] = links[i];
+            if (links[i].parties.creator == _address) {
+                result[count] = i;
                 count++;
             }
         }
@@ -726,31 +703,94 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
             revert FeeAuthorizationExpired();
         }
 
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encode(
-                    ENVELOPE_SALT,
-                    block.chainid,
-                    address(this),
-                    msg.sender,
-                    _request.tokenAddress,
-                    _request.contractType,
-                    _request.amount,
-                    _request.tokenId,
-                    _request.claimKey,
-                    _request.onBehalfOf,
-                    _request.withMFA,
-                    _request.recipient,
-                    _request.reclaimableAfter,
-                    _feeAuthorization.serviceFee,
-                    _feeAuthorization.gaslessFee,
-                    _feeAuthorization.gaslessSponsored,
-                    _feeAuthorization.deadline
-                )
-            )
-        );
+        bytes32 digest = _feeAuthorizationDigest(_request, _feeAuthorization, msg.sender);
         address authorizationSigner = getSigner(digest, _feeAuthorization.signature);
         if (authorizationSigner != mfaAuthorizer) revert WrongFeeAuthorizationSignature();
+    }
+
+    function _feeAuthorizationDigest(
+        LinkRequest calldata _request,
+        FeeAuthorization calldata _feeAuthorization,
+        address _feePayer
+    ) internal view returns (bytes32) {
+        bytes memory encoded = new bytes(17 * 32);
+        _writeFeeAuthorizationContext(encoded, _feePayer);
+        _writeFeeAuthorizationAsset(
+            encoded, _request.tokenAddress, _request.contractType, _request.amount, _request.tokenId
+        );
+        _writeFeeAuthorizationParties(
+            encoded, _request.claimKey, _request.onBehalfOf, _request.withMFA, _request.recipient, _request.reclaimableAfter
+        );
+        _writeFeeAuthorizationFees(
+            encoded,
+            _feeAuthorization.serviceFee,
+            _feeAuthorization.gaslessFee,
+            _feeAuthorization.gaslessSponsored,
+            _feeAuthorization.deadline
+        );
+
+        return MessageHashUtils.toEthSignedMessageHash(keccak256(encoded));
+    }
+
+    function _writeFeeAuthorizationContext(bytes memory encoded, address _feePayer) internal view {
+        bytes32 salt = ENVELOPE_SALT;
+        assembly ("memory-safe") {
+            let ptr := add(encoded, 32)
+            mstore(ptr, salt)
+            mstore(add(ptr, 32), chainid())
+            mstore(add(ptr, 64), address())
+            mstore(add(ptr, 96), _feePayer)
+        }
+    }
+
+    function _writeFeeAuthorizationAsset(
+        bytes memory encoded,
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256 _amount,
+        uint256 _tokenId
+    ) internal pure {
+        assembly ("memory-safe") {
+            let ptr := add(encoded, 160)
+            mstore(ptr, _tokenAddress)
+            mstore(add(ptr, 32), _contractType)
+            mstore(add(ptr, 64), _amount)
+            mstore(add(ptr, 96), _tokenId)
+        }
+    }
+
+    function _writeFeeAuthorizationParties(
+        bytes memory encoded,
+        address claimKey,
+        address _onBehalfOf,
+        bool _withMFA,
+        address _recipient,
+        uint40 _reclaimableAfter
+    ) internal pure {
+        assembly ("memory-safe") {
+            let ptr := add(encoded, 288)
+            mstore(ptr, claimKey)
+            mstore(add(ptr, 32), _onBehalfOf)
+            mstore(add(ptr, 64), _withMFA)
+            mstore(add(ptr, 96), _recipient)
+            mstore(add(ptr, 128), _reclaimableAfter)
+        }
+    }
+
+    function _writeFeeAuthorizationFees(
+        bytes memory encoded,
+        uint256 _serviceFee,
+        uint256 _gaslessFee,
+        bool _gaslessSponsored,
+        uint256 _deadline
+    ) internal pure {
+        assembly ("memory-safe") {
+            let ptr := add(encoded, 448)
+            mstore(ptr, _serviceFee)
+            mstore(add(ptr, 32), _gaslessFee)
+            mstore(add(ptr, 64), _gaslessSponsored)
+            mstore(add(ptr, 96), _deadline)
+        }
     }
 
     function _collectLinkFees(uint256 _index, address _feePayer, uint256 _serviceFee, uint256 _gaslessFee) internal {
@@ -777,26 +817,28 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256 _gaslessFee,
         bool _gaslessSponsored
     ) internal returns (uint256) {
-        links.push(
-            Link({
-                tokenAddress: _tokenAddress,
-                contractType: _contractType,
-                amount: _amount,
-                tokenId: _tokenId,
-                redeemed: false,
-                claimKey: claimKey,
-                creator: _onBehalfOf,
-                timestamp: uint40(block.timestamp),
-                requiresMFA: _requiresMFA,
-                gaslessSponsored: _gaslessSponsored,
-                recipient: _recipient,
-                reclaimableAfter: _reclaimableAfter,
-                serviceFee: _serviceFee,
-                gaslessFee: _gaslessFee
-            })
-        );
-        emit LinkCreated(links.length - 1, _contractType, _amount, _onBehalfOf);
-        return links.length - 1;
+        uint256 index = links.length;
+        links.push();
+
+        {
+            Link storage link = links[index];
+            link.status.claimKey = claimKey;
+            link.status.requiresMFA = _requiresMFA;
+            link.status.gaslessSponsored = _gaslessSponsored;
+            link.status.timestamp = uint40(block.timestamp);
+            link.asset.tokenAddress = _tokenAddress;
+            link.asset.contractType = _contractType;
+            link.asset.amount = _amount;
+            link.asset.tokenId = _tokenId;
+            link.parties.creator = _onBehalfOf;
+            link.parties.recipient = _recipient;
+            link.parties.reclaimableAfter = _reclaimableAfter;
+            link.fees.serviceFee = _serviceFee;
+            link.fees.gaslessFee = _gaslessFee;
+        }
+
+        emit LinkCreated(index, _contractType, _amount, _onBehalfOf);
+        return index;
     }
 
     function _isValidGaslessClaim(
@@ -810,7 +852,7 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         if (_caller != _recipientAddress) return false;
         if (_index >= links.length) return false;
         Link storage link = links[_index];
-        if (link.gaslessFee == 0 && !link.gaslessSponsored) return false;
+        if (link.fees.gaslessFee == 0 && !link.status.gaslessSponsored) return false;
         return _isValidClaim(_index, _recipientAddress, _extraData, _signature, _authorized);
     }
 
@@ -822,17 +864,17 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         bool _authorized
     ) internal view returns (bool) {
         Link memory deposit = links[_index];
-        if (deposit.redeemed) return false;
-        if (deposit.requiresMFA && !_authorized) return false;
-        if (deposit.recipient != address(0) && _recipientAddress != deposit.recipient) return false;
+        if (deposit.status.redeemed) return false;
+        if (deposit.status.requiresMFA && !_authorized) return false;
+        if (deposit.parties.recipient != address(0) && _recipientAddress != deposit.parties.recipient) return false;
 
-        if (deposit.claimKey != address(0)) {
+        if (deposit.status.claimKey != address(0)) {
             bytes32 _claimHash = MessageHashUtils.toEthSignedMessageHash(
                 keccak256(
                     abi.encodePacked(ENVELOPE_SALT, block.chainid, address(this), _index, _recipientAddress, _extraData)
                 )
             );
-            if (_recoverSigner(_claimHash, _signature) != deposit.claimKey) return false;
+            if (_recoverSigner(_claimHash, _signature) != deposit.status.claimKey) return false;
         }
 
         return true;
@@ -841,10 +883,12 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     function _isValidGaslessReclaim(address _caller, uint256 _index) internal view returns (bool) {
         if (_index >= links.length) return false;
         Link memory deposit = links[_index];
-        if (deposit.gaslessFee == 0 && !deposit.gaslessSponsored) return false;
-        if (deposit.redeemed) return false;
-        if (deposit.creator != _caller) return false;
-        if (deposit.recipient != address(0) && block.timestamp <= deposit.reclaimableAfter) return false;
+        if (deposit.fees.gaslessFee == 0 && !deposit.status.gaslessSponsored) return false;
+        if (deposit.status.redeemed) return false;
+        if (deposit.parties.creator != _caller) return false;
+        if (deposit.parties.recipient != address(0) && block.timestamp <= deposit.parties.reclaimableAfter) {
+            return false;
+        }
         return true;
     }
 
@@ -867,6 +911,62 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                 || _amountsLength != _claimKeysLength || _tokenIdsLength != _claimKeysLength
                 || _withMFAsLength != _claimKeysLength
         ) revert ParametersLengthMismatch();
+    }
+
+    function _validateCustomLinksPayment(uint8[] calldata _contractTypes, uint256[] calldata _amounts) internal view {
+        uint256 expectedEther;
+        for (uint256 i = 0; i < _amounts.length; ++i) {
+            if (_contractTypes[i] > 3) revert InvalidContractType();
+            if (_contractTypes[i] == 0) expectedEther += _amounts[i];
+        }
+        if (msg.value != expectedEther) revert InvalidTotalEtherSent();
+    }
+
+    function _createNoFeeCustomLink(
+        address _tokenAddress,
+        uint8 _contractType,
+        uint256 _amount,
+        uint256 _tokenId,
+        address claimKey,
+        bool _withMFA
+    ) internal returns (uint256) {
+        uint256 amount = _pullTokensViaApprovalFrom(
+            msg.sender, _tokenAddress, _contractType, _amount, _tokenId, _contractType == 0 ? _amount : 0
+        );
+        return _storeLink(
+            _tokenAddress, _contractType, amount, _tokenId, claimKey, msg.sender, _withMFA, address(0), 0, 0, 0, false
+        );
+    }
+
+    function _createCustomLinkWithFees(LinkRequest calldata request, FeeAuthorization calldata feeAuthorization)
+        internal
+        returns (uint256)
+    {
+        uint256 amount = _pullTokensViaApprovalFrom(
+            msg.sender,
+            request.tokenAddress,
+            request.contractType,
+            request.amount,
+            request.tokenId,
+            request.contractType == 0 ? request.amount : 0
+        );
+
+        uint256 index = links.length;
+        _collectLinkFees(index, msg.sender, feeAuthorization.serviceFee, feeAuthorization.gaslessFee);
+        return _storeLink(
+            request.tokenAddress,
+            request.contractType,
+            amount,
+            request.tokenId,
+            request.claimKey,
+            request.onBehalfOf,
+            request.withMFA,
+            request.recipient,
+            request.reclaimableAfter,
+            feeAuthorization.serviceFee,
+            feeAuthorization.gaslessFee,
+            feeAuthorization.gaslessSponsored
+        );
     }
 
     function _pullUniformBatchAssets(
@@ -978,7 +1078,7 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     ) internal returns (bool) {
         if (_index >= links.length) revert LinkIndexOutOfBounds();
         Link memory link = links[_index];
-        if (link.redeemed) revert LinkAlreadyRedeemed();
+        if (link.status.redeemed) revert LinkAlreadyRedeemed();
 
         address claimSigner;
         if (_signature.length > 0) {
@@ -989,23 +1089,25 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
             );
             claimSigner = getSigner(_claimHash, _signature);
         }
-        if (link.requiresMFA && !_authorized) revert RequiresMfaAuthorization();
-        if (link.claimKey != address(0) && claimSigner != link.claimKey) revert WrongSignature();
-        if (link.recipient != address(0) && _recipientAddress != link.recipient) revert WrongRecipient();
+        if (link.status.requiresMFA && !_authorized) revert RequiresMfaAuthorization();
+        if (link.status.claimKey != address(0) && claimSigner != link.status.claimKey) revert WrongSignature();
+        if (link.parties.recipient != address(0) && _recipientAddress != link.parties.recipient) {
+            revert WrongRecipient();
+        }
 
-        emit LinkRedeemed(_index, link.contractType, link.amount, _recipientAddress);
-        links[_index].redeemed = true;
+        emit LinkRedeemed(_index, link.asset.contractType, link.asset.amount, _recipientAddress);
+        links[_index].status.redeemed = true;
 
-        if (link.contractType == 0) {
-            (bool success,) = _recipientAddress.call{value: link.amount}("");
+        if (link.asset.contractType == 0) {
+            (bool success,) = _recipientAddress.call{value: link.asset.amount}("");
             if (!success) revert EthTransferFailed();
-        } else if (link.contractType == 1) {
-            IERC20(link.tokenAddress).safeTransfer(_recipientAddress, link.amount);
-        } else if (link.contractType == 2) {
-            IERC721(link.tokenAddress).safeTransferFrom(address(this), _recipientAddress, link.tokenId);
-        } else if (link.contractType == 3) {
-            IERC1155(link.tokenAddress)
-                .safeTransferFrom(address(this), _recipientAddress, link.tokenId, link.amount, "");
+        } else if (link.asset.contractType == 1) {
+            IERC20(link.asset.tokenAddress).safeTransfer(_recipientAddress, link.asset.amount);
+        } else if (link.asset.contractType == 2) {
+            IERC721(link.asset.tokenAddress).safeTransferFrom(address(this), _recipientAddress, link.asset.tokenId);
+        } else if (link.asset.contractType == 3) {
+            IERC1155(link.asset.tokenAddress)
+                .safeTransferFrom(address(this), _recipientAddress, link.asset.tokenId, link.asset.amount, "");
         }
 
         return true;
@@ -1014,25 +1116,25 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     function _executeReclaim(uint256 _index, address _creator) internal returns (bool) {
         if (_index >= links.length) revert LinkIndexOutOfBounds();
         Link memory link = links[_index];
-        if (link.redeemed) revert LinkAlreadyRedeemed();
-        if (link.creator != _creator) revert NotTheCreator();
-        if (link.recipient != address(0)) {
-            if (block.timestamp <= link.reclaimableAfter) revert TooEarlyToReclaim();
+        if (link.status.redeemed) revert LinkAlreadyRedeemed();
+        if (link.parties.creator != _creator) revert NotTheCreator();
+        if (link.parties.recipient != address(0)) {
+            if (block.timestamp <= link.parties.reclaimableAfter) revert TooEarlyToReclaim();
         }
 
-        emit LinkRedeemed(_index, link.contractType, link.amount, link.creator);
-        links[_index].redeemed = true;
+        emit LinkRedeemed(_index, link.asset.contractType, link.asset.amount, link.parties.creator);
+        links[_index].status.redeemed = true;
 
-        if (link.contractType == 0) {
-            (bool success,) = payable(link.creator).call{value: link.amount}("");
+        if (link.asset.contractType == 0) {
+            (bool success,) = payable(link.parties.creator).call{value: link.asset.amount}("");
             if (!success) revert EthTransferFailed();
-        } else if (link.contractType == 1) {
-            IERC20(link.tokenAddress).safeTransfer(link.creator, link.amount);
-        } else if (link.contractType == 2) {
-            IERC721(link.tokenAddress).safeTransferFrom(address(this), link.creator, link.tokenId);
-        } else if (link.contractType == 3) {
-            IERC1155(link.tokenAddress)
-                .safeTransferFrom(address(this), link.creator, link.tokenId, link.amount, "");
+        } else if (link.asset.contractType == 1) {
+            IERC20(link.asset.tokenAddress).safeTransfer(link.parties.creator, link.asset.amount);
+        } else if (link.asset.contractType == 2) {
+            IERC721(link.asset.tokenAddress).safeTransferFrom(address(this), link.parties.creator, link.asset.tokenId);
+        } else if (link.asset.contractType == 3) {
+            IERC1155(link.asset.tokenAddress)
+                .safeTransferFrom(address(this), link.parties.creator, link.asset.tokenId, link.asset.amount, "");
         }
 
         return true;

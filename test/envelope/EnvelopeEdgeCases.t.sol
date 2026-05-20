@@ -201,11 +201,11 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         _depositEth(1);
         _depositEth(1);
         // Same sender (address(this)) made both deposits.
-        EnvelopeLinks.Link[] memory mine = vault.getLinksCreatedBy(address(this));
+        uint256[] memory mine = vault.getLinkIndexesCreatedBy(address(this));
         assertEq(mine.length, 2);
 
         // Different sender → empty.
-        EnvelopeLinks.Link[] memory aliceDeposits = vault.getLinksCreatedBy(ALICE);
+        uint256[] memory aliceDeposits = vault.getLinkIndexesCreatedBy(ALICE);
         assertEq(aliceDeposits.length, 0);
     }
 

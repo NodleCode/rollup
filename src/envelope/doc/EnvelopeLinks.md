@@ -198,11 +198,11 @@ Gasless eligibility is independent of the gift amount. The paymaster must still 
 constructor(address mfaAuthorizer, address owner, address feeToken)
 ```
 
-| Param           | Purpose                                                                                                                                                       |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Param           | Purpose                                                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mfaAuthorizer` | Backend signer for MFA claim approvals and link-creation-time fee authorizations. `address(0)` disables non-zero fee authorizations and makes MFA withdrawals fail. |
-| `owner`         | Owns the vault and can withdraw accumulated fees.                                                                                                             |
-| `feeToken`      | ERC-20 used for Nodle service and gasless sponsorship fees, for example NODL. `address(0)` permits only zero-fee deposits.                                    |
+| `owner`         | Owns the vault and can withdraw accumulated fees.                                                                                                                   |
+| `feeToken`      | ERC-20 used for Nodle service and gasless sponsorship fees, for example NODL. `address(0)` permits only zero-fee deposits.                                          |
 
 The constructor also sets the EIP-712 domain separator used by the vault-side validation helpers.
 
@@ -233,18 +233,18 @@ struct Deposit {
 
 ## Main Deposit Functions
 
-| Function                                                      | Flow                                                                                                                                                                                           |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createLink(token, type, amount, tokenId, claimKey)`         | Basic open link. No MFA, no fees, no gasless sponsorship.                                                                                                                                      |
-| `createMFALink(...)`                                         | Basic open link that requires backend MFA at claim time. No link-creation-time fees unless using `createLinkWithFees`.                                                                        |
-| `createLinkFor(..., onBehalfOf)`                        | Creates a link whose reclaim rights belong to `onBehalfOf`. Used by batch flows.                                                                                                               |
-| `createMFALinkFor(..., onBehalfOf)`                     | Selfless deposit plus MFA requirement.                                                                                                                                                         |
-| `createCustomLink(...)`                                      | Canonical no-fee entry point with MFA flag, optional recipient binding, and optional reclaim delay.                                                                                            |
-| `createLinkWithFees(request, feeAuthorization)`        | Canonical paid-service entry point. Pulls the gift asset, verifies backend-signed fees, collects `feeToken`, and records gasless eligibility when `gaslessFee > 0` or `gaslessSponsored=true`. |
+| Function                                                 | Flow                                                                                                                                                                                           |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createLink(token, type, amount, tokenId, claimKey)`     | Basic open link. No MFA, no fees, no gasless sponsorship.                                                                                                                                      |
+| `createMFALink(...)`                                     | Basic open link that requires backend MFA at claim time. No link-creation-time fees unless using `createLinkWithFees`.                                                                         |
+| `createLinkFor(..., onBehalfOf)`                         | Creates a link whose reclaim rights belong to `onBehalfOf`. Used by batch flows.                                                                                                               |
+| `createMFALinkFor(..., onBehalfOf)`                      | Selfless deposit plus MFA requirement.                                                                                                                                                         |
+| `createCustomLink(...)`                                  | Canonical no-fee entry point with MFA flag, optional recipient binding, and optional reclaim delay.                                                                                            |
+| `createLinkWithFees(request, feeAuthorization)`          | Canonical paid-service entry point. Pulls the gift asset, verifies backend-signed fees, collects `feeToken`, and records gasless eligibility when `gaslessFee > 0` or `gaslessSponsored=true`. |
 | `createLinks(...)`                                       | Creates many same-shape no-fee deposits in one transaction. ETH, ERC-20, and ERC-1155 are supported; ERC-721 uses the heterogeneous batch path.                                                |
-| `createLinksNoReturn(...)`                               | Same as `createLinks` but skips allocating/returning the link indexes array.                                                                                                           |
+| `createLinksNoReturn(...)`                               | Same as `createLinks` but skips allocating/returning the link indexes array.                                                                                                                   |
 | `createCustomLinks(...)`                                 | Creates a heterogeneous no-fee batch and supports ETH, ERC-20, ERC-721, and ERC-1155.                                                                                                          |
-| `createCustomLinksWithFees(requests, feeAuthorizations)` | Creates a heterogeneous paid/gasless-ready batch using the same `LinkRequest` and `FeeAuthorization` structs as the single-deposit flow.                                                    |
+| `createCustomLinksWithFees(requests, feeAuthorizations)` | Creates a heterogeneous paid/gasless-ready batch using the same `LinkRequest` and `FeeAuthorization` structs as the single-deposit flow.                                                       |
 | `createLinksRaffle(...)`                                 | Creates ETH or ERC-20 raffle-style deposits with different amounts and one shared `claimKey`.                                                                                                  |
 | `createMFARaffleLinks(...)`                              | Same as raffle batching, but every deposit requires MFA at claim time.                                                                                                                         |
 
@@ -268,12 +268,12 @@ The batching functions share the same storage and events as single deposits. Sam
 
 ## Withdraw And Claim Functions
 
-| Function                                                                  | Caller                                   | Authorization                                                                                                 |
-| ------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `claim(index, recipient, signature)`                            | Anyone, or a recipient using a paymaster | Link key signs `(salt, chainId, vault, index, recipient, OPEN_CLAIM_MODE)`.                            |
+| Function                                                            | Caller                                   | Authorization                                                                                                 |
+| ------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `claim(index, recipient, signature)`                                | Anyone, or a recipient using a paymaster | Link key signs `(salt, chainId, vault, index, recipient, OPEN_CLAIM_MODE)`.                                   |
 | `claimWithMFA(index, recipient, signature, mfaSignature, deadline)` | Anyone, or a recipient using a paymaster | Link signature plus backend MFA signature over `(salt, chainId, vault, index, recipient, deadline)`.          |
-| `claimAsBoundRecipient(index, recipient, signature)`                 | Must be `recipient`                      | Link key signs using `BOUND_CLAIM_MODE`.                                                             |
-| `reclaim(index)`                                            | Original `senderAddress`                 | Sender reclaim. If the deposit is recipient-bound, `block.timestamp` must be greater than `reclaimableAfter`. |
+| `claimAsBoundRecipient(index, recipient, signature)`                | Must be `recipient`                      | Link key signs using `BOUND_CLAIM_MODE`.                                                                      |
+| `reclaim(index)`                                                    | Original `senderAddress`                 | Sender reclaim. If the deposit is recipient-bound, `block.timestamp` must be greater than `reclaimableAfter`. |
 
 All withdrawal paths set `claimed = true` before transferring assets. Claim-time fee collection was intentionally removed: fees are now collected when the envelope is created.
 
@@ -366,7 +366,10 @@ echo "Total links: $LINK_COUNT"
 
 # Fetch last created link (index = count - 1)
 IDX=$((LINK_COUNT - 1))
-cast call $LINKS "getLink(uint256)" $IDX --rpc-url $RPC
+cast call $LINKS "getLinkStatus(uint256)" $IDX --rpc-url $RPC
+cast call $LINKS "getLinkAsset(uint256)" $IDX --rpc-url $RPC
+cast call $LINKS "getLinkParties(uint256)" $IDX --rpc-url $RPC
+cast call $LINKS "getLinkFees(uint256)" $IDX --rpc-url $RPC
 ```
 
 ### 3. Claim the link

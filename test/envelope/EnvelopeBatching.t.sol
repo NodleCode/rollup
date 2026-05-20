@@ -3,6 +3,7 @@ pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
 import {EnvelopeLinks} from "../../src/envelope/EnvelopeLinks.sol";
+import {EnvelopeFeeAuthTestUtils} from "./EnvelopeFeeAuthTestUtils.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
@@ -50,9 +51,10 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         assertEq(depositIndexes.length, numDeposits);
         assertEq(vault.getLinkCount(), numDeposits);
         for (uint256 i = 0; i < numDeposits; ++i) {
-            EnvelopeLinks.Link memory deposit = vault.getLink(depositIndexes[i]);
-            assertEq(deposit.amount, amount);
-            assertEq(deposit.creator, address(this));
+            EnvelopeLinks.LinkAsset memory asset = vault.getLinkAsset(depositIndexes[i]);
+            EnvelopeLinks.LinkParties memory parties = vault.getLinkParties(depositIndexes[i]);
+            assertEq(asset.amount, amount);
+            assertEq(parties.creator, address(this));
         }
     }
 
@@ -146,11 +148,12 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         uint256[] memory depositIndexes =
             vault.createCustomLinks(tokenAddresses, contractTypes, amounts, tokenIds, pubKeys20, withMFAs);
 
-        EnvelopeLinks.Link memory deposit = vault.getLink(depositIndexes[0]);
+        EnvelopeLinks.LinkAsset memory asset = vault.getLinkAsset(depositIndexes[0]);
+        EnvelopeLinks.LinkParties memory parties = vault.getLinkParties(depositIndexes[0]);
         assertEq(testToken721.ownerOf(tokenId), address(vault));
-        assertEq(deposit.contractType, 2);
-        assertEq(deposit.tokenId, tokenId);
-        assertEq(deposit.creator, address(this));
+        assertEq(asset.contractType, 2);
+        assertEq(asset.tokenId, tokenId);
+        assertEq(parties.creator, address(this));
     }
 
     function testMakeBatchCustomDepositWithFeesCollectsFeesAtDeposit() public {
@@ -165,25 +168,24 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         feeToken.mint(address(this), 0.1 ether);
         feeToken.approve(address(feeVault), 0.1 ether);
 
-        uint256[] memory depositIndexes =
-            feeVault.createCustomLinksWithFees{value: 3 ether}(requests, authorizations);
+        uint256[] memory depositIndexes = feeVault.createCustomLinksWithFees{value: 3 ether}(requests, authorizations);
 
-        EnvelopeLinks.Link memory firstDeposit = feeVault.getLink(depositIndexes[0]);
-        EnvelopeLinks.Link memory secondDeposit = feeVault.getLink(depositIndexes[1]);
+        EnvelopeLinks.LinkParties memory firstParties = feeVault.getLinkParties(depositIndexes[0]);
+        EnvelopeLinks.LinkFees memory firstFees = feeVault.getLinkFees(depositIndexes[0]);
+        EnvelopeLinks.LinkStatus memory secondStatus = feeVault.getLinkStatus(depositIndexes[1]);
+        EnvelopeLinks.LinkParties memory secondParties = feeVault.getLinkParties(depositIndexes[1]);
 
         assertEq(depositIndexes.length, 2);
-        assertEq(firstDeposit.creator, address(this));
-        assertEq(firstDeposit.serviceFee, 0.01 ether);
-        assertEq(firstDeposit.gaslessFee, 0.02 ether);
-        assertEq(secondDeposit.requiresMFA, true);
-        assertEq(secondDeposit.recipient, RECIPIENT);
+        assertEq(firstParties.creator, address(this));
+        assertEq(firstFees.serviceFee, 0.01 ether);
+        assertEq(firstFees.gaslessFee, 0.02 ether);
+        assertEq(secondStatus.requiresMFA, true);
+        assertEq(secondParties.recipient, RECIPIENT);
         assertEq(feeToken.balanceOf(address(feeVault)), 0.1 ether);
         assertEq(feeVault.accumulatedFees(address(feeToken)), 0.1 ether);
 
-        bytes memory withdrawalSig =
-            _signWithdrawal(feeVault, depositIndexes[0], RECIPIENT, feeVault.OPEN_CLAIM_MODE());
-        bytes memory callData =
-            abi.encodeCall(EnvelopeLinks.claim, (depositIndexes[0], RECIPIENT, withdrawalSig));
+        bytes memory withdrawalSig = _signWithdrawal(feeVault, depositIndexes[0], RECIPIENT, feeVault.OPEN_CLAIM_MODE());
+        bytes memory callData = abi.encodeCall(EnvelopeLinks.claim, (depositIndexes[0], RECIPIENT, withdrawalSig));
         assertTrue(feeVault.isValidGaslessOperation(RECIPIENT, callData));
     }
 
@@ -207,15 +209,15 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
 
         uint256[] memory depositIndexes = feeVault.createCustomLinksWithFees(requests, authorizations);
 
-        EnvelopeLinks.Link memory nftDeposit = feeVault.getLink(depositIndexes[0]);
-        EnvelopeLinks.Link memory multiTokenDeposit = feeVault.getLink(depositIndexes[1]);
+        EnvelopeLinks.LinkAsset memory nftAsset = feeVault.getLinkAsset(depositIndexes[0]);
+        EnvelopeLinks.LinkAsset memory multiTokenAsset = feeVault.getLinkAsset(depositIndexes[1]);
 
         assertEq(testToken721.ownerOf(tokenId), address(feeVault));
         assertEq(testToken1155.balanceOf(address(feeVault), erc1155Id), 5);
-        assertEq(nftDeposit.contractType, 2);
-        assertEq(nftDeposit.tokenId, tokenId);
-        assertEq(multiTokenDeposit.contractType, 3);
-        assertEq(multiTokenDeposit.amount, 5);
+        assertEq(nftAsset.contractType, 2);
+        assertEq(nftAsset.tokenId, tokenId);
+        assertEq(multiTokenAsset.contractType, 3);
+        assertEq(multiTokenAsset.amount, 5);
         assertEq(feeToken.balanceOf(address(feeVault)), 10);
     }
 
@@ -226,18 +228,16 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         requests[0] = _request(address(0), 0, 1 ether, 0, false, address(0), 0);
         authorizations[0] = _authorization(feeVault, requests[0], address(this), 0, 0, true, 0);
 
-        uint256[] memory depositIndexes =
-            feeVault.createCustomLinksWithFees{value: 1 ether}(requests, authorizations);
+        uint256[] memory depositIndexes = feeVault.createCustomLinksWithFees{value: 1 ether}(requests, authorizations);
 
-        EnvelopeLinks.Link memory deposit = feeVault.getLink(depositIndexes[0]);
-        assertEq(deposit.gaslessFee, 0);
-        assertTrue(deposit.gaslessSponsored);
+        EnvelopeLinks.LinkFees memory fees = feeVault.getLinkFees(depositIndexes[0]);
+        EnvelopeLinks.LinkStatus memory status = feeVault.getLinkStatus(depositIndexes[0]);
+        assertEq(fees.gaslessFee, 0);
+        assertTrue(status.gaslessSponsored);
         assertEq(feeToken.balanceOf(address(feeVault)), 0);
 
-        bytes memory withdrawalSig =
-            _signWithdrawal(feeVault, depositIndexes[0], RECIPIENT, feeVault.OPEN_CLAIM_MODE());
-        bytes memory callData =
-            abi.encodeCall(EnvelopeLinks.claim, (depositIndexes[0], RECIPIENT, withdrawalSig));
+        bytes memory withdrawalSig = _signWithdrawal(feeVault, depositIndexes[0], RECIPIENT, feeVault.OPEN_CLAIM_MODE());
+        bytes memory callData = abi.encodeCall(EnvelopeLinks.claim, (depositIndexes[0], RECIPIENT, withdrawalSig));
         assertTrue(feeVault.isValidGaslessOperation(RECIPIENT, callData));
     }
 
@@ -265,11 +265,13 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         uint256[] memory depositIndices = vault.createRaffleLinks{value: 100}(address(0), 0, amounts, PUBKEY20);
 
         for (uint256 i = 0; i < amounts.length; ++i) {
-            EnvelopeLinks.Link memory deposit = vault.getLink(depositIndices[i]);
-            assertEq(deposit.amount, amounts[i]);
-            assertEq(deposit.contractType, 0);
-            assertEq(deposit.claimKey, PUBKEY20);
-            assertEq(deposit.creator, address(this));
+            EnvelopeLinks.LinkAsset memory asset = vault.getLinkAsset(depositIndices[i]);
+            EnvelopeLinks.LinkStatus memory status = vault.getLinkStatus(depositIndices[i]);
+            EnvelopeLinks.LinkParties memory parties = vault.getLinkParties(depositIndices[i]);
+            assertEq(asset.amount, amounts[i]);
+            assertEq(asset.contractType, 0);
+            assertEq(status.claimKey, PUBKEY20);
+            assertEq(parties.creator, address(this));
         }
     }
 
@@ -286,11 +288,13 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         uint256[] memory depositIndices = vault.createRaffleLinks(address(testToken), 1, amounts, PUBKEY20);
 
         for (uint256 i = 0; i < amounts.length; ++i) {
-            EnvelopeLinks.Link memory deposit = vault.getLink(depositIndices[i]);
-            assertEq(deposit.amount, amounts[i]);
-            assertEq(deposit.contractType, 1);
-            assertEq(deposit.claimKey, PUBKEY20);
-            assertEq(deposit.creator, address(this));
+            EnvelopeLinks.LinkAsset memory asset = vault.getLinkAsset(depositIndices[i]);
+            EnvelopeLinks.LinkStatus memory status = vault.getLinkStatus(depositIndices[i]);
+            EnvelopeLinks.LinkParties memory parties = vault.getLinkParties(depositIndices[i]);
+            assertEq(asset.amount, amounts[i]);
+            assertEq(asset.contractType, 1);
+            assertEq(status.claimKey, PUBKEY20);
+            assertEq(parties.creator, address(this));
         }
     }
 
@@ -302,9 +306,10 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         uint256[] memory depositIndices = vault.createMFARaffleLinks{value: 30}(address(0), 0, amounts, PUBKEY20);
 
         for (uint256 i = 0; i < amounts.length; ++i) {
-            EnvelopeLinks.Link memory deposit = vault.getLink(depositIndices[i]);
-            assertTrue(deposit.requiresMFA);
-            assertEq(deposit.creator, address(this));
+            EnvelopeLinks.LinkStatus memory status = vault.getLinkStatus(depositIndices[i]);
+            EnvelopeLinks.LinkParties memory parties = vault.getLinkParties(depositIndices[i]);
+            assertTrue(status.requiresMFA);
+            assertEq(parties.creator, address(this));
         }
     }
 
@@ -405,28 +410,15 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         bool gaslessSponsored,
         uint256 deadline
     ) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encode(
-                    targetVault.ENVELOPE_SALT(),
-                    block.chainid,
-                    address(targetVault),
-                    feePayer,
-                    request.tokenAddress,
-                    request.contractType,
-                    request.amount,
-                    request.tokenId,
-                    request.claimKey,
-                    request.onBehalfOf,
-                    request.withMFA,
-                    request.recipient,
-                    request.reclaimableAfter,
-                    serviceFee,
-                    gaslessFee,
-                    gaslessSponsored,
-                    deadline
-                )
-            )
+        bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
+            targetVault.ENVELOPE_SALT(),
+            address(targetVault),
+            request,
+            feePayer,
+            serviceFee,
+            gaslessFee,
+            gaslessSponsored,
+            deadline
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BACKEND_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
