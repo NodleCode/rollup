@@ -115,7 +115,7 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         address verifyingContract;
     }
 
-    Link[] public links; // array of links
+    Link[] internal links; // array of links
 
     /// @notice ERC-20 token used for Envelope service and gasless sponsorship fees (for example NODL).
     IERC20 public immutable feeToken;
