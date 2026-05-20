@@ -87,6 +87,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint8 contractType; // (1 byte) 0 for eth, 1 for erc20, 2 for erc721, 3 for erc1155
         bool claimed; // (1 byte) has this deposit been claimed
         bool requiresMFA; // (1 byte) is additional auth (MFA) required?
+        bool gaslessSponsored; // (1 byte) can the paymaster sponsor this deposit without a prepaid gasless fee?
         uint40 timestamp; // ( 5 bytes) timestamp of the deposit
         /////
         uint256 tokenId; // (32 bytes) id of the token being sent (if erc721 or erc1155)
@@ -112,10 +113,12 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     }
 
     /// @notice Backend-signed fee bundle collected when a deposit is created.
-    /// @dev deadline == 0 means no expiry. Non-zero fees require `signature` from `mfaAuthorizer`.
+    /// @dev deadline == 0 means no expiry. Non-zero fees or sponsored gasless eligibility require
+    ///      `signature` from `mfaAuthorizer`. Zero-fee authorizations with a non-empty signature are verified too.
     struct FeeAuthorization {
         uint256 serviceFee;
         uint256 gaslessFee;
+        bool gaslessSponsored;
         uint256 deadline;
         bytes signature;
     }
@@ -209,7 +212,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     ) public payable nonReentrant returns (uint256) {
         _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
         return _storeDeposit(
-            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, msg.sender, false, address(0), 0, 0, 0
+            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, msg.sender, false, address(0), 0, 0, 0, false
         );
     }
 
@@ -222,7 +225,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     ) public payable nonReentrant returns (uint256) {
         _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
         return _storeDeposit(
-            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, msg.sender, true, address(0), 0, 0, 0
+            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, msg.sender, true, address(0), 0, 0, 0, false
         );
     }
 
@@ -236,7 +239,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     ) public payable nonReentrant returns (uint256) {
         _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
         return _storeDeposit(
-            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, _onBehalfOf, true, address(0), 0, 0, 0
+            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, _onBehalfOf, true, address(0), 0, 0, 0, false
         );
     }
 
@@ -250,7 +253,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     ) public payable nonReentrant returns (uint256) {
         _amount = _pullTokensViaApproval(_tokenAddress, _contractType, _amount, _tokenId);
         return _storeDeposit(
-            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, _onBehalfOf, false, address(0), 0, 0, 0
+            _tokenAddress, _contractType, _amount, _tokenId, _pubKey20, _onBehalfOf, false, address(0), 0, 0, 0, false
         );
     }
 
@@ -290,15 +293,17 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
             _recipient,
             _reclaimableAfter,
             0,
-            0
+            0,
+            false
         );
     }
 
     /**
      * @notice Create a deposit and collect backend-authorized service/gasless fees up front.
-     * @dev Non-zero fees are paid in `feeToken` by msg.sender. `gaslessFee > 0` marks the deposit
-     *      as eligible for EnvelopePaymaster-sponsored claim or sender reclaim. The fee authorization
-     *      is signed by `mfaAuthorizer` and includes the full deposit intent plus a deadline.
+     * @dev Non-zero fees are paid in `feeToken` by msg.sender. `gaslessFee > 0` or
+     *      `gaslessSponsored == true` marks the deposit as eligible for EnvelopePaymaster-sponsored
+     *      claim or sender reclaim. The fee authorization is signed by `mfaAuthorizer` and includes
+     *      the full deposit intent plus a deadline.
      */
     function makeCustomDepositWithFees(DepositRequest calldata _request, FeeAuthorization calldata _feeAuthorization)
         public
@@ -324,7 +329,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
             _request.recipient,
             _request.reclaimableAfter,
             _feeAuthorization.serviceFee,
-            _feeAuthorization.gaslessFee
+            _feeAuthorization.gaslessFee,
+            _feeAuthorization.gaslessSponsored
         );
     }
 
@@ -344,7 +350,18 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256[] memory depositIndexes = new uint256[](_pubKeys20.length);
         for (uint256 i = 0; i < _pubKeys20.length; ++i) {
             depositIndexes[i] = _storeDeposit(
-                _tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender, false, address(0), 0, 0, 0
+                _tokenAddress,
+                _contractType,
+                _amount,
+                _tokenId,
+                _pubKeys20[i],
+                msg.sender,
+                false,
+                address(0),
+                0,
+                0,
+                0,
+                false
             );
         }
         return depositIndexes;
@@ -363,7 +380,18 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
 
         for (uint256 i = 0; i < _pubKeys20.length; ++i) {
             _storeDeposit(
-                _tokenAddress, _contractType, _amount, _tokenId, _pubKeys20[i], msg.sender, false, address(0), 0, 0, 0
+                _tokenAddress,
+                _contractType,
+                _amount,
+                _tokenId,
+                _pubKeys20[i],
+                msg.sender,
+                false,
+                address(0),
+                0,
+                0,
+                0,
+                false
             );
         }
     }
@@ -416,7 +444,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                 address(0),
                 0,
                 0,
-                0
+                0,
+                false
             );
         }
         return depositIndexes;
@@ -466,7 +495,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                 request.recipient,
                 request.reclaimableAfter,
                 feeAuthorization.serviceFee,
-                feeAuthorization.gaslessFee
+                feeAuthorization.gaslessFee,
+                feeAuthorization.gaslessSponsored
             );
         }
 
@@ -722,8 +752,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         view
     {
         uint256 totalFee = _feeAuthorization.serviceFee + _feeAuthorization.gaslessFee;
-        if (totalFee == 0) return;
-        if (address(feeToken) == address(0)) revert FeeTokenNotConfigured();
+        if (totalFee == 0 && !_feeAuthorization.gaslessSponsored && _feeAuthorization.signature.length == 0) return;
+        if (totalFee > 0 && address(feeToken) == address(0)) revert FeeTokenNotConfigured();
         if (_feeAuthorization.deadline != 0 && block.timestamp > _feeAuthorization.deadline) {
             revert FeeAuthorizationExpired();
         }
@@ -746,6 +776,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                     _request.reclaimableAfter,
                     _feeAuthorization.serviceFee,
                     _feeAuthorization.gaslessFee,
+                    _feeAuthorization.gaslessSponsored,
                     _feeAuthorization.deadline
                 )
             )
@@ -775,7 +806,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         address _recipient,
         uint40 _reclaimableAfter,
         uint256 _serviceFee,
-        uint256 _gaslessFee
+        uint256 _gaslessFee,
+        bool _gaslessSponsored
     ) internal returns (uint256) {
         deposits.push(
             Deposit({
@@ -788,6 +820,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
                 senderAddress: _onBehalfOf,
                 timestamp: uint40(block.timestamp),
                 requiresMFA: _requiresMFA,
+                gaslessSponsored: _gaslessSponsored,
                 recipient: _recipient,
                 reclaimableAfter: _reclaimableAfter,
                 serviceFee: _serviceFee,
@@ -808,7 +841,8 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     ) internal view returns (bool) {
         if (_caller != _recipientAddress) return false;
         if (_index >= deposits.length) return false;
-        if (deposits[_index].gaslessFee == 0) return false;
+        Deposit storage deposit = deposits[_index];
+        if (deposit.gaslessFee == 0 && !deposit.gaslessSponsored) return false;
         return _isValidWithdrawal(_index, _recipientAddress, _extraData, _signature, _authorized);
     }
 
@@ -839,7 +873,7 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     function _isValidGaslessReclaim(address _caller, uint256 _index) internal view returns (bool) {
         if (_index >= deposits.length) return false;
         Deposit memory deposit = deposits[_index];
-        if (deposit.gaslessFee == 0) return false;
+        if (deposit.gaslessFee == 0 && !deposit.gaslessSponsored) return false;
         if (deposit.claimed) return false;
         if (deposit.senderAddress != _caller) return false;
         if (deposit.recipient != address(0) && block.timestamp <= deposit.reclaimableAfter) return false;
@@ -919,7 +953,18 @@ contract EnvelopeVault is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         uint256[] memory depositIndexes = new uint256[](_amounts.length);
         for (uint256 i = 0; i < _amounts.length; ++i) {
             depositIndexes[i] = _storeDeposit(
-                _tokenAddress, _contractType, _amounts[i], 0, _pubKey20, msg.sender, _requiresMFA, address(0), 0, 0, 0
+                _tokenAddress,
+                _contractType,
+                _amounts[i],
+                0,
+                _pubKey20,
+                msg.sender,
+                _requiresMFA,
+                address(0),
+                0,
+                0,
+                0,
+                false
             );
         }
         return depositIndexes;

@@ -219,6 +219,28 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         assertEq(feeToken.balanceOf(address(feeVault)), 10);
     }
 
+    function testMakeBatchCustomDepositWithFeesSupportsSponsoredGasless() public {
+        EnvelopeVault.DepositRequest[] memory requests = new EnvelopeVault.DepositRequest[](1);
+        EnvelopeVault.FeeAuthorization[] memory authorizations = new EnvelopeVault.FeeAuthorization[](1);
+
+        requests[0] = _request(address(0), 0, 1 ether, 0, false, address(0), 0);
+        authorizations[0] = _authorization(feeVault, requests[0], address(this), 0, 0, true, 0);
+
+        uint256[] memory depositIndexes =
+            feeVault.makeBatchCustomDepositWithFees{value: 1 ether}(requests, authorizations);
+
+        EnvelopeVault.Deposit memory deposit = feeVault.getDeposit(depositIndexes[0]);
+        assertEq(deposit.gaslessFee, 0);
+        assertTrue(deposit.gaslessSponsored);
+        assertEq(feeToken.balanceOf(address(feeVault)), 0);
+
+        bytes memory withdrawalSig =
+            _signWithdrawal(feeVault, depositIndexes[0], RECIPIENT, feeVault.ANYONE_WITHDRAWAL_MODE());
+        bytes memory callData =
+            abi.encodeCall(EnvelopeVault.withdrawDeposit, (depositIndexes[0], RECIPIENT, withdrawalSig));
+        assertTrue(feeVault.isValidGaslessOperation(RECIPIENT, callData));
+    }
+
     function test_RevertIf_BatchFeeAuthorizationIsSignedForDifferentPayer() public {
         EnvelopeVault.DepositRequest[] memory requests = new EnvelopeVault.DepositRequest[](1);
         EnvelopeVault.FeeAuthorization[] memory authorizations = new EnvelopeVault.FeeAuthorization[](1);
@@ -340,11 +362,26 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         uint256 gaslessFee,
         uint256 deadline
     ) internal view returns (EnvelopeVault.FeeAuthorization memory) {
+        return _authorization(targetVault, request, feePayer, serviceFee, gaslessFee, false, deadline);
+    }
+
+    function _authorization(
+        EnvelopeVault targetVault,
+        EnvelopeVault.DepositRequest memory request,
+        address feePayer,
+        uint256 serviceFee,
+        uint256 gaslessFee,
+        bool gaslessSponsored,
+        uint256 deadline
+    ) internal view returns (EnvelopeVault.FeeAuthorization memory) {
         return EnvelopeVault.FeeAuthorization({
             serviceFee: serviceFee,
             gaslessFee: gaslessFee,
+            gaslessSponsored: gaslessSponsored,
             deadline: deadline,
-            signature: _signFeeAuthorization(targetVault, request, feePayer, serviceFee, gaslessFee, deadline)
+            signature: _signFeeAuthorization(
+                targetVault, request, feePayer, serviceFee, gaslessFee, gaslessSponsored, deadline
+            )
         });
     }
 
@@ -354,6 +391,18 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         address feePayer,
         uint256 serviceFee,
         uint256 gaslessFee,
+        uint256 deadline
+    ) internal view returns (bytes memory) {
+        return _signFeeAuthorization(targetVault, request, feePayer, serviceFee, gaslessFee, false, deadline);
+    }
+
+    function _signFeeAuthorization(
+        EnvelopeVault targetVault,
+        EnvelopeVault.DepositRequest memory request,
+        address feePayer,
+        uint256 serviceFee,
+        uint256 gaslessFee,
+        bool gaslessSponsored,
         uint256 deadline
     ) internal view returns (bytes memory) {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
@@ -374,6 +423,7 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
                     request.reclaimableAfter,
                     serviceFee,
                     gaslessFee,
+                    gaslessSponsored,
                     deadline
                 )
             )

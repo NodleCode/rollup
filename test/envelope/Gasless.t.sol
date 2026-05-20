@@ -57,6 +57,17 @@ contract EnvelopeVaultGaslessTest is Test {
         uint256 gaslessFee,
         uint256 deadline
     ) internal view returns (bytes memory) {
+        return _signFeeAuthorization(request, feePayer, serviceFee, gaslessFee, false, deadline);
+    }
+
+    function _signFeeAuthorization(
+        EnvelopeVault.DepositRequest memory request,
+        address feePayer,
+        uint256 serviceFee,
+        uint256 gaslessFee,
+        bool gaslessSponsored,
+        uint256 deadline
+    ) internal view returns (bytes memory) {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encode(
@@ -75,6 +86,7 @@ contract EnvelopeVaultGaslessTest is Test {
                     request.reclaimableAfter,
                     serviceFee,
                     gaslessFee,
+                    gaslessSponsored,
                     deadline
                 )
             )
@@ -89,11 +101,22 @@ contract EnvelopeVaultGaslessTest is Test {
         uint256 gaslessFee,
         uint256 deadline
     ) internal view returns (EnvelopeVault.FeeAuthorization memory) {
+        return _feeAuthorization(request, serviceFee, gaslessFee, false, deadline);
+    }
+
+    function _feeAuthorization(
+        EnvelopeVault.DepositRequest memory request,
+        uint256 serviceFee,
+        uint256 gaslessFee,
+        bool gaslessSponsored,
+        uint256 deadline
+    ) internal view returns (EnvelopeVault.FeeAuthorization memory) {
         return EnvelopeVault.FeeAuthorization({
             serviceFee: serviceFee,
             gaslessFee: gaslessFee,
+            gaslessSponsored: gaslessSponsored,
             deadline: deadline,
-            signature: _signFeeAuthorization(request, SENDER, serviceFee, gaslessFee, deadline)
+            signature: _signFeeAuthorization(request, SENDER, serviceFee, gaslessFee, gaslessSponsored, deadline)
         });
     }
 
@@ -148,8 +171,98 @@ contract EnvelopeVaultGaslessTest is Test {
         assertEq(deposit.amount, amount);
         assertEq(deposit.serviceFee, serviceFee);
         assertEq(deposit.gaslessFee, gaslessFee);
+        assertFalse(deposit.gaslessSponsored);
         assertEq(feeToken.balanceOf(address(vault)), serviceFee + gaslessFee);
         assertEq(vault.accumulatedFees(address(feeToken)), serviceFee + gaslessFee);
+    }
+
+    function test_SponsoredGaslessAuthorizationApprovesPaymasterWithoutGaslessFee() public {
+        EnvelopeVault.DepositRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, true, 0);
+
+        vm.prank(SENDER);
+        uint256 index = vault.makeCustomDepositWithFees{value: 1 ether}(request, authorization);
+
+        EnvelopeVault.Deposit memory deposit = vault.getDeposit(index);
+        assertEq(deposit.gaslessFee, 0);
+        assertTrue(deposit.gaslessSponsored);
+        assertEq(feeToken.balanceOf(address(vault)), 0);
+
+        bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT, vault.ANYONE_WITHDRAWAL_MODE());
+        bytes memory callData = abi.encodeCall(EnvelopeVault.withdrawDeposit, (index, RECIPIENT, withdrawalSig));
+        assertTrue(vault.isValidGaslessOperation(RECIPIENT, callData));
+    }
+
+    function test_SponsoredGaslessMfaClaimIsApprovedWithoutCollectedGaslessFee() public {
+        EnvelopeVault.DepositRequest memory request = _request(1 ether, true, address(0), 0);
+        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, true, 0);
+
+        vm.prank(SENDER);
+        uint256 index = vault.makeCustomDepositWithFees{value: 1 ether}(request, authorization);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT, vault.ANYONE_WITHDRAWAL_MODE());
+        bytes memory mfaSig = _signMfa(index, RECIPIENT, deadline);
+        bytes memory callData =
+            abi.encodeCall(EnvelopeVault.withdrawMFADeposit, (index, RECIPIENT, withdrawalSig, mfaSig, deadline));
+
+        assertTrue(vault.isValidGaslessOperation(RECIPIENT, callData));
+        assertEq(feeToken.balanceOf(address(vault)), 0);
+    }
+
+    function test_ZeroFeeAuthorizationWithBackendSignatureIsAccepted() public {
+        EnvelopeVault.DepositRequest memory request =
+            _request(1 ether, true, RECIPIENT, uint40(block.timestamp + 1 days));
+        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, 0);
+
+        vm.prank(SENDER);
+        uint256 index = vault.makeCustomDepositWithFees{value: 1 ether}(request, authorization);
+
+        EnvelopeVault.Deposit memory deposit = vault.getDeposit(index);
+        assertEq(deposit.serviceFee, 0);
+        assertEq(deposit.gaslessFee, 0);
+        assertFalse(deposit.gaslessSponsored);
+        assertEq(feeToken.balanceOf(address(vault)), 0);
+        assertEq(vault.accumulatedFees(address(feeToken)), 0);
+    }
+
+    function test_ZeroFeeAuthorizationWithoutSignatureRemainsOpen() public {
+        EnvelopeVault.DepositRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeVault.FeeAuthorization memory authorization = EnvelopeVault.FeeAuthorization({
+            serviceFee: 0, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: ""
+        });
+
+        vm.prank(SENDER);
+        uint256 index = vault.makeCustomDepositWithFees{value: 1 ether}(request, authorization);
+
+        EnvelopeVault.Deposit memory deposit = vault.getDeposit(index);
+        assertEq(deposit.serviceFee, 0);
+        assertEq(deposit.gaslessFee, 0);
+    }
+
+    function test_RevertIf_ZeroFeeAuthorizationSignatureWrong() public {
+        EnvelopeVault.DepositRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeVault.FeeAuthorization memory authorization = EnvelopeVault.FeeAuthorization({
+            serviceFee: 0,
+            gaslessFee: 0,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: _signFeeAuthorization(request, address(0xBAD), 0, 0, 0)
+        });
+
+        vm.prank(SENDER);
+        vm.expectRevert(EnvelopeVault.WrongFeeAuthorizationSignature.selector);
+        vault.makeCustomDepositWithFees{value: 1 ether}(request, authorization);
+    }
+
+    function test_RevertIf_SponsoredGaslessFlagTampered() public {
+        EnvelopeVault.DepositRequest memory request = _request(1 ether, false, address(0), 0);
+        EnvelopeVault.FeeAuthorization memory authorization = _feeAuthorization(request, 0, 0, false, 0);
+        authorization.gaslessSponsored = true;
+
+        vm.prank(SENDER);
+        vm.expectRevert(EnvelopeVault.WrongFeeAuthorizationSignature.selector);
+        vault.makeCustomDepositWithFees{value: 1 ether}(request, authorization);
     }
 
     function test_RevertIf_FeeTokenNotConfigured() public {

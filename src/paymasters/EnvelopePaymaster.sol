@@ -5,8 +5,8 @@ pragma solidity ^0.8.26;
 import {BasePaymaster} from "./BasePaymaster.sol";
 import {IEnvelopeGaslessValidator} from "../envelope/util/IEnvelopeGaslessValidator.sol";
 
-/// @notice ZkSync paymaster that sponsors prepaid gasless EnvelopeVault claims and reclaims.
-/// @dev The EnvelopeVault remains the source of truth for whether a call is valid and prepaid.
+/// @notice ZkSync paymaster that sponsors eligible gasless EnvelopeVault claims and reclaims.
+/// @dev The EnvelopeVault remains the source of truth for whether a call is valid and prepaid or sponsored.
 ///      This paymaster only accepts general-flow transactions targeting that vault.
 contract EnvelopePaymaster is BasePaymaster {
     IEnvelopeGaslessValidator public immutable envelopeVault;

@@ -4,7 +4,186 @@
 
 ## Purpose
 
-`EnvelopeVault` is a link-based asset vault for ETH, ERC-20, ERC-721, and ERC-1155 gifts. A sender deposits an asset against a per-link `pubKey20`; the recipient claims by presenting a signature from the matching private key. The vault supports open links, address-bound links, optional backend MFA, sender reclaim, deposit-time service fees, and prepaid gasless claim/reclaim eligibility for ZkSync paymasters.
+`EnvelopeVault` is a link-based asset vault for ETH, ERC-20, ERC-721, and ERC-1155 gifts. A sender deposits an asset against a per-link `pubKey20`; the recipient claims by presenting a signature from the matching private key. The vault supports open links, address-bound links, optional backend MFA, sender reclaim, deposit-time service fees, and prepaid or backend-sponsored gasless claim/reclaim eligibility for ZkSync paymasters.
+
+## Actors And Architecture
+
+The core product actors are:
+
+| Actor | Role |
+| ----- | ---- |
+| Sender / Nina | Creates the gift link and funds the envelope. In the app, Nina signs one ZkSync smart-account batch instead of separate approval and deposit transactions. |
+| Backend / Atlas | Prices the service and gasless portions, signs `FeeAuthorization`, and optionally signs MFA approvals at claim time. Atlas can also sponsor gasless eligibility with `gaslessSponsored=true`. |
+| Receiver / Remy | Opens the link and claims the gift. Remy may be explicitly recipient-bound, or the link may be open to whoever has the link key. |
+| App Wallet | A ZkSync smart account controlled by the app. It batches approvals plus the vault call into one user confirmation. |
+| EnvelopeVault | Custodies gifts, validates backend fee authorization, stores gasless eligibility, and executes claims/reclaims. |
+| EnvelopePaymaster | Pays ZkSync claim/reclaim gas only when `EnvelopeVault.isValidGaslessOperation` approves the calldata. |
+
+```mermaid
+flowchart LR
+    Sender[Sender / Nina] --> AppWallet[App Wallet\nZkSync smart account]
+    AppWallet -->|approve gift token if needed| GiftToken[Gift token\nETH / ERC20 / ERC721 / ERC1155]
+    AppWallet -->|approve fee token if needed| FeeToken[NODL fee token]
+    AppWallet -->|deposit call| Vault[EnvelopeVault]
+    Backend[Backend / Atlas\nMFA + fee signer] -->|FeeAuthorization| AppWallet
+    Backend -->|MFA signature| Receiver[Receiver / Remy]
+    Receiver -->|claim tx| Vault
+    Receiver -->|gasless claim tx| Paymaster[EnvelopePaymaster]
+    Paymaster -->|validate calldata| Vault
+    Paymaster -->|pays ETH gas| Bootloader[ZkSync bootloader]
+    Vault -->|transfers gift| Receiver
+    Vault -->|records fees| FeeAccounting[accumulatedFees]
+```
+
+## Backend Fee Decision
+
+The vault does not price fees. Atlas chooses the service fee, gasless fee, and whether the backend sponsors claim gas, then signs the complete deposit intent for the app wallet address that will call the vault.
+
+```mermaid
+flowchart TD
+    Request[App sends gift request\nasset, amount, MFA, recipient binding, gasless preference] --> Classify{Needs MFA?}
+    Classify -->|yes| Service[Set serviceFee for MFA/backend checks]
+    Classify -->|no| NoService[serviceFee can be zero]
+    Service --> Gasless{Gasless claim requested?}
+    NoService --> Gasless
+    Gasless -->|no| NoGasless[gaslessFee=0\ngaslessSponsored=false]
+    Gasless -->|sender pays| Prepaid[gaslessFee in NODL\ngaslessSponsored=false]
+    Gasless -->|promotion / sponsored first envelope| Sponsored[gaslessFee=0\ngaslessSponsored=true]
+    Prepaid --> Sign[Sign FeeAuthorization\nfor the app wallet address]
+    Sponsored --> Sign
+    NoGasless --> Sign
+    Sign --> UI[Return quote, deadline, signature]
+```
+
+`gaslessFee > 0` means the sender prepaid the paymaster budget in NODL. `gaslessSponsored == true` means Atlas approved paymaster eligibility without collecting a gasless fee from the sender. Either condition allows the paymaster path, but only the non-zero fee path transfers NODL into the vault.
+
+## App Wallet Batch UX
+
+For best UX, the app wallet should use ZkSync native account abstraction and present a single confirmation that internally executes the required approvals plus the vault call. This is especially important because the deployed L2 NODL token does not implement `ERC20Permit`.
+
+Recommended sender flow:
+
+1. Derive or load Nina's app-wallet smart-account address.
+2. Build the `DepositRequest` using `onBehalfOf = appWalletAddress` when the app wallet should own sender reclaim rights.
+3. Ask Atlas for a `FeeAuthorization` signed for `feePayer = appWalletAddress`.
+4. Query current allowances and approvals.
+5. Build an AA batch containing only the missing approvals plus `makeCustomDepositWithFees`.
+6. Show Nina one clear confirmation: gift asset, recipient-binding status, MFA status, NODL service fee, gasless fee or sponsorship, and reclaim policy.
+7. Submit one ZkSync smart-account transaction.
+
+Pseudo-call plan:
+
+```solidity
+Call[] memory calls;
+
+if (giftIsERC20 && giftAllowance < giftAmount) {
+    calls.push(Call({
+        to: giftToken,
+        value: 0,
+        data: abi.encodeCall(IERC20.approve, (address(vault), giftAmount))
+    }));
+}
+
+if (feeAuthorization.serviceFee + feeAuthorization.gaslessFee > 0 && nodlAllowance < totalFee) {
+    calls.push(Call({
+        to: address(feeToken),
+        value: 0,
+        data: abi.encodeCall(IERC20.approve, (address(vault), totalFee))
+    }));
+}
+
+calls.push(Call({
+    to: address(vault),
+    value: request.contractType == 0 ? request.amount : 0,
+    data: abi.encodeCall(EnvelopeVault.makeCustomDepositWithFees, (request, feeAuthorization))
+}));
+
+appWallet.executeBatch(calls, paymasterParams);
+```
+
+For ERC-721, use `approve(vault, tokenId)` before the vault call if the vault is not already approved. For ERC-1155, use `setApprovalForAll(vault, true)` only when needed; for one-shot UX, the app may add `setApprovalForAll(vault, false)` after the deposit call in the same batch to avoid leaving standing approval.
+
+## Main Sequences
+
+### No MFA, No Gasless P2P Gift
+
+```mermaid
+sequenceDiagram
+    participant Nina as Sender / Nina
+    participant Wallet as App Wallet
+    participant Vault as EnvelopeVault
+    participant Remy as Receiver / Remy
+
+    Nina->>Wallet: Create gift and link key
+    Wallet->>Vault: makeCustomDeposit or makeDeposit
+    Vault-->>Wallet: Deposit index stored, no fees, no MFA
+    Nina-->>Remy: Share link out of band
+    Remy->>Remy: Link key signs claim for Remy's address
+    Remy->>Vault: withdrawDeposit(index, Remy, linkSignature)
+    Vault-->>Remy: Transfer full gift amount
+```
+
+If Remy is recipient-bound, the sender uses `makeCustomDeposit(..., recipient=Remy, reclaimableAfter=...)`, and Remy can call either `withdrawDeposit` with Remy as recipient or the stricter `withdrawDepositAsRecipient` path. The paymaster will only sponsor recipient-bound claims when the caller is the bound recipient and gasless eligibility exists.
+
+### MFA Without Gasless Claim
+
+```mermaid
+sequenceDiagram
+    participant Nina as Sender / Nina
+    participant Wallet as App Wallet
+    participant Atlas as Backend / Atlas
+    participant FeeToken as NODL Fee Token
+    participant Vault as EnvelopeVault
+    participant Remy as Receiver / Remy
+
+    Nina->>Wallet: Configure MFA gift
+    Wallet->>Atlas: Request fee quote and authorization
+    Atlas-->>Wallet: FeeAuthorization(serviceFee, gaslessFee=0, gaslessSponsored=false)
+    Wallet->>FeeToken: approve(vault, serviceFee) inside AA batch, if needed
+    Wallet->>Vault: makeCustomDepositWithFees(request.withMFA=true, authorization)
+    Vault->>FeeToken: transferFrom(app wallet, vault, serviceFee)
+    Vault-->>Wallet: Deposit index stored, requiresMFA=true
+    Nina-->>Remy: Share link
+    Remy->>Atlas: Complete MFA challenge
+    Atlas-->>Remy: MFA signature for (vault, index, Remy, deadline)
+    Remy->>Vault: withdrawMFADeposit(index, Remy, linkSignature, mfaSignature, deadline)
+    Vault-->>Remy: Transfer full gift amount
+```
+
+In this flow Remy pays the claim transaction gas. The service fee is collected at deposit creation and does not reduce the gift amount.
+
+### MFA With Gasless Claim
+
+```mermaid
+sequenceDiagram
+    participant Nina as Sender / Nina
+    participant Wallet as App Wallet
+    participant Atlas as Backend / Atlas
+    participant FeeToken as NODL Fee Token
+    participant Vault as EnvelopeVault
+    participant Remy as Receiver / Remy
+    participant Paymaster as EnvelopePaymaster
+    participant Bootloader as ZkSync Bootloader
+
+    Nina->>Wallet: Configure MFA gift with gasless claim
+    Wallet->>Atlas: Request fee quote and gasless authorization
+    Atlas-->>Wallet: FeeAuthorization(serviceFee, gaslessFee or gaslessSponsored=true)
+    Wallet->>FeeToken: approve(vault, serviceFee + gaslessFee) inside AA batch, if needed
+    Wallet->>Vault: makeCustomDepositWithFees(request.withMFA=true, authorization)
+    Vault->>FeeToken: transferFrom(app wallet, vault, serviceFee + gaslessFee) when totalFee > 0
+    Vault-->>Wallet: Deposit stored with gasless eligibility
+    Nina-->>Remy: Share link
+    Remy->>Atlas: Complete MFA challenge
+    Atlas-->>Remy: MFA signature
+    Remy->>Paymaster: Submit withdrawMFADeposit through ZkSync paymaster
+    Paymaster->>Vault: isValidGaslessOperation(Remy, calldata)
+    Vault-->>Paymaster: true if recipient, signatures, MFA, and eligibility are valid
+    Paymaster->>Bootloader: Pay required ETH gas
+    Bootloader->>Vault: Execute withdrawMFADeposit
+    Vault-->>Remy: Transfer full gift amount
+```
+
+Gasless eligibility is independent of the gift amount. The paymaster must still be funded with ETH; NODL fee collection is an accounting and treasury process, not an on-chain claim-time swap.
 
 ## Constructor
 
@@ -12,11 +191,11 @@
 constructor(address mfaAuthorizer, address owner, address feeToken)
 ```
 
-| Param | Purpose |
-|---|---|
+| Param           | Purpose                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mfaAuthorizer` | Backend signer for MFA claim approvals and deposit-time fee authorizations. `address(0)` disables non-zero fee authorizations and makes MFA withdrawals fail. |
-| `owner` | Owns the vault and can withdraw accumulated fees. |
-| `feeToken` | ERC-20 used for Nodle service and gasless sponsorship fees, for example NODL. `address(0)` permits only zero-fee deposits. |
+| `owner`         | Owns the vault and can withdraw accumulated fees.                                                                                                             |
+| `feeToken`      | ERC-20 used for Nodle service and gasless sponsorship fees, for example NODL. `address(0)` permits only zero-fee deposits.                                    |
 
 The constructor also sets the EIP-712 domain separator used by the vault-side validation helpers.
 
@@ -32,6 +211,7 @@ struct Deposit {
     uint8 contractType;      // 0=ETH, 1=ERC20, 2=ERC721, 3=ERC1155
     bool claimed;
     bool requiresMFA;
+    bool gaslessSponsored;   // backend approved paymaster eligibility without gaslessFee
     uint40 timestamp;
     uint256 tokenId;
     address senderAddress;
@@ -42,26 +222,36 @@ struct Deposit {
 }
 ```
 
-`serviceFee` and `gaslessFee` are not deducted from the gift amount. They are separate `feeToken` transfers from the depositor to the vault and are accounted in `accumulatedFees[address(feeToken)]`.
+`serviceFee` and `gaslessFee` are not deducted from the gift amount. They are separate `feeToken` transfers from the depositor to the vault and are accounted in `accumulatedFees[address(feeToken)]`. `gaslessSponsored` records backend-approved paymaster eligibility when Atlas pays the gas budget operationally instead of collecting a sender-side `gaslessFee`.
 
 ## Main Deposit Functions
 
-| Function | Flow |
-|---|---|
-| `makeDeposit(token, type, amount, tokenId, pubKey20)` | Basic open link. No MFA, no fees, no gasless sponsorship. |
-| `makeMFADeposit(...)` | Basic open link that requires backend MFA at claim time. No deposit-time fees unless using `makeCustomDepositWithFees`. |
-| `makeSelflessDeposit(..., onBehalfOf)` | Creates a link whose reclaim rights belong to `onBehalfOf`. Used by batch flows. |
-| `makeSelflessMFADeposit(..., onBehalfOf)` | Selfless deposit plus MFA requirement. |
-| `makeCustomDeposit(...)` | Canonical no-fee entry point with MFA flag, optional recipient binding, and optional reclaim delay. |
-| `makeCustomDepositWithFees(request, feeAuthorization)` | Canonical paid-service entry point. Pulls the gift asset, verifies backend-signed fees, collects `feeToken`, and records gasless eligibility when `gaslessFee > 0`. |
-| `makeBatchDeposit(...)` | Creates many same-shape no-fee deposits in one transaction. ETH, ERC-20, and ERC-1155 are supported; ERC-721 uses the heterogeneous batch path. |
-| `makeBatchDepositNoReturn(...)` | Same as `makeBatchDeposit` but skips allocating/returning the deposit indexes array. |
-| `makeBatchCustomDeposit(...)` | Creates a heterogeneous no-fee batch and supports ETH, ERC-20, ERC-721, and ERC-1155. |
-| `makeBatchCustomDepositWithFees(requests, feeAuthorizations)` | Creates a heterogeneous paid/gasless-ready batch using the same `DepositRequest` and `FeeAuthorization` structs as the single-deposit flow. |
-| `makeBatchDepositRaffle(...)` | Creates ETH or ERC-20 raffle-style deposits with different amounts and one shared `pubKey20`. |
-| `makeBatchMFADepositRaffle(...)` | Same as raffle batching, but every deposit requires MFA at claim time. |
+| Function                                                      | Flow                                                                                                                                                                |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `makeDeposit(token, type, amount, tokenId, pubKey20)`         | Basic open link. No MFA, no fees, no gasless sponsorship.                                                                                                           |
+| `makeMFADeposit(...)`                                         | Basic open link that requires backend MFA at claim time. No deposit-time fees unless using `makeCustomDepositWithFees`.                                             |
+| `makeSelflessDeposit(..., onBehalfOf)`                        | Creates a link whose reclaim rights belong to `onBehalfOf`. Used by batch flows.                                                                                    |
+| `makeSelflessMFADeposit(..., onBehalfOf)`                     | Selfless deposit plus MFA requirement.                                                                                                                              |
+| `makeCustomDeposit(...)`                                      | Canonical no-fee entry point with MFA flag, optional recipient binding, and optional reclaim delay.                                                                 |
+| `makeCustomDepositWithFees(request, feeAuthorization)`        | Canonical paid-service entry point. Pulls the gift asset, verifies backend-signed fees, collects `feeToken`, and records gasless eligibility when `gaslessFee > 0` or `gaslessSponsored=true`. |
+| `makeBatchDeposit(...)`                                       | Creates many same-shape no-fee deposits in one transaction. ETH, ERC-20, and ERC-1155 are supported; ERC-721 uses the heterogeneous batch path.                     |
+| `makeBatchDepositNoReturn(...)`                               | Same as `makeBatchDeposit` but skips allocating/returning the deposit indexes array.                                                                                |
+| `makeBatchCustomDeposit(...)`                                 | Creates a heterogeneous no-fee batch and supports ETH, ERC-20, ERC-721, and ERC-1155.                                                                               |
+| `makeBatchCustomDepositWithFees(requests, feeAuthorizations)` | Creates a heterogeneous paid/gasless-ready batch using the same `DepositRequest` and `FeeAuthorization` structs as the single-deposit flow.                         |
+| `makeBatchDepositRaffle(...)`                                 | Creates ETH or ERC-20 raffle-style deposits with different amounts and one shared `pubKey20`.                                                                       |
+| `makeBatchMFADepositRaffle(...)`                              | Same as raffle batching, but every deposit requires MFA at claim time.                                                                                              |
 
-`FeeAuthorization` covers the full deposit intent, the fee payer (`msg.sender`), the two fee amounts, and a backend-selected deadline. `deadline == 0` means no expiry. If either fee is non-zero, the signature must recover to `mfaAuthorizer`.
+```solidity
+struct FeeAuthorization {
+    uint256 serviceFee;
+    uint256 gaslessFee;
+    bool gaslessSponsored;
+    uint256 deadline;
+    bytes signature;
+}
+```
+
+`FeeAuthorization` covers the full deposit intent, the fee payer (`msg.sender`), the two fee amounts, `gaslessSponsored`, and a backend-selected deadline. `deadline == 0` means no expiry. If either fee is non-zero, if `gaslessSponsored` is true, or if a zero-fee authorization includes a non-empty signature, the signature must recover to `mfaAuthorizer`. This allows backend-approved free envelopes without forcing a fee transfer, and also allows promotional gasless eligibility without encoding fake fee amounts.
 
 ## Vault-Native Batching
 
@@ -71,12 +261,12 @@ The batching functions share the same storage and events as single deposits. Sam
 
 ## Withdraw And Claim Functions
 
-| Function | Caller | Authorization |
-|---|---|---|
-| `withdrawDeposit(index, recipient, signature)` | Anyone, or a recipient using a paymaster | Link key signs `(salt, chainId, vault, index, recipient, ANYONE_WITHDRAWAL_MODE)`. |
-| `withdrawMFADeposit(index, recipient, signature, mfaSignature, deadline)` | Anyone, or a recipient using a paymaster | Link signature plus backend MFA signature over `(salt, chainId, vault, index, recipient, deadline)`. |
-| `withdrawDepositAsRecipient(index, recipient, signature)` | Must be `recipient` | Link key signs using `RECIPIENT_WITHDRAWAL_MODE`. |
-| `withdrawDepositSender(index)` | Original `senderAddress` | Sender reclaim. If the deposit is recipient-bound, `block.timestamp` must be greater than `reclaimableAfter`. |
+| Function                                                                  | Caller                                   | Authorization                                                                                                 |
+| ------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `withdrawDeposit(index, recipient, signature)`                            | Anyone, or a recipient using a paymaster | Link key signs `(salt, chainId, vault, index, recipient, ANYONE_WITHDRAWAL_MODE)`.                            |
+| `withdrawMFADeposit(index, recipient, signature, mfaSignature, deadline)` | Anyone, or a recipient using a paymaster | Link signature plus backend MFA signature over `(salt, chainId, vault, index, recipient, deadline)`.          |
+| `withdrawDepositAsRecipient(index, recipient, signature)`                 | Must be `recipient`                      | Link key signs using `RECIPIENT_WITHDRAWAL_MODE`.                                                             |
+| `withdrawDepositSender(index)`                                            | Original `senderAddress`                 | Sender reclaim. If the deposit is recipient-bound, `block.timestamp` must be greater than `reclaimableAfter`. |
 
 All withdrawal paths set `claimed = true` before transferring assets. Claim-time fee collection was intentionally removed: fees are now collected when the envelope is created.
 
@@ -84,14 +274,14 @@ All withdrawal paths set `claimed = true` before transferring assets. Claim-time
 
 Gasless operation is handled by ZkSync paymasters, not by an internal vault callback. The vault is only the source of truth for whether a paymaster should sponsor a call.
 
-1. Sender creates a deposit through `makeCustomDepositWithFees` with `gaslessFee > 0`.
-2. The vault collects the gasless sponsorship fee immediately in `feeToken` and records it on the deposit.
+1. Sender creates a deposit through `makeCustomDepositWithFees` with `gaslessFee > 0` or `gaslessSponsored=true`.
+2. The vault collects any non-zero gasless sponsorship fee immediately in `feeToken` and records gasless eligibility on the deposit.
 3. A receiver submits a ZkSync transaction to `withdrawDeposit`, `withdrawMFADeposit`, or `withdrawDepositAsRecipient` using `EnvelopePaymaster`.
 4. ZkSync calls the paymaster before execution. The paymaster checks the transaction targets this vault and calls `isValidGaslessOperation(from, transaction.data)`.
-5. The vault re-checks the deposit state, gasless fee, recipient/sender identity, signatures, MFA deadline, and reclaim delay.
+5. The vault re-checks the deposit state, gasless eligibility, recipient/sender identity, signatures, MFA deadline, and reclaim delay.
 6. If validation passes, the paymaster pays ETH to the bootloader. The vault function then executes normally.
 
-Sender reclaim can also be gasless: the sender submits `withdrawDepositSender(index)` through the paymaster. This is allowed only for deposits with `gaslessFee > 0` and the same reclaim timing rules as the regular reclaim path.
+Sender reclaim can also be gasless: the sender submits `withdrawDepositSender(index)` through the paymaster. This is allowed only for deposits with `gaslessFee > 0` or `gaslessSponsored=true`, and the same reclaim timing rules as the regular reclaim path.
 
 ## Paymaster Validation Helper
 
@@ -106,16 +296,17 @@ This function is intended for paymaster validation. It accepts only these select
 - `withdrawDepositAsRecipient`
 - `withdrawDepositSender`
 
-For claim calls, `caller` must be the recipient. For reclaim calls, `caller` must be the stored sender. The helper returns false for non-prepaid deposits, claimed deposits, unsupported selectors, wrong callers, invalid signatures, expired MFA approvals, or early reclaims.
+For claim calls, `caller` must be the recipient. For reclaim calls, `caller` must be the stored sender. The helper returns false for non-eligible deposits, claimed deposits, unsupported selectors, wrong callers, invalid signatures, expired MFA approvals, or early reclaims.
 
 ## Fees
 
-| Fee | Collected | Meaning |
-|---|---|---|
-| `serviceFee` | Deposit creation | Paid backend service fee for optional security/MFA/compliance checks. |
-| `gaslessFee` | Deposit creation | Prepaid compensation for paymaster-sponsored claim or reclaim. |
+| Fee / Flag            | Collected        | Meaning                                                                                   |
+| --------------------- | ---------------- | ----------------------------------------------------------------------------------------- |
+| `serviceFee`          | Deposit creation | Paid backend service fee for optional security/MFA/compliance checks.                     |
+| `gaslessFee`          | Deposit creation | Prepaid NODL compensation for paymaster-sponsored claim or reclaim.                       |
+| `gaslessSponsored`    | Not collected    | Backend-approved paymaster eligibility without collecting a sender-side gasless fee.      |
 
-Both fees are backend-priced off-chain and backend-signed on-chain. The vault does not encode pricing policy; it enforces the signed amounts and deadline. The owner withdraws accumulated fees through `withdrawFees(token)`.
+Fees and sponsorship are backend-priced off-chain and backend-signed on-chain. The vault does not encode pricing policy; it enforces the signed amounts, sponsored eligibility flag, and deadline. The owner withdraws accumulated fees through `withdrawFees(token)`.
 
 ## Removed EIP-3009 Path
 

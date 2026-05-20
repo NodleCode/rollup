@@ -63,6 +63,16 @@ contract EnvelopePaymasterTest is Test {
         uint256 gaslessFee,
         uint256 deadline
     ) internal view returns (bytes memory) {
+        return _signFeeAuthorization(request, serviceFee, gaslessFee, false, deadline);
+    }
+
+    function _signFeeAuthorization(
+        EnvelopeVault.DepositRequest memory request,
+        uint256 serviceFee,
+        uint256 gaslessFee,
+        bool gaslessSponsored,
+        uint256 deadline
+    ) internal view returns (bytes memory) {
         bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
             keccak256(
                 abi.encode(
@@ -81,6 +91,7 @@ contract EnvelopePaymasterTest is Test {
                     request.reclaimableAfter,
                     serviceFee,
                     gaslessFee,
+                    gaslessSponsored,
                     deadline
                 )
             )
@@ -94,6 +105,7 @@ contract EnvelopePaymasterTest is Test {
         EnvelopeVault.FeeAuthorization memory authorization = EnvelopeVault.FeeAuthorization({
             serviceFee: 0,
             gaslessFee: 0.01 ether,
+            gaslessSponsored: false,
             deadline: 0,
             signature: _signFeeAuthorization(request, 0, 0.01 ether, 0)
         });
