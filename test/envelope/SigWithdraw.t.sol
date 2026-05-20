@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../../src/envelope/V4/EnvelopeVault.sol";
+import "../../src/envelope/EnvelopeVault.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
@@ -18,7 +18,8 @@ contract TestSigWithdrawEther is Test {
     address _recipientAddress = 0x6B3751c5b04Aa818EA90115AA06a4D9A36A16f02;
     bytes public signatureAnybody =
         hex"02a37d0548c14c6b07eba4ef1438eb946cdada4f481164755129eb3725f7e8c13d7c052308e73314338f4d484a5f4aef20c7519a1dbc283e4826253b742817241c";
-    bytes public signatureRecipient = hex"364c17bca8823977b29b7646c954353996f363549f08ce3943969171c050f0d74006eabb597df680e9e4229631f473bfbedf995336a03d2fd3be7f1fff22d2511b";
+    bytes public signatureRecipient =
+        hex"364c17bca8823977b29b7646c954353996f363549f08ce3943969171c050f0d74006eabb597df680e9e4229631f473bfbedf995336a03d2fd3be7f1fff22d2511b";
 
     receive() external payable {} // necessary to receive ether
 
@@ -47,12 +48,12 @@ contract TestSigWithdrawEther is Test {
         // Can't use pure withdrawDeposit
         vm.expectRevert(EnvelopeVault.WrongSignature.selector);
         vault.withdrawDeposit(depositIdx, _recipientAddress, signatureRecipient);
-        
+
         // Only the recipient is able to withdraw via withdrawDepositAsRecipient
         vm.expectRevert(EnvelopeVault.NotTheRecipient.selector);
         vault.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureRecipient);
 
-        vm.prank(_recipientAddress);  // Withdraw!
+        vm.prank(_recipientAddress); // Withdraw!
         vault.withdrawDepositAsRecipient(depositIdx, _recipientAddress, signatureRecipient);
     }
 }

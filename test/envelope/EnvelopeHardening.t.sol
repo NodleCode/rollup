@@ -7,7 +7,7 @@ pragma solidity 0.8.26;
 //   T2 — mfaAuthorizer is now a per-deploy constructor arg (fix for S3 hardcoded key)
 
 import {Test} from "forge-std/Test.sol";
-import {EnvelopeVault} from "../../src/envelope/V4/EnvelopeVault.sol";
+import {EnvelopeVault} from "../../src/envelope/EnvelopeVault.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-import "../../src/envelope/V4/EnvelopeVault.sol";
+import "../../src/envelope/EnvelopeVault.sol";
 import "./mocks/ERC20Mock.sol";
 
 contract EnvelopeVaultGaslessTest is Test {

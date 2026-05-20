@@ -7,7 +7,7 @@ import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interface
 import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
 import {BasePaymaster, BOOTLOADER_FORMAL_ADDRESS} from "../../src/paymasters/BasePaymaster.sol";
 import {EnvelopePaymaster} from "../../src/paymasters/EnvelopePaymaster.sol";
-import {EnvelopeVault} from "../../src/envelope/V4/EnvelopeVault.sol";
+import {EnvelopeVault} from "../../src/envelope/EnvelopeVault.sol";
 import {ERC20Mock} from "../envelope/mocks/ERC20Mock.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 

@@ -1,6 +1,6 @@
 # EnvelopeVault
 
-`src/envelope/V4/EnvelopeVault.sol`
+`src/envelope/EnvelopeVault.sol`
 
 ## Purpose
 
@@ -10,14 +10,14 @@
 
 The core product actors are:
 
-| Actor | Role |
-| ----- | ---- |
-| Sender / Nina | Creates the gift link and funds the envelope. In the app, Nina signs one ZkSync smart-account batch instead of separate approval and deposit transactions. |
-| Backend / Atlas | Prices the service and gasless portions, signs `FeeAuthorization`, and optionally signs MFA approvals at claim time. Atlas can also sponsor gasless eligibility with `gaslessSponsored=true`. |
-| Receiver / Remy | Opens the link and claims the gift. Remy may be explicitly recipient-bound, or the link may be open to whoever has the link key. |
-| App Wallet | A ZkSync smart account controlled by the app. It batches approvals plus the vault call into one user confirmation. |
-| EnvelopeVault | Custodies gifts, validates backend fee authorization, stores gasless eligibility, and executes claims/reclaims. |
-| EnvelopePaymaster | Pays ZkSync claim/reclaim gas only when `EnvelopeVault.isValidGaslessOperation` approves the calldata. |
+| Actor             | Role                                                                                                                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sender / Nina     | Creates the gift link and funds the envelope. In the app, Nina signs one ZkSync smart-account batch instead of separate approval and deposit transactions.                                    |
+| Backend / Atlas   | Prices the service and gasless portions, signs `FeeAuthorization`, and optionally signs MFA approvals at claim time. Atlas can also sponsor gasless eligibility with `gaslessSponsored=true`. |
+| Receiver / Remy   | Opens the link and claims the gift. Remy may be explicitly recipient-bound, or the link may be open to whoever has the link key.                                                              |
+| App Wallet        | A ZkSync smart account controlled by the app. It batches approvals plus the vault call into one user confirmation.                                                                            |
+| EnvelopeVault     | Custodies gifts, validates backend fee authorization, stores gasless eligibility, and executes claims/reclaims.                                                                               |
+| EnvelopePaymaster | Pays ZkSync claim/reclaim gas only when `EnvelopeVault.isValidGaslessOperation` approves the calldata.                                                                                        |
 
 ```mermaid
 flowchart LR
@@ -226,20 +226,20 @@ struct Deposit {
 
 ## Main Deposit Functions
 
-| Function                                                      | Flow                                                                                                                                                                |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `makeDeposit(token, type, amount, tokenId, pubKey20)`         | Basic open link. No MFA, no fees, no gasless sponsorship.                                                                                                           |
-| `makeMFADeposit(...)`                                         | Basic open link that requires backend MFA at claim time. No deposit-time fees unless using `makeCustomDepositWithFees`.                                             |
-| `makeSelflessDeposit(..., onBehalfOf)`                        | Creates a link whose reclaim rights belong to `onBehalfOf`. Used by batch flows.                                                                                    |
-| `makeSelflessMFADeposit(..., onBehalfOf)`                     | Selfless deposit plus MFA requirement.                                                                                                                              |
-| `makeCustomDeposit(...)`                                      | Canonical no-fee entry point with MFA flag, optional recipient binding, and optional reclaim delay.                                                                 |
+| Function                                                      | Flow                                                                                                                                                                                           |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `makeDeposit(token, type, amount, tokenId, pubKey20)`         | Basic open link. No MFA, no fees, no gasless sponsorship.                                                                                                                                      |
+| `makeMFADeposit(...)`                                         | Basic open link that requires backend MFA at claim time. No deposit-time fees unless using `makeCustomDepositWithFees`.                                                                        |
+| `makeSelflessDeposit(..., onBehalfOf)`                        | Creates a link whose reclaim rights belong to `onBehalfOf`. Used by batch flows.                                                                                                               |
+| `makeSelflessMFADeposit(..., onBehalfOf)`                     | Selfless deposit plus MFA requirement.                                                                                                                                                         |
+| `makeCustomDeposit(...)`                                      | Canonical no-fee entry point with MFA flag, optional recipient binding, and optional reclaim delay.                                                                                            |
 | `makeCustomDepositWithFees(request, feeAuthorization)`        | Canonical paid-service entry point. Pulls the gift asset, verifies backend-signed fees, collects `feeToken`, and records gasless eligibility when `gaslessFee > 0` or `gaslessSponsored=true`. |
-| `makeBatchDeposit(...)`                                       | Creates many same-shape no-fee deposits in one transaction. ETH, ERC-20, and ERC-1155 are supported; ERC-721 uses the heterogeneous batch path.                     |
-| `makeBatchDepositNoReturn(...)`                               | Same as `makeBatchDeposit` but skips allocating/returning the deposit indexes array.                                                                                |
-| `makeBatchCustomDeposit(...)`                                 | Creates a heterogeneous no-fee batch and supports ETH, ERC-20, ERC-721, and ERC-1155.                                                                               |
-| `makeBatchCustomDepositWithFees(requests, feeAuthorizations)` | Creates a heterogeneous paid/gasless-ready batch using the same `DepositRequest` and `FeeAuthorization` structs as the single-deposit flow.                         |
-| `makeBatchDepositRaffle(...)`                                 | Creates ETH or ERC-20 raffle-style deposits with different amounts and one shared `pubKey20`.                                                                       |
-| `makeBatchMFADepositRaffle(...)`                              | Same as raffle batching, but every deposit requires MFA at claim time.                                                                                              |
+| `makeBatchDeposit(...)`                                       | Creates many same-shape no-fee deposits in one transaction. ETH, ERC-20, and ERC-1155 are supported; ERC-721 uses the heterogeneous batch path.                                                |
+| `makeBatchDepositNoReturn(...)`                               | Same as `makeBatchDeposit` but skips allocating/returning the deposit indexes array.                                                                                                           |
+| `makeBatchCustomDeposit(...)`                                 | Creates a heterogeneous no-fee batch and supports ETH, ERC-20, ERC-721, and ERC-1155.                                                                                                          |
+| `makeBatchCustomDepositWithFees(requests, feeAuthorizations)` | Creates a heterogeneous paid/gasless-ready batch using the same `DepositRequest` and `FeeAuthorization` structs as the single-deposit flow.                                                    |
+| `makeBatchDepositRaffle(...)`                                 | Creates ETH or ERC-20 raffle-style deposits with different amounts and one shared `pubKey20`.                                                                                                  |
+| `makeBatchMFADepositRaffle(...)`                              | Same as raffle batching, but every deposit requires MFA at claim time.                                                                                                                         |
 
 ```solidity
 struct FeeAuthorization {
@@ -300,11 +300,11 @@ For claim calls, `caller` must be the recipient. For reclaim calls, `caller` mus
 
 ## Fees
 
-| Fee / Flag            | Collected        | Meaning                                                                                   |
-| --------------------- | ---------------- | ----------------------------------------------------------------------------------------- |
-| `serviceFee`          | Deposit creation | Paid backend service fee for optional security/MFA/compliance checks.                     |
-| `gaslessFee`          | Deposit creation | Prepaid NODL compensation for paymaster-sponsored claim or reclaim.                       |
-| `gaslessSponsored`    | Not collected    | Backend-approved paymaster eligibility without collecting a sender-side gasless fee.      |
+| Fee / Flag         | Collected        | Meaning                                                                              |
+| ------------------ | ---------------- | ------------------------------------------------------------------------------------ |
+| `serviceFee`       | Deposit creation | Paid backend service fee for optional security/MFA/compliance checks.                |
+| `gaslessFee`       | Deposit creation | Prepaid NODL compensation for paymaster-sponsored claim or reclaim.                  |
+| `gaslessSponsored` | Not collected    | Backend-approved paymaster eligibility without collecting a sender-side gasless fee. |
 
 Fees and sponsorship are backend-priced off-chain and backend-signed on-chain. The vault does not encode pricing policy; it enforces the signed amounts, sponsored eligibility flag, and deadline. The owner withdraws accumulated fees through `withdrawFees(token)`.
 

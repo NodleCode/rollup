@@ -3,7 +3,7 @@
 pragma solidity ^0.8.26;
 
 import {BasePaymaster} from "./BasePaymaster.sol";
-import {IEnvelopeGaslessValidator} from "../envelope/util/IEnvelopeGaslessValidator.sol";
+import {IEnvelopeGaslessValidator} from "../envelope/IEnvelopeGaslessValidator.sol";
 
 /// @notice ZkSync paymaster that sponsors eligible gasless EnvelopeVault claims and reclaims.
 /// @dev The EnvelopeVault remains the source of truth for whether a call is valid and prepaid or sponsored.

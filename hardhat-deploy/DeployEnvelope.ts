@@ -41,9 +41,11 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const mfaAuthorizer = process.env.ENVELOPE_MFA_AUTHORIZER ?? ZERO;
   const envelopeOwner = process.env.ENVELOPE_OWNER ?? wallet.address;
   const feeToken = process.env.ENVELOPE_FEE_TOKEN ?? ZERO;
-  const deployPaymaster = (process.env.ENVELOPE_DEPLOY_PAYMASTER ?? "false").toLowerCase() === "true";
+  const deployPaymaster =
+    (process.env.ENVELOPE_DEPLOY_PAYMASTER ?? "false").toLowerCase() === "true";
   const paymasterAdmin = process.env.ENVELOPE_PAYMASTER_ADMIN ?? wallet.address;
-  const paymasterWithdrawer = process.env.ENVELOPE_PAYMASTER_WITHDRAWER ?? wallet.address;
+  const paymasterWithdrawer =
+    process.env.ENVELOPE_PAYMASTER_WITHDRAWER ?? wallet.address;
 
   console.log("=== Deploying Envelope on ZkSync ===");
   console.log("Network:        ", hre.network.name);
@@ -55,17 +57,21 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   console.log("");
 
   // 1. Vault — required.
-  const vault = await deployContract(deployer, "EnvelopeVault", [mfaAuthorizer, envelopeOwner, feeToken]);
+  const vault = await deployContract(deployer, "EnvelopeVault", [
+    mfaAuthorizer,
+    envelopeOwner,
+    feeToken,
+  ]);
   const vaultAddr = await vault.getAddress();
 
   // 2. Paymaster — optional. Must be funded with ETH after deployment.
   let paymasterAddr: string | undefined;
   if (deployPaymaster) {
-    const envelopePaymaster = await deployContract(deployer, "EnvelopePaymaster", [
-      paymasterAdmin,
-      paymasterWithdrawer,
-      vaultAddr,
-    ]);
+    const envelopePaymaster = await deployContract(
+      deployer,
+      "EnvelopePaymaster",
+      [paymasterAdmin, paymasterWithdrawer, vaultAddr],
+    );
     paymasterAddr = await envelopePaymaster.getAddress();
   }
 
@@ -81,7 +87,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
     console.log("Verifying EnvelopeVault...");
     await hre.run("verify:verify", {
       address: vaultAddr,
-      contract: "src/envelope/V4/EnvelopeVault.sol:EnvelopeVault",
+      contract: "src/envelope/EnvelopeVault.sol:EnvelopeVault",
       constructorArguments: [mfaAuthorizer, envelopeOwner, feeToken],
     });
   } catch (e: any) {
@@ -108,6 +114,8 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
 
   if (mfaAuthorizer === ZERO) {
     console.log("");
-    console.log("NOTE: ENVELOPE_MFA_AUTHORIZER is 0x0 — withdrawMFADeposit will always revert. Set it before allowing MFA-flagged deposits in production.");
+    console.log(
+      "NOTE: ENVELOPE_MFA_AUTHORIZER is 0x0 — withdrawMFADeposit will always revert. Set it before allowing MFA-flagged deposits in production.",
+    );
   }
 };
