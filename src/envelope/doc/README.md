@@ -48,6 +48,22 @@ The GPL is "viral" only across `import` boundaries; non-importing files in the s
 | Sender reclaim             | `EnvelopeLinks.reclaim`                                                         | Original sender reclaims unclaimed links; recipient-bound links also enforce `reclaimableAfter`.                                                                            |
 | Gasless validation         | `EnvelopeLinks.isValidGaslessOperation`                                         | View helper used by `EnvelopePaymaster` to validate prepaid or backend-sponsored claim/reclaim calldata before the paymaster pays gas.                                      |
 
+## EOA UX: approve once, use forever
+
+EOA users on ZkSync (or any chain) interact directly with the vault. The recommended frontend integration:
+
+1. **First interaction** — issue two one-time unlimited approvals:
+   - `giftToken.approve(vault, type(uint256).max)` — for the asset being gifted.
+   - `feeToken.approve(vault, type(uint256).max)` — for the NODL service/gasless fee token.
+2. **Every subsequent link** — a single transaction:
+   - `vault.createLinkWithFees(request, feeAuthorization)`
+
+After the initial setup, each envelope creation costs exactly **one signature** from the user's perspective. The two approvals persist until explicitly revoked, so returning users never see an approval prompt again.
+
+> **Why not a Router/Forwarder contract?** A stateless forwarder that pulls tokens on the user's behalf still requires the same two one-time approvals (to the forwarder instead of the vault) and adds gas overhead per call without reducing signature count. Direct vault approval is simpler, cheaper, and equally secure.
+
+For ZkSync smart-account wallets (e.g. app-wallets), the approvals and vault call can be batched into a single user-visible transaction via the native account-abstraction batching — no approvals are visible to the user at all.
+
 ## ZkSync gasless model
 
 Gasless operations are paymaster-native:
