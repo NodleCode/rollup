@@ -63,7 +63,9 @@ contract EnvelopeSecurityTest is Test {
         fotToken.approve(address(vault), 100000);
 
         address[] memory keys = new address[](5);
-        for (uint256 i = 0; i < 5; i++) keys[i] = linkPubKey;
+        for (uint256 i = 0; i < 5; i++) {
+            keys[i] = linkPubKey;
+        }
 
         uint256[] memory indexes = vault.createLinks(address(fotToken), 1, 1000, 0, keys);
 
@@ -145,8 +147,7 @@ contract EnvelopeSecurityTest is Test {
         bytes memory sig = _signOpen(address(vault), idx, ALICE);
         bytes memory mfaSig = hex"00";
 
-        bytes memory callData =
-            abi.encodeCall(EnvelopeLinks.claimWithMFA, (idx, ALICE, sig, mfaSig, 0));
+        bytes memory callData = abi.encodeCall(EnvelopeLinks.claimWithMFA, (idx, ALICE, sig, mfaSig, 0));
 
         bool valid = vault.isValidGaslessOperation(ALICE, callData);
         assertFalse(valid, "Should reject when mfaAuthorizer is zero");
@@ -221,24 +222,13 @@ contract EnvelopeSecurityTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
 
         bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
-            mfaVault.ENVELOPE_SALT(),
-            address(mfaVault),
-            request,
-            address(this),
-            serviceFee,
-            gaslessFee,
-            false,
-            deadline
+            mfaVault.ENVELOPE_SALT(), address(mfaVault), request, address(this), serviceFee, gaslessFee, false, deadline
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(MFA_PRIV, digest);
         bytes memory sig = abi.encodePacked(r, s, v);
 
         EnvelopeLinks.FeeAuthorization memory feeAuth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: serviceFee,
-            gaslessFee: gaslessFee,
-            gaslessSponsored: false,
-            deadline: deadline,
-            signature: sig
+            serviceFee: serviceFee, gaslessFee: gaslessFee, gaslessSponsored: false, deadline: deadline, signature: sig
         });
 
         // First use succeeds.

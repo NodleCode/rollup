@@ -198,18 +198,18 @@ Gasless eligibility is independent of the gift amount. The paymaster must still 
 constructor(address mfaAuthorizer, address owner, address feeToken)
 ```
 
-| Param           | Purpose                                                                                                                                                             |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Param           | Purpose                                                                                                                                                                                                        |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mfaAuthorizer` | Backend signer for MFA claim approvals and link-creation-time fee authorizations. `address(0)` disables non-zero fee authorizations and makes MFA withdrawals fail. Rotatable by owner via `setMfaAuthorizer`. |
-| `owner`         | Owns the vault, can withdraw accumulated fees, and rotate the `mfaAuthorizer`.                                                                                      |
-| `feeToken`      | ERC-20 used for Nodle service and gasless sponsorship fees, for example NODL. `address(0)` permits only zero-fee deposits.                                          |
+| `owner`         | Owns the vault, can withdraw accumulated fees, and rotate the `mfaAuthorizer`.                                                                                                                                 |
+| `feeToken`      | ERC-20 used for Nodle service and gasless sponsorship fees, for example NODL. `address(0)` permits only zero-fee deposits.                                                                                     |
 
 ## Owner Functions
 
-| Function                            | Purpose                                                                                  |
-| ----------------------------------- | ---------------------------------------------------------------------------------------- |
-| `setMfaAuthorizer(address)`         | Rotate the MFA/fee-authorization signer. Invalidates all in-flight signatures from the old key. |
-| `withdrawFees(address tokenAddress)`| Withdraw accumulated service and gasless fees for a given token.                         |
+| Function                             | Purpose                                                                                         |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `setMfaAuthorizer(address)`          | Rotate the MFA/fee-authorization signer. Invalidates all in-flight signatures from the old key. |
+| `withdrawFees(address tokenAddress)` | Withdraw accumulated service and gasless fees for a given token.                                |
 
 ## Security Properties
 

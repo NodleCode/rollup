@@ -719,7 +719,12 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
             encoded, _request.tokenAddress, _request.contractType, _request.amount, _request.tokenId
         );
         _writeFeeAuthorizationParties(
-            encoded, _request.claimKey, _request.onBehalfOf, _request.withMFA, _request.recipient, _request.reclaimableAfter
+            encoded,
+            _request.claimKey,
+            _request.onBehalfOf,
+            _request.withMFA,
+            _request.recipient,
+            _request.reclaimableAfter
         );
         _writeFeeAuthorizationFees(
             encoded,
