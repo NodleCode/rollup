@@ -75,13 +75,7 @@ contract EnvelopePaymasterTest is Test {
         uint256 deadline
     ) internal view returns (bytes memory) {
         bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
-            address(vault),
-            request,
-            SENDER,
-            serviceFee,
-            gaslessFee,
-            gaslessSponsored,
-            deadline
+            address(vault), request, SENDER, serviceFee, gaslessFee, gaslessSponsored, deadline
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BACKEND_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
@@ -104,6 +98,13 @@ contract EnvelopePaymasterTest is Test {
     function _signWithdrawal(uint256 depositIndex, address recipient) internal view returns (bytes memory) {
         bytes32 digest =
             EnvelopeEIP712Utils.claimDigest(address(vault), depositIndex, recipient, vault.OPEN_CLAIM_MODE());
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIVKEY, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _signBoundWithdrawal(uint256 depositIndex, address recipient) internal view returns (bytes memory) {
+        bytes32 digest =
+            EnvelopeEIP712Utils.claimDigest(address(vault), depositIndex, recipient, vault.BOUND_CLAIM_MODE());
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
     }
@@ -140,6 +141,39 @@ contract EnvelopePaymasterTest is Test {
 
         assertEq(magic, paymaster.validateAndPayForPaymasterTransaction.selector);
         assertEq(BOOTLOADER_FORMAL_ADDRESS.balance, bootloaderBalBefore + requiredETH);
+        assertEq(paymaster.gaslessAttemptsByLink(index), 1);
+    }
+
+    function test_RevertIf_GaslessAttemptLimitReached() public {
+        uint256 index = _makeGaslessDeposit(1 ether);
+        bytes memory withdrawalSig = _signWithdrawal(index, RECIPIENT);
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claim, (index, RECIPIENT, withdrawalSig));
+        Transaction memory txn = _buildTransaction(RECIPIENT, address(vault), data, 100_000, 1 gwei);
+
+        // Exhaust all 3 allowed attempts
+        for (uint256 i = 0; i < paymaster.MAX_GASLESS_ATTEMPTS_PER_LINK(); i++) {
+            vm.prank(BOOTLOADER_FORMAL_ADDRESS);
+            paymaster.validateAndPayForPaymasterTransaction(bytes32(0), bytes32(0), txn);
+        }
+        assertEq(paymaster.gaslessAttemptsByLink(index), paymaster.MAX_GASLESS_ATTEMPTS_PER_LINK());
+
+        vm.prank(BOOTLOADER_FORMAL_ADDRESS);
+        vm.expectRevert(abi.encodeWithSelector(EnvelopePaymaster.GaslessAttemptLimitReached.selector, index));
+        paymaster.validateAndPayForPaymasterTransaction(bytes32(0), bytes32(0), txn);
+    }
+
+    function test_RevertIf_UnboundBoundRecipientGaslessOperationNotApproved() public {
+        uint256 index = _makeGaslessDeposit(1 ether);
+        bytes memory withdrawalSig = _signBoundWithdrawal(index, RECIPIENT);
+        bytes memory data = abi.encodeCall(EnvelopeLinks.claimAsBoundRecipient, (index, RECIPIENT, withdrawalSig));
+        Transaction memory txn = _buildTransaction(RECIPIENT, address(vault), data, 100_000, 1 gwei);
+
+        assertFalse(vault.isValidGaslessOperation(RECIPIENT, data));
+
+        vm.prank(BOOTLOADER_FORMAL_ADDRESS);
+        vm.expectRevert(EnvelopePaymaster.EnvelopeGaslessOperationNotApproved.selector);
+        paymaster.validateAndPayForPaymasterTransaction(bytes32(0), bytes32(0), txn);
+        assertEq(paymaster.gaslessAttemptsByLink(index), 0);
     }
 
     function test_RevertIf_DestinationIsNotEnvelopeLinks() public {
