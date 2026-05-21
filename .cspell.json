@@ -16,8 +16,10 @@
     "src/swarms/doc/iso3166-2"
   ],
   "ignoreWords": [
+    "AMPL",
     "NODL",
     "Nodle",
+    "Typehashes",
     "depin",
     "contentsign",
     "matterlabs",

@@ -78,9 +78,9 @@ The vault no longer contains an internal paymaster callback, and the EIP-3009 ga
 
 ## Deploy
 
-| Script                             | Purpose                                                     |
-| ---------------------------------- | ----------------------------------------------------------- |
-| `hardhat-deploy/DeployEnvelope.ts` | Deploys `EnvelopeLinks` and optionally `EnvelopePaymaster`. |
+| Script                              | Purpose                                                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------------------------- |
+| `hardhat-deploy/DeployEnvelope.ts`  | Deploys `EnvelopeLinks` and optionally `EnvelopePaymaster`.                                 |
 | `script/DeployEnvelopeZkSync.s.sol` | Forge deployment script for `EnvelopeLinks` and optional `EnvelopePaymaster` on ZkSync Era. |
 
 Important environment variables:

@@ -30,7 +30,7 @@ contract EnvelopeLinksTest is Test {
         testToken = new ERC20Mock();
         testToken721 = new ERC721Mock();
         testToken1155 = new ERC1155Mock();
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
 
         // Mint tokens for test accounts
         testToken.mint(address(this), 1000);

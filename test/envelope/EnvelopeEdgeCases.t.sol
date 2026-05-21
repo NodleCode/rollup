@@ -10,7 +10,7 @@ import {EnvelopeLinks} from "../../src/envelope/EnvelopeLinks.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {EnvelopeEIP712Utils} from "./EnvelopeEIP712Utils.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
@@ -61,7 +61,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
     function setUp() public {
         LINK_PUBKEY20 = vm.addr(LINK_PRIV);
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
         erc20 = new ERC20Mock();
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
@@ -72,13 +72,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     // ── helpers ────────────────────────────────────────────────────────────
 
     function _signWithdrawal(uint256 idx, address recipient, uint256 privKey) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, recipient, vault.OPEN_CLAIM_MODE()
-                )
-            )
-        );
+        bytes32 digest = EnvelopeEIP712Utils.claimDigest(address(vault), idx, recipient, vault.OPEN_CLAIM_MODE());
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privKey, digest);
         return abi.encodePacked(r, s, v);
     }
@@ -107,6 +101,53 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         erc721.approve(address(vault), 1);
         vm.expectRevert(EnvelopeLinks.Erc721AmountMustBeOne.selector);
         vault.createLink(address(erc721), 2, 2, 1, LINK_PUBKEY20);
+    }
+
+    function test_RevertWhen_SingleErc20DepositReceivesEth() public {
+        erc20.mint(address(this), 100);
+        erc20.approve(address(vault), 100);
+
+        vm.expectRevert(EnvelopeLinks.EthNotAcceptedForNonEthLink.selector);
+        vault.createLink{value: 1 wei}(address(erc20), 1, 100, 0, LINK_PUBKEY20);
+    }
+
+    function test_RevertWhen_SingleErc721DepositReceivesEth() public {
+        erc721.mint(address(this), 1);
+        erc721.approve(address(vault), 1);
+
+        vm.expectRevert(EnvelopeLinks.EthNotAcceptedForNonEthLink.selector);
+        vault.createLink{value: 1 wei}(address(erc721), 2, 1, 1, LINK_PUBKEY20);
+    }
+
+    function test_RevertWhen_SingleErc1155DepositReceivesEth() public {
+        erc1155.mint(address(this), 1, 100, "");
+        erc1155.setApprovalForAll(address(vault), true);
+
+        vm.expectRevert(EnvelopeLinks.EthNotAcceptedForNonEthLink.selector);
+        vault.createLink{value: 1 wei}(address(erc1155), 3, 100, 1, LINK_PUBKEY20);
+    }
+
+    function test_RevertWhen_CreateLinkWithFeesNonEthDepositReceivesEth() public {
+        erc20.mint(address(this), 100);
+        erc20.approve(address(vault), 100);
+
+        EnvelopeLinks.LinkRequest memory request = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(erc20),
+            contractType: 1,
+            amount: 100,
+            tokenId: 0,
+            claimKey: LINK_PUBKEY20,
+            onBehalfOf: address(this),
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+        EnvelopeLinks.FeeAuthorization memory authorization = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: ""
+        });
+
+        vm.expectRevert(EnvelopeLinks.EthNotAcceptedForNonEthLink.selector);
+        vault.createLinkWithFees{value: 1 wei}(request, authorization);
     }
 
     // ── EnvelopeLinks withdraw input validation ─────────────────────────────────
@@ -139,13 +180,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
     function test_RevertWhen_WithdrawAsRecipientCallerMismatch() public {
         // Recipient-mode signature; caller must equal the recipient.
         uint256 idx = _depositEth(1 ether);
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, ALICE, vault.BOUND_CLAIM_MODE()
-                )
-            )
-        );
+        bytes32 digest = EnvelopeEIP712Utils.claimDigest(address(vault), idx, ALICE, vault.BOUND_CLAIM_MODE());
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIV, digest);
         bytes memory sig = abi.encodePacked(r, s, v);
 

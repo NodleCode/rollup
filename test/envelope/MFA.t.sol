@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 import "../../src/envelope/EnvelopeLinks.sol";
+import {EnvelopeEIP712Utils} from "./EnvelopeEIP712Utils.sol";
 
 contract EnvelopeLinksMFATest is Test {
     EnvelopeLinks public vault;
@@ -19,30 +20,14 @@ contract EnvelopeLinksMFATest is Test {
     }
 
     function _signMfa(uint256 depositIndex, address recipient, uint256 deadline) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    vault.ENVELOPE_SALT(), block.chainid, address(vault), depositIndex, recipient, deadline
-                )
-            )
-        );
+        bytes32 digest = EnvelopeEIP712Utils.mfaDigest(address(vault), depositIndex, recipient, deadline);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(MFA_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
     }
 
     function _signWithdrawal(uint256 depositIndex, address recipient) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    vault.ENVELOPE_SALT(),
-                    block.chainid,
-                    address(vault),
-                    depositIndex,
-                    recipient,
-                    vault.OPEN_CLAIM_MODE()
-                )
-            )
-        );
+        bytes32 digest =
+            EnvelopeEIP712Utils.claimDigest(address(vault), depositIndex, recipient, vault.OPEN_CLAIM_MODE());
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(SAMPLE_PRIVKEY), digest);
         return abi.encodePacked(r, s, v);
     }

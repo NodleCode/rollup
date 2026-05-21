@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import "../../src/envelope/EnvelopeLinks.sol";
 import {EnvelopeFeeAuthTestUtils} from "./EnvelopeFeeAuthTestUtils.sol";
+import {EnvelopeEIP712Utils} from "./EnvelopeEIP712Utils.sol";
 import "./mocks/ERC20Mock.sol";
 
 contract EnvelopeLinksGaslessTest is Test {
@@ -70,14 +71,7 @@ contract EnvelopeLinksGaslessTest is Test {
         uint256 deadline
     ) internal view returns (bytes memory) {
         bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
-            vault.ENVELOPE_SALT(),
-            address(vault),
-            request,
-            feePayer,
-            serviceFee,
-            gaslessFee,
-            gaslessSponsored,
-            deadline
+            address(vault), request, feePayer, serviceFee, gaslessFee, gaslessSponsored, deadline
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BACKEND_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
@@ -113,23 +107,13 @@ contract EnvelopeLinksGaslessTest is Test {
         view
         returns (bytes memory)
     {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(vault.ENVELOPE_SALT(), block.chainid, address(vault), depositIndex, recipient, mode)
-            )
-        );
+        bytes32 digest = EnvelopeEIP712Utils.claimDigest(address(vault), depositIndex, recipient, mode);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
     }
 
     function _signMfa(uint256 depositIndex, address recipient, uint256 deadline) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    vault.ENVELOPE_SALT(), block.chainid, address(vault), depositIndex, recipient, deadline
-                )
-            )
-        );
+        bytes32 digest = EnvelopeEIP712Utils.mfaDigest(address(vault), depositIndex, recipient, deadline);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BACKEND_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
     }
@@ -163,7 +147,7 @@ contract EnvelopeLinksGaslessTest is Test {
         assertEq(fees.gaslessFee, gaslessFee);
         assertFalse(status.gaslessSponsored);
         assertEq(feeToken.balanceOf(address(vault)), serviceFee + gaslessFee);
-        assertEq(vault.accumulatedFees(address(feeToken)), serviceFee + gaslessFee);
+        assertEq(vault.accumulatedFees(), serviceFee + gaslessFee);
     }
 
     function test_SponsoredGaslessAuthorizationApprovesPaymasterWithoutGaslessFee() public {
@@ -214,7 +198,7 @@ contract EnvelopeLinksGaslessTest is Test {
         assertEq(fees.gaslessFee, 0);
         assertFalse(status.gaslessSponsored);
         assertEq(feeToken.balanceOf(address(vault)), 0);
-        assertEq(vault.accumulatedFees(address(feeToken)), 0);
+        assertEq(vault.accumulatedFees(), 0);
     }
 
     function test_ZeroFeeAuthorizationWithoutSignatureRemainsOpen() public {
