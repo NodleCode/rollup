@@ -10,7 +10,7 @@ import {EnvelopePaymaster} from "../../src/paymasters/EnvelopePaymaster.sol";
 import {EnvelopeLinks} from "../../src/envelope/EnvelopeLinks.sol";
 import {ERC20Mock} from "../envelope/mocks/ERC20Mock.sol";
 import {EnvelopeFeeAuthTestUtils} from "../envelope/EnvelopeFeeAuthTestUtils.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {EnvelopeEIP712Utils} from "../envelope/EnvelopeEIP712Utils.sol";
 
 contract EnvelopePaymasterTest is Test {
     EnvelopeLinks public vault;
@@ -75,7 +75,6 @@ contract EnvelopePaymasterTest is Test {
         uint256 deadline
     ) internal view returns (bytes memory) {
         bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
-            vault.ENVELOPE_SALT(),
             address(vault),
             request,
             SENDER,
@@ -103,18 +102,8 @@ contract EnvelopePaymasterTest is Test {
     }
 
     function _signWithdrawal(uint256 depositIndex, address recipient) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    vault.ENVELOPE_SALT(),
-                    block.chainid,
-                    address(vault),
-                    depositIndex,
-                    recipient,
-                    vault.OPEN_CLAIM_MODE()
-                )
-            )
-        );
+        bytes32 digest =
+            EnvelopeEIP712Utils.claimDigest(address(vault), depositIndex, recipient, vault.OPEN_CLAIM_MODE());
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
     }

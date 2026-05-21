@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
 import "../../src/envelope/EnvelopeLinks.sol";
-import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {EnvelopeEIP712Utils} from "./EnvelopeEIP712Utils.sol";
 
 contract TestSigWithdrawEther is Test {
     EnvelopeLinks public vault;
@@ -20,25 +20,13 @@ contract TestSigWithdrawEther is Test {
     }
 
     function _signOpen(uint256 idx, address recipient) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, recipient, vault.OPEN_CLAIM_MODE()
-                )
-            )
-        );
+        bytes32 digest = EnvelopeEIP712Utils.claimDigest(address(vault), idx, recipient, vault.OPEN_CLAIM_MODE());
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIV, digest);
         return abi.encodePacked(r, s, v);
     }
 
     function _signBound(uint256 idx, address recipient) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, recipient, vault.BOUND_CLAIM_MODE()
-                )
-            )
-        );
+        bytes32 digest = EnvelopeEIP712Utils.claimDigest(address(vault), idx, recipient, vault.BOUND_CLAIM_MODE());
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIV, digest);
         return abi.encodePacked(r, s, v);
     }

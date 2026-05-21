@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import "../../src/envelope/EnvelopeLinks.sol";
 import {EnvelopeFeeAuthTestUtils} from "./EnvelopeFeeAuthTestUtils.sol";
+import {EnvelopeEIP712Utils} from "./EnvelopeEIP712Utils.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
@@ -71,21 +72,13 @@ contract EnvelopeCoverageTest is Test {
         view
         returns (bytes memory)
     {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(vault.ENVELOPE_SALT(), block.chainid, address(vault), index, recipient, mode)
-            )
-        );
+        bytes32 digest = EnvelopeEIP712Utils.claimDigest(address(vault), index, recipient, mode);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(linkPrivKey, digest);
         return abi.encodePacked(r, s, v);
     }
 
     function _signMfa(uint256 index, address recipient, uint256 deadline) internal view returns (bytes memory) {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(vault.ENVELOPE_SALT(), block.chainid, address(vault), index, recipient, deadline)
-            )
-        );
+        bytes32 digest = EnvelopeEIP712Utils.mfaDigest(address(vault), index, recipient, deadline);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BACKEND_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
     }
@@ -111,7 +104,7 @@ contract EnvelopeCoverageTest is Test {
         uint256 deadline
     ) internal view returns (bytes memory) {
         bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
-            vault.ENVELOPE_SALT(), vaultAddr, req, feePayer, serviceFee, gaslessFee, gaslessSponsored, deadline
+            vaultAddr, req, feePayer, serviceFee, gaslessFee, gaslessSponsored, deadline
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BACKEND_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
@@ -228,8 +221,8 @@ contract EnvelopeCoverageTest is Test {
     // ══════════════════════════════════════════════════════════════════════════════
 
     function test_withdrawFees_eth() public {
-        // Seed accumulatedFees[address(0)] with ETH balance
-        bytes32 slot = keccak256(abi.encode(address(0), uint256(5)));
+        // Seed accumulatedFees[address(0)] with ETH balance (slot 7 for accumulatedFees mapping)
+        bytes32 slot = keccak256(abi.encode(address(0), uint256(7)));
         vm.store(address(vault), slot, bytes32(uint256(0.5 ether)));
         vm.deal(address(vault), 0.5 ether);
 
@@ -1103,8 +1096,8 @@ contract EnvelopeCoverageTest is Test {
         // Seed directly: we can call withdrawFees with ETH balance.
         vm.deal(address(rejVault), 1 ether);
         // Write to the accumulatedFees[address(0)] storage slot
-        // accumulatedFees is at storage slot 5 in the contract layout
-        bytes32 slot = keccak256(abi.encode(address(0), uint256(5)));
+        // accumulatedFees is at storage slot 7 in the contract layout
+        bytes32 slot = keccak256(abi.encode(address(0), uint256(7)));
         vm.store(address(rejVault), slot, bytes32(uint256(1 ether)));
 
         vm.prank(address(rejecter));
@@ -1280,9 +1273,7 @@ contract EnvelopeCoverageTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
         bytes memory claimSig = _signClaim(LINK_PRIVKEY, idx, RECIPIENT, vault.OPEN_CLAIM_MODE());
         // Use a wrong signature (signed by LINK_PRIVKEY instead of BACKEND)
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(abi.encodePacked(vault.ENVELOPE_SALT(), block.chainid, address(vault), idx, RECIPIENT, deadline))
-        );
+        bytes32 digest = EnvelopeEIP712Utils.mfaDigest(address(vault), idx, RECIPIENT, deadline);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIVKEY, digest);
         bytes memory wrongMfaSig = abi.encodePacked(r, s, v);
 

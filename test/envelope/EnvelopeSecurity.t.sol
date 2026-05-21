@@ -12,9 +12,9 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {EnvelopeLinks} from "../../src/envelope/EnvelopeLinks.sol";
 import {EnvelopeFeeAuthTestUtils} from "./EnvelopeFeeAuthTestUtils.sol";
+import {EnvelopeEIP712Utils} from "./EnvelopeEIP712Utils.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {FeeOnTransferERC20Mock} from "./mocks/FeeOnTransferERC20Mock.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 contract EnvelopeSecurityTest is Test {
     EnvelopeLinks public vault;
@@ -222,7 +222,7 @@ contract EnvelopeSecurityTest is Test {
         uint256 deadline = block.timestamp + 1 hours;
 
         bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
-            mfaVault.ENVELOPE_SALT(), address(mfaVault), request, address(this), serviceFee, gaslessFee, false, deadline
+            address(mfaVault), request, address(this), serviceFee, gaslessFee, false, deadline
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(MFA_PRIV, digest);
         bytes memory sig = abi.encodePacked(r, s, v);
@@ -244,22 +244,16 @@ contract EnvelopeSecurityTest is Test {
     // ══════════════════════════════════════════════════════════════════════════════
 
     function _signOpen(address vaultAddr, uint256 idx, address recipient) internal view returns (bytes memory) {
-        EnvelopeLinks v = EnvelopeLinks(payable(vaultAddr));
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(v.ENVELOPE_SALT(), block.chainid, vaultAddr, idx, recipient, v.OPEN_CLAIM_MODE())
-            )
+        bytes32 digest = EnvelopeEIP712Utils.claimDigest(
+            vaultAddr, idx, recipient, EnvelopeLinks(payable(vaultAddr)).OPEN_CLAIM_MODE()
         );
         (uint8 vv, bytes32 r, bytes32 s) = vm.sign(LINK_PRIV, digest);
         return abi.encodePacked(r, s, vv);
     }
 
     function _signBound(address vaultAddr, uint256 idx, address recipient) internal view returns (bytes memory) {
-        EnvelopeLinks v = EnvelopeLinks(payable(vaultAddr));
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(v.ENVELOPE_SALT(), block.chainid, vaultAddr, idx, recipient, v.BOUND_CLAIM_MODE())
-            )
+        bytes32 digest = EnvelopeEIP712Utils.claimDigest(
+            vaultAddr, idx, recipient, EnvelopeLinks(payable(vaultAddr)).BOUND_CLAIM_MODE()
         );
         (uint8 vv, bytes32 r, bytes32 s) = vm.sign(LINK_PRIV, digest);
         return abi.encodePacked(r, s, vv);
@@ -270,10 +264,7 @@ contract EnvelopeSecurityTest is Test {
         view
         returns (bytes memory)
     {
-        EnvelopeLinks v = EnvelopeLinks(payable(vaultAddr));
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(abi.encodePacked(v.ENVELOPE_SALT(), block.chainid, vaultAddr, idx, recipient, deadline))
-        );
+        bytes32 digest = EnvelopeEIP712Utils.mfaDigest(vaultAddr, idx, recipient, deadline);
         (uint8 vv, bytes32 r, bytes32 s) = vm.sign(privKey, digest);
         return abi.encodePacked(r, s, vv);
     }

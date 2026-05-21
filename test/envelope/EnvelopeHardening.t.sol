@@ -11,6 +11,7 @@ import {EnvelopeLinks} from "../../src/envelope/EnvelopeLinks.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 import {ERC721Mock} from "./mocks/ERC721Mock.sol";
 import {ERC1155Mock} from "./mocks/ERC1155Mock.sol";
+import {EnvelopeEIP712Utils} from "./EnvelopeEIP712Utils.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
@@ -78,30 +79,14 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         uint256 idx = nodleVault.createMFALinkFor{value: 1 wei}(address(0), 0, 1, 0, depositSigner, address(this));
 
         // withdrawal signature (signed by deposit pubkey)
-        bytes32 wdHash = MessageHashUtilsLite.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    nodleVault.ENVELOPE_SALT(),
-                    block.chainid,
-                    address(nodleVault),
-                    idx,
-                    address(this),
-                    nodleVault.OPEN_CLAIM_MODE()
-                )
-            )
-        );
+        bytes32 wdHash =
+            EnvelopeEIP712Utils.claimDigest(address(nodleVault), idx, address(this), nodleVault.OPEN_CLAIM_MODE());
         (uint8 wv, bytes32 wr, bytes32 ws) = vm.sign(depositPrivKey, wdHash);
         bytes memory wdSig = abi.encodePacked(wr, ws, wv);
 
         // MFA signature (signed by configured mfaAuthorizer, includes deadline)
         uint256 deadline = 0; // no expiry
-        bytes32 mfaHash = MessageHashUtilsLite.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    nodleVault.ENVELOPE_SALT(), block.chainid, address(nodleVault), idx, address(this), deadline
-                )
-            )
-        );
+        bytes32 mfaHash = EnvelopeEIP712Utils.mfaDigest(address(nodleVault), idx, address(this), deadline);
         (uint8 mv, bytes32 mr, bytes32 ms) = vm.sign(mfaPrivKey, mfaHash);
         bytes memory mfaSig = abi.encodePacked(mr, ms, mv);
 
@@ -120,17 +105,5 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
         bytes memory mfaSig = hex"00";
         vm.expectRevert();
         vault.claimWithMFA(idx, address(this), wdSig, mfaSig, 0);
-    }
-}
-
-/// @dev Local copy of OZ's MessageHashUtils.toEthSignedMessageHash to avoid pulling
-/// the full library into a test-only file.
-library MessageHashUtilsLite {
-    function toEthSignedMessageHash(bytes32 messageHash) internal pure returns (bytes32 digest) {
-        assembly ("memory-safe") {
-            mstore(0x00, "\x19Ethereum Signed Message:\n32")
-            mstore(0x1c, messageHash)
-            digest := keccak256(0x00, 0x3c)
-        }
     }
 }

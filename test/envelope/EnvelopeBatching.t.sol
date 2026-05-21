@@ -4,12 +4,12 @@ pragma solidity ^0.8.19;
 import "forge-std/Test.sol";
 import {EnvelopeLinks} from "../../src/envelope/EnvelopeLinks.sol";
 import {EnvelopeFeeAuthTestUtils} from "./EnvelopeFeeAuthTestUtils.sol";
+import {EnvelopeEIP712Utils} from "./EnvelopeEIP712Utils.sol";
 import "./mocks/ERC20Mock.sol";
 import "./mocks/ERC721Mock.sol";
 import "./mocks/ERC1155Mock.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
     EnvelopeLinks public vault;
@@ -411,7 +411,6 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         uint256 deadline
     ) internal view returns (bytes memory) {
         bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
-            targetVault.ENVELOPE_SALT(),
             address(targetVault),
             request,
             feePayer,
@@ -429,13 +428,7 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         view
         returns (bytes memory)
     {
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(
-                    targetVault.ENVELOPE_SALT(), block.chainid, address(targetVault), depositIndex, recipient, mode
-                )
-            )
-        );
+        bytes32 digest = EnvelopeEIP712Utils.claimDigest(address(targetVault), depositIndex, recipient, mode);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
     }

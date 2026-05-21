@@ -4,7 +4,7 @@
 pragma solidity ^0.8.26;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -15,7 +15,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ownable2Step {
+contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ownable2Step, EIP712 {
     using SafeERC20 for IERC20;
 
     // ── Custom Errors ────────────────────────────────────────────────────────────
@@ -109,12 +109,19 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         bytes signature;
     }
 
-    // We may include this hash in peanut-specific signatures to make sure
-    // that the message signed by the user has effects only in peanut contracts.
-    bytes32 public constant ENVELOPE_SALT = 0x70adbbeba9d4f0c82e28dd574f15466f75df0543b65f24460fc445813b5d94e0; // keccak256("Konrad makes tokens go woosh tadam");
+    // ── EIP-712 Typehashes ───────────────────────────────────────────────────────
 
-    bytes32 public constant OPEN_CLAIM_MODE = 0x0000000000000000000000000000000000000000000000000000000000000000; // default. Any address can trigger the withdrawal function
-    bytes32 public constant BOUND_CLAIM_MODE = 0x2bb5bef2b248d3edba501ad918c3ab524cce2aea54d4c914414e1c4401dc4ff4; // keccak256("only recipient") - only the signed recipient can trigger the withdrawal function
+    bytes32 public constant CLAIM_TYPEHASH = keccak256("Claim(uint256 index,address recipient,bytes32 mode)");
+
+    bytes32 public constant MFA_APPROVAL_TYPEHASH =
+        keccak256("MfaApproval(uint256 index,address recipient,uint256 deadline)");
+
+    bytes32 public constant FEE_AUTHORIZATION_TYPEHASH = keccak256(
+        "FeeAuthorization(address feePayer,address tokenAddress,uint8 contractType,uint256 amount,uint256 tokenId,address claimKey,address onBehalfOf,bool withMFA,address recipient,uint40 reclaimableAfter,uint256 serviceFee,uint256 gaslessFee,bool gaslessSponsored,uint256 deadline)"
+    );
+
+    bytes32 public constant OPEN_CLAIM_MODE = 0x0000000000000000000000000000000000000000000000000000000000000000;
+    bytes32 public constant BOUND_CLAIM_MODE = 0x2bb5bef2b248d3edba501ad918c3ab524cce2aea54d4c914414e1c4401dc4ff4; // keccak256("only recipient")
 
     /// @notice Address authorized to issue MFA signatures gating claimWithMFA calls and fee authorizations.
     /// @dev Rotatable by owner. Address(0) disables MFA — claimWithMFA will revert.
@@ -143,7 +150,10 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     /// @param _mfaAuthorizer address authorized to sign backend fee and MFA approvals (use address(0) to disable).
     /// @param _owner initial owner of the contract (receives accumulated fees).
     /// @param _feeToken ERC-20 token used for fees; address(0) disables non-zero fee authorizations.
-    constructor(address _mfaAuthorizer, address _owner, address _feeToken) Ownable(_owner) {
+    constructor(address _mfaAuthorizer, address _owner, address _feeToken)
+        Ownable(_owner)
+        EIP712("EnvelopeLinks", "5")
+    {
         mfaAuthorizer = _mfaAuthorizer;
         feeToken = IERC20(_feeToken);
     }
@@ -662,10 +672,8 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         // deadline == 0 means no expiry
         if (_deadline != 0 && block.timestamp > _deadline) revert MfaSignatureExpired();
 
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(ENVELOPE_SALT, block.chainid, address(this), _index, _recipientAddress, _deadline)
-            )
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(abi.encode(MFA_APPROVAL_TYPEHASH, _index, _recipientAddress, _deadline))
         );
         address authorizationSigner = getSigner(digest, _MFASignature);
         if (authorizationSigner != mfaAuthorizer) revert WrongMfaSignature();
@@ -679,10 +687,8 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         if (mfaAuthorizer == address(0)) return false;
         if (_deadline != 0 && block.timestamp > _deadline) return false;
 
-        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(
-            keccak256(
-                abi.encodePacked(ENVELOPE_SALT, block.chainid, address(this), _index, _recipientAddress, _deadline)
-            )
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(abi.encode(MFA_APPROVAL_TYPEHASH, _index, _recipientAddress, _deadline))
         );
         return _recoverSigner(digest, _signature) == mfaAuthorizer;
     }
@@ -713,89 +719,27 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         FeeAuthorization calldata _feeAuthorization,
         address _feePayer
     ) internal view returns (bytes32) {
-        bytes memory encoded = new bytes(17 * 32);
-        _writeFeeAuthorizationContext(encoded, _feePayer);
-        _writeFeeAuthorizationAsset(
-            encoded, _request.tokenAddress, _request.contractType, _request.amount, _request.tokenId
+        return _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    FEE_AUTHORIZATION_TYPEHASH,
+                    _feePayer,
+                    _request.tokenAddress,
+                    _request.contractType,
+                    _request.amount,
+                    _request.tokenId,
+                    _request.claimKey,
+                    _request.onBehalfOf,
+                    _request.withMFA,
+                    _request.recipient,
+                    _request.reclaimableAfter,
+                    _feeAuthorization.serviceFee,
+                    _feeAuthorization.gaslessFee,
+                    _feeAuthorization.gaslessSponsored,
+                    _feeAuthorization.deadline
+                )
+            )
         );
-        _writeFeeAuthorizationParties(
-            encoded,
-            _request.claimKey,
-            _request.onBehalfOf,
-            _request.withMFA,
-            _request.recipient,
-            _request.reclaimableAfter
-        );
-        _writeFeeAuthorizationFees(
-            encoded,
-            _feeAuthorization.serviceFee,
-            _feeAuthorization.gaslessFee,
-            _feeAuthorization.gaslessSponsored,
-            _feeAuthorization.deadline
-        );
-
-        return MessageHashUtils.toEthSignedMessageHash(keccak256(encoded));
-    }
-
-    function _writeFeeAuthorizationContext(bytes memory encoded, address _feePayer) internal view {
-        bytes32 salt = ENVELOPE_SALT;
-        assembly ("memory-safe") {
-            let ptr := add(encoded, 32)
-            mstore(ptr, salt)
-            mstore(add(ptr, 32), chainid())
-            mstore(add(ptr, 64), address())
-            mstore(add(ptr, 96), _feePayer)
-        }
-    }
-
-    function _writeFeeAuthorizationAsset(
-        bytes memory encoded,
-        address _tokenAddress,
-        uint8 _contractType,
-        uint256 _amount,
-        uint256 _tokenId
-    ) internal pure {
-        assembly ("memory-safe") {
-            let ptr := add(encoded, 160)
-            mstore(ptr, _tokenAddress)
-            mstore(add(ptr, 32), _contractType)
-            mstore(add(ptr, 64), _amount)
-            mstore(add(ptr, 96), _tokenId)
-        }
-    }
-
-    function _writeFeeAuthorizationParties(
-        bytes memory encoded,
-        address claimKey,
-        address _onBehalfOf,
-        bool _withMFA,
-        address _recipient,
-        uint40 _reclaimableAfter
-    ) internal pure {
-        assembly ("memory-safe") {
-            let ptr := add(encoded, 288)
-            mstore(ptr, claimKey)
-            mstore(add(ptr, 32), _onBehalfOf)
-            mstore(add(ptr, 64), _withMFA)
-            mstore(add(ptr, 96), _recipient)
-            mstore(add(ptr, 128), _reclaimableAfter)
-        }
-    }
-
-    function _writeFeeAuthorizationFees(
-        bytes memory encoded,
-        uint256 _serviceFee,
-        uint256 _gaslessFee,
-        bool _gaslessSponsored,
-        uint256 _deadline
-    ) internal pure {
-        assembly ("memory-safe") {
-            let ptr := add(encoded, 448)
-            mstore(ptr, _serviceFee)
-            mstore(add(ptr, 32), _gaslessFee)
-            mstore(add(ptr, 64), _gaslessSponsored)
-            mstore(add(ptr, 96), _deadline)
-        }
     }
 
     function _collectLinkFees(uint256 _index, address _feePayer, uint256 _serviceFee, uint256 _gaslessFee) internal {
@@ -875,10 +819,8 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         if (deposit.parties.recipient != address(0) && _recipientAddress != deposit.parties.recipient) return false;
 
         if (deposit.status.claimKey != address(0)) {
-            bytes32 _claimHash = MessageHashUtils.toEthSignedMessageHash(
-                keccak256(
-                    abi.encodePacked(ENVELOPE_SALT, block.chainid, address(this), _index, _recipientAddress, _extraData)
-                )
+            bytes32 _claimHash = _hashTypedDataV4(
+                keccak256(abi.encode(CLAIM_TYPEHASH, _index, _recipientAddress, _extraData))
             );
             if (_recoverSigner(_claimHash, _signature) != deposit.status.claimKey) return false;
         }
@@ -1102,10 +1044,8 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
 
         address claimSigner;
         if (_signature.length > 0) {
-            bytes32 _claimHash = MessageHashUtils.toEthSignedMessageHash(
-                keccak256(
-                    abi.encodePacked(ENVELOPE_SALT, block.chainid, address(this), _index, _recipientAddress, _extraData)
-                )
+            bytes32 _claimHash = _hashTypedDataV4(
+                keccak256(abi.encode(CLAIM_TYPEHASH, _index, _recipientAddress, _extraData))
             );
             claimSigner = getSigner(_claimHash, _signature);
         }
