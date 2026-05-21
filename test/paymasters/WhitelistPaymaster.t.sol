@@ -12,7 +12,7 @@ contract MockWhitelistPaymaster is WhitelistPaymaster {
     constructor(address admin, address withdrawer) WhitelistPaymaster(admin, withdrawer) {}
 
     function mock_validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) public view {
-        _validateAndPayGeneralFlow(from, to, requiredETH);
+        _validateAndPayGeneralFlow(from, to, requiredETH, "");
     }
 
     function mock_validateAndPayApprovalBasedFlow(

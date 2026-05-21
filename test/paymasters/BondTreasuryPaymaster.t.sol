@@ -65,7 +65,7 @@ contract MockBondTreasuryPaymaster is BondTreasuryPaymaster {
     {}
 
     function mock_validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) public view {
-        _validateAndPayGeneralFlow(from, to, requiredETH);
+        _validateAndPayGeneralFlow(from, to, requiredETH, "");
     }
 
     function mock_validateAndPayApprovalBasedFlow(

@@ -1,0 +1,137 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+pragma solidity ^0.8.19;
+
+//////////////////////////////
+// A few integration tests for the EnvelopeLinks contract
+//////////////////////////////
+
+import "forge-std/Test.sol";
+import "../../src/envelope/EnvelopeLinks.sol";
+import "./mocks/ERC20Mock.sol";
+import "./mocks/ERC721Mock.sol";
+import "./mocks/ERC1155Mock.sol";
+import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+
+contract EnvelopeLinksIntegrationTest is Test, ERC1155Holder, ERC721Holder {
+    EnvelopeLinks public vault;
+    ERC20Mock public testToken;
+    ERC721Mock public testToken721;
+    ERC1155Mock public testToken1155;
+
+    // a dummy private/public keypair to test withdrawals
+    address public constant PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
+    bytes32 public constant PRIVKEY = 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+
+    function setUp() public {
+        console.log("Setting up test");
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
+        testToken = new ERC20Mock();
+        testToken721 = new ERC721Mock();
+        testToken1155 = new ERC1155Mock();
+    }
+
+    receive() external payable {}
+
+    // Make a deposit, withdraw the deposit.
+    // check invariants
+    function testIntegrationEtherSenderWithdraw(uint64 amount) public {
+        vm.assume(amount > 0);
+        assertEq(vault.getLinkCount(), 0); // deposit count invariant
+        assertEq(address(vault).balance, 0); // contract balance invariant
+        uint256 senderBalance = address(this).balance; // sender balance invariant
+        uint256 depositIdx = vault.createLink{value: amount}(address(0), 0, amount, 0, PUBKEY20);
+        assertEq(depositIdx, 0); // deposit index invariant
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
+        assertEq(address(vault).balance, amount); // contract balance invariant
+        assertEq(address(this).balance, senderBalance - amount); // sender balance invariant
+
+        // wait 25 hours
+        vm.warp(block.timestamp + 25 hours);
+
+        // Withdraw the deposit
+        vault.reclaim(depositIdx);
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
+        assertEq(address(vault).balance, 0); // contract balance invariant
+        assertEq(address(this).balance, senderBalance); // sender balance invariant
+    }
+
+    function testIntegrationERC20SenderWithdraw(uint64 amount) public {
+        vm.assume(amount > 0);
+        // mint tokens to the contract
+        testToken.mint(address(this), amount);
+        // approve the contract to spend the tokens
+        testToken.approve(address(vault), amount);
+        assertEq(testToken.balanceOf(address(this)), amount); // contract token balance invariant
+        uint256 depositIdx = vault.createLink(address(testToken), 1, amount, 0, PUBKEY20);
+        assertEq(depositIdx, 0); // deposit index invariant
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
+        assertEq(testToken.balanceOf(address(vault)), amount); // contract token balance invariant
+        assertEq(testToken.balanceOf(address(this)), 0); // sender token balance invariant
+
+        // wait 25 hours
+        vm.warp(block.timestamp + 25 hours);
+
+        // Withdraw the deposit
+        vault.reclaim(depositIdx);
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
+        assertEq(testToken.balanceOf(address(vault)), 0); // contract token balance invariant
+        assertEq(testToken.balanceOf(address(this)), amount); // sender token balance invariant
+    }
+
+    // Test for ERC721 Token
+    function testIntegrationERC721SenderWithdraw(uint64 tokenId) public {
+        // setup
+        testToken721.mint(address(this), tokenId);
+        testToken721.approve(address(vault), tokenId);
+
+        // invariant checks
+        assertEq(vault.getLinkCount(), 0);
+        assertEq(testToken721.ownerOf(tokenId), address(this));
+        assertEq(testToken721.balanceOf(address(vault)), 0);
+        assertEq(testToken721.balanceOf(address(this)), 1);
+        uint256 depositIdx = vault.createLink(address(testToken721), 2, 1, tokenId, PUBKEY20);
+
+        // invariant checks
+        assertEq(depositIdx, 0);
+        assertEq(vault.getLinkCount(), 1);
+        assertEq(testToken721.ownerOf(tokenId), address(vault));
+        assertEq(testToken721.balanceOf(address(vault)), 1);
+        assertEq(testToken721.balanceOf(address(this)), 0);
+
+        // wait 25 hours
+        vm.warp(block.timestamp + 25 hours);
+
+        // Withdraw the deposit
+        vault.reclaim(depositIdx);
+
+        // invariant checks
+        assertEq(vault.getLinkCount(), 1);
+        assertEq(testToken721.ownerOf(tokenId), address(this));
+        assertEq(testToken721.balanceOf(address(vault)), 0);
+        assertEq(testToken721.balanceOf(address(this)), 1);
+    }
+
+    // Test for ERC1155 Token
+    function testIntegrationERC1155SenderWithdraw(uint64 tokenId, uint64 amount) public {
+        vm.assume(amount > 0);
+        // mint tokens to the contract
+        testToken1155.mint(address(this), tokenId, amount, "");
+        testToken1155.setApprovalForAll(address(vault), true);
+        assertEq(testToken1155.balanceOf(address(this), tokenId), amount); // contract token balance invariant
+        uint256 depositIdx = vault.createLink(address(testToken1155), 3, amount, tokenId, PUBKEY20);
+        assertEq(depositIdx, 0); // deposit index invariant
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
+        assertEq(testToken1155.balanceOf(address(vault), tokenId), amount); // contract token balance invariant
+        assertEq(testToken1155.balanceOf(address(this), tokenId), 0); // sender token balance invariant
+
+        // wait 25 hours
+        vm.warp(block.timestamp + 25 hours);
+
+        // Withdraw the deposit
+        vault.reclaim(depositIdx);
+        assertEq(vault.getLinkCount(), 1); // deposit count invariant
+        assertEq(testToken1155.balanceOf(address(vault), tokenId), 0); // contract token balance invariant
+        assertEq(testToken1155.balanceOf(address(this), tokenId), amount); // sender token balance invariant
+    }
+}

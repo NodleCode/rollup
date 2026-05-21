@@ -64,7 +64,11 @@ contract WhitelistPaymaster is BasePaymaster {
         emit WhitelistedUsersRemoved(users);
     }
 
-    function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) internal view override {
+    function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH, bytes memory)
+        internal
+        view
+        override
+    {
         if (!isWhitelistedContract[to]) {
             revert DestIsNotWhitelisted();
         }

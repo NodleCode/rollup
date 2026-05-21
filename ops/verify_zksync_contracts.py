@@ -79,11 +79,32 @@ TESTNET_VERIFIER = (
 # Used by --broadcast mode to map broadcast JSON entries to verifiable contracts.
 # Extend this when adding new contract types to the deploy script.
 CONTRACT_SOURCE_MAP = {
+    "EnvelopeLinks": "src/envelope/EnvelopeLinks.sol:EnvelopeLinks",
+    "EnvelopePaymaster": "src/paymasters/EnvelopePaymaster.sol:EnvelopePaymaster",
     "ServiceProviderUpgradeable": "src/swarms/ServiceProviderUpgradeable.sol:ServiceProviderUpgradeable",
     "FleetIdentityUpgradeable": "src/swarms/FleetIdentityUpgradeable.sol:FleetIdentityUpgradeable",
     "SwarmRegistryUniversalUpgradeable": "src/swarms/SwarmRegistryUniversalUpgradeable.sol:SwarmRegistryUniversalUpgradeable",
     "ERC1967Proxy": "lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy",
     "BondTreasuryPaymaster": "src/paymasters/BondTreasuryPaymaster.sol:BondTreasuryPaymaster",
+}
+
+# Some zkSync forge broadcasts record deployments as calls to ContractDeployer
+# with unnamed `additionalContracts`. For those scripts, recover the deployed
+# contract type by the deterministic deployment order inside the script.
+BROADCAST_CONTRACT_SEQUENCE = {
+    "DeployEnvelopeZkSync.s.sol": [
+        "EnvelopeLinks",
+        "EnvelopePaymaster",
+    ],
+    "DeploySwarmUpgradeableZkSync.s.sol": [
+        "ServiceProviderUpgradeable",
+        "ERC1967Proxy",
+        "FleetIdentityUpgradeable",
+        "ERC1967Proxy",
+        "SwarmRegistryUniversalUpgradeable",
+        "ERC1967Proxy",
+        "BondTreasuryPaymaster",
+    ],
 }
 
 
@@ -258,14 +279,20 @@ def parse_broadcast(broadcast_path: str) -> list:
     with open(broadcast_path) as f:
         data = json.load(f)
 
+    script_name = os.path.basename(os.path.dirname(os.path.dirname(broadcast_path)))
+    deployment_sequence = BROADCAST_CONTRACT_SEQUENCE.get(script_name, [])
+    unnamed_index = 0
+
     results = []
     for tx in data["transactions"]:
         contract_name = tx.get("contractName", "")
         address = tx.get("contractAddress", "")
-        if not address:
-            additional = tx.get("additionalContracts") or []
-            if additional:
-                address = additional[0].get("address", "")
+        additional = tx.get("additionalContracts") or []
+        if additional:
+            address = additional[0].get("address", "")
+        if not contract_name and additional and unnamed_index < len(deployment_sequence):
+            contract_name = deployment_sequence[unnamed_index]
+            unnamed_index += 1
         if not address or not contract_name:
             continue
 
