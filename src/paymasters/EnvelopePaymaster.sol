@@ -57,6 +57,10 @@ contract EnvelopePaymaster is BasePaymaster {
         emit GaslessAttemptRecorded(index, attempts);
     }
 
+    /// @dev Reads the first uint256 calldata argument out of `transactionData` (the link index).
+    ///      Safe because this is only called after `isValidGaslessOperation` matched one of the
+    ///      claim/reclaim selectors, all of which have `uint256 _index` as their first parameter.
+    ///      Offset 36 = 32 (bytes-memory length prefix) + 4 (function selector).
     function _decodeGaslessLinkIndex(bytes memory transactionData) internal pure returns (uint256 index) {
         if (transactionData.length < 36) revert EnvelopeGaslessOperationNotApproved();
 

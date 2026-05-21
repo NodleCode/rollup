@@ -19,7 +19,7 @@ contract TestSenderWithdrawEther is Test {
 
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
     }
 
     function testSenderWithdrawEther(uint64 amount) public {
@@ -44,7 +44,7 @@ contract TestSenderWithdrawErc20 is Test {
     // apparently not possible to fuzz test in setUp() function?
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
         testToken = new ERC20Mock(); // contractType 1
 
         // Mint tokens for test accounts (larger than uint128)
@@ -78,7 +78,7 @@ contract TestSenderWithdrawErc721 is Test, ERC721Holder {
     // apparently not possible to fuzz test in setUp() function?
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
         testToken = new ERC721Mock(); // contractType 2
 
         // Mint token for test
@@ -110,7 +110,7 @@ contract TestSenderWithdrawErc1155 is Test, ERC1155Holder {
 
     function setUp() public {
         console.log("Setting up test");
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
         testToken = new ERC1155Mock();
 
         // Mint tokens

@@ -218,11 +218,7 @@ contract EnvelopeEIP712Test is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         EnvelopeLinks.FeeAuthorization memory feeAuth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: serviceFee,
-            gaslessFee: 0,
-            gaslessSponsored: false,
-            deadline: deadline,
-            signature: sig
+            serviceFee: serviceFee, gaslessFee: 0, gaslessSponsored: false, deadline: deadline, signature: sig
         });
 
         // Works on vault1

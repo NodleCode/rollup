@@ -30,8 +30,9 @@ library EnvelopeEIP712Utils {
         view
         returns (bytes32)
     {
-        bytes32 structHash =
-            keccak256(abi.encode(EnvelopeLinks(payable(vaultAddr)).MFA_APPROVAL_TYPEHASH(), index, recipient, deadline));
+        bytes32 structHash = keccak256(
+            abi.encode(EnvelopeLinks(payable(vaultAddr)).MFA_APPROVAL_TYPEHASH(), index, recipient, deadline)
+        );
         return _hashTypedData(vaultAddr, structHash);
     }
 

@@ -61,7 +61,7 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
 
     function setUp() public {
         LINK_PUBKEY20 = vm.addr(LINK_PRIV);
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
         erc20 = new ERC20Mock();
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
@@ -101,6 +101,53 @@ contract EnvelopeEdgeCasesTest is Test, ERC721Holder, ERC1155Holder {
         erc721.approve(address(vault), 1);
         vm.expectRevert(EnvelopeLinks.Erc721AmountMustBeOne.selector);
         vault.createLink(address(erc721), 2, 2, 1, LINK_PUBKEY20);
+    }
+
+    function test_RevertWhen_SingleErc20DepositReceivesEth() public {
+        erc20.mint(address(this), 100);
+        erc20.approve(address(vault), 100);
+
+        vm.expectRevert(EnvelopeLinks.EthNotAcceptedForNonEthLink.selector);
+        vault.createLink{value: 1 wei}(address(erc20), 1, 100, 0, LINK_PUBKEY20);
+    }
+
+    function test_RevertWhen_SingleErc721DepositReceivesEth() public {
+        erc721.mint(address(this), 1);
+        erc721.approve(address(vault), 1);
+
+        vm.expectRevert(EnvelopeLinks.EthNotAcceptedForNonEthLink.selector);
+        vault.createLink{value: 1 wei}(address(erc721), 2, 1, 1, LINK_PUBKEY20);
+    }
+
+    function test_RevertWhen_SingleErc1155DepositReceivesEth() public {
+        erc1155.mint(address(this), 1, 100, "");
+        erc1155.setApprovalForAll(address(vault), true);
+
+        vm.expectRevert(EnvelopeLinks.EthNotAcceptedForNonEthLink.selector);
+        vault.createLink{value: 1 wei}(address(erc1155), 3, 100, 1, LINK_PUBKEY20);
+    }
+
+    function test_RevertWhen_CreateLinkWithFeesNonEthDepositReceivesEth() public {
+        erc20.mint(address(this), 100);
+        erc20.approve(address(vault), 100);
+
+        EnvelopeLinks.LinkRequest memory request = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(erc20),
+            contractType: 1,
+            amount: 100,
+            tokenId: 0,
+            claimKey: LINK_PUBKEY20,
+            onBehalfOf: address(this),
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+        EnvelopeLinks.FeeAuthorization memory authorization = EnvelopeLinks.FeeAuthorization({
+            serviceFee: 0, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: ""
+        });
+
+        vm.expectRevert(EnvelopeLinks.EthNotAcceptedForNonEthLink.selector);
+        vault.createLinkWithFees{value: 1 wei}(request, authorization);
     }
 
     // ── EnvelopeLinks withdraw input validation ─────────────────────────────────

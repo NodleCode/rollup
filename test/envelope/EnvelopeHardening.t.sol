@@ -24,7 +24,7 @@ contract EnvelopeHardeningTest is Test, ERC721Holder, ERC1155Holder {
     address constant PUBKEY20 = address(0xaBC5211D86a01c2dD50797ba7B5b32e3C1167F9f);
 
     function setUp() public {
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
         erc721 = new ERC721Mock();
         erc1155 = new ERC1155Mock();
     }

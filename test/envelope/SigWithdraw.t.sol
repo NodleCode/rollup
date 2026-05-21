@@ -15,7 +15,7 @@ contract TestSigWithdrawEther is Test {
     receive() external payable {}
 
     function setUp() public {
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
         _pubkey20 = vm.addr(LINK_PRIV);
     }
 

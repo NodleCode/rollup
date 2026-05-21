@@ -37,7 +37,7 @@ contract EnvelopeSecurityTest is Test {
         feeToken = new ERC20Mock();
         fotToken = new FeeOnTransferERC20Mock();
 
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
         mfaVault = new EnvelopeLinks(mfaSigner, address(this), address(feeToken));
     }
 
@@ -90,6 +90,40 @@ contract EnvelopeSecurityTest is Test {
         vault.createRaffleLinks(address(fotToken), 1, amounts, linkPubKey);
     }
 
+    function test_H1_feeTokenMustTransferExactAmount() public {
+        EnvelopeLinks fotFeeVault = new EnvelopeLinks(mfaSigner, address(this), address(fotToken));
+        fotToken.mint(address(this), 10000);
+        fotToken.approve(address(fotFeeVault), 10000);
+
+        EnvelopeLinks.LinkRequest memory request = EnvelopeLinks.LinkRequest({
+            tokenAddress: address(0),
+            contractType: 0,
+            amount: 0.1 ether,
+            tokenId: 0,
+            claimKey: linkPubKey,
+            onBehalfOf: address(this),
+            withMFA: false,
+            recipient: address(0),
+            reclaimableAfter: 0
+        });
+
+        uint256 serviceFee = 1000;
+        bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
+            address(fotFeeVault), request, address(this), serviceFee, 0, false, 0
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(MFA_PRIV, digest);
+        EnvelopeLinks.FeeAuthorization memory feeAuth = EnvelopeLinks.FeeAuthorization({
+            serviceFee: serviceFee,
+            gaslessFee: 0,
+            gaslessSponsored: false,
+            deadline: 0,
+            signature: abi.encodePacked(r, s, v)
+        });
+
+        vm.expectRevert(EnvelopeLinks.FeeTokenTransferAmountMismatch.selector);
+        fotFeeVault.createLinkWithFees{value: 0.1 ether}(request, feeAuth);
+    }
+
     // ══════════════════════════════════════════════════════════════════════════════
     // H-2: Mutable mfaAuthorizer (key rotation)
     // ══════════════════════════════════════════════════════════════════════════════
@@ -133,24 +167,14 @@ contract EnvelopeSecurityTest is Test {
     // M-1: Guard against mfaAuthorizer == address(0)
     // ══════════════════════════════════════════════════════════════════════════════
 
-    function test_M1_claimWithMfaRevertsWhenAuthorizerIsZero() public {
-        // vault has mfaAuthorizer == address(0).
-        uint256 idx = vault.createMFALink{value: 1 ether}(address(0), 0, 1 ether, 0, linkPubKey);
-        bytes memory sig = _signOpen(address(vault), idx, ALICE);
-
-        vm.expectRevert(EnvelopeLinks.MfaAuthorizerIsZero.selector);
-        vault.claimWithMFA(idx, ALICE, sig, hex"", 0);
+    function test_M1_constructorRejectsZeroAuthorizer() public {
+        vm.expectRevert(EnvelopeLinks.ZeroMfaAuthorizer.selector);
+        new EnvelopeLinks(address(0), address(this), address(0));
     }
 
-    function test_M1_isValidGaslessOperationReturnsFalseWhenAuthorizerZero() public {
-        uint256 idx = vault.createMFALink{value: 1 ether}(address(0), 0, 1 ether, 0, linkPubKey);
-        bytes memory sig = _signOpen(address(vault), idx, ALICE);
-        bytes memory mfaSig = hex"00";
-
-        bytes memory callData = abi.encodeCall(EnvelopeLinks.claimWithMFA, (idx, ALICE, sig, mfaSig, 0));
-
-        bool valid = vault.isValidGaslessOperation(ALICE, callData);
-        assertFalse(valid, "Should reject when mfaAuthorizer is zero");
+    function test_M1_setMfaAuthorizerRejectsZero() public {
+        vm.expectRevert(EnvelopeLinks.ZeroMfaAuthorizer.selector);
+        mfaVault.setMfaAuthorizer(address(0));
     }
 
     // ══════════════════════════════════════════════════════════════════════════════

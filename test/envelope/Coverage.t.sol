@@ -217,24 +217,12 @@ contract EnvelopeCoverageTest is Test {
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
-    // withdrawFees — ETH accumulated fees
+    // withdrawFees — ERC-20 (feeToken) only; ETH fees are not supported
     // ══════════════════════════════════════════════════════════════════════════════
-
-    function test_withdrawFees_eth() public {
-        // Seed accumulatedFees[address(0)] with ETH balance (slot 7 for accumulatedFees mapping)
-        bytes32 slot = keccak256(abi.encode(address(0), uint256(7)));
-        vm.store(address(vault), slot, bytes32(uint256(0.5 ether)));
-        vm.deal(address(vault), 0.5 ether);
-
-        uint256 ownerBalBefore = address(this).balance;
-        vault.withdrawFees(address(0));
-        assertEq(address(this).balance, ownerBalBefore + 0.5 ether);
-        assertEq(vault.accumulatedFees(address(0)), 0);
-    }
 
     function test_RevertIf_withdrawFees_noFees() public {
         vm.expectRevert(EnvelopeLinks.NoFeesToWithdraw.selector);
-        vault.withdrawFees(address(feeToken));
+        vault.withdrawFees();
     }
 
     function test_withdrawFees_erc20() public {
@@ -252,26 +240,22 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0.1 ether, 0.05 ether, false, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0.1 ether,
-            gaslessFee: 0.05 ether,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0.1 ether, gaslessFee: 0.05 ether, gaslessSponsored: false, deadline: 0, signature: authSig
         });
 
         vm.prank(SENDER);
         vault.createLinkWithFees{value: 1 ether}(req, auth);
 
         uint256 ownerBalBefore = feeToken.balanceOf(address(this));
-        vault.withdrawFees(address(feeToken));
+        vault.withdrawFees();
         assertEq(feeToken.balanceOf(address(this)), ownerBalBefore + 0.15 ether);
-        assertEq(vault.accumulatedFees(address(feeToken)), 0);
+        assertEq(vault.accumulatedFees(), 0);
     }
 
     function test_RevertIf_withdrawFees_nonOwner() public {
         vm.prank(OTHER);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, OTHER));
-        vault.withdrawFees(address(feeToken));
+        vault.withdrawFees();
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -303,7 +287,11 @@ contract EnvelopeCoverageTest is Test {
     }
 
     function test_isValidGaslessOperation_unknownSelector() public view {
-        assertFalse(vault.isValidGaslessOperation(RECIPIENT, hex"deadbeef0000000000000000000000000000000000000000000000000000000000000000"));
+        assertFalse(
+            vault.isValidGaslessOperation(
+                RECIPIENT, hex"deadbeef0000000000000000000000000000000000000000000000000000000000000000"
+            )
+        );
     }
 
     function test_isValidGaslessOperation_reclaim_indexOutOfBounds() public view {
@@ -342,11 +330,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0, 0.01 ether, false, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0,
-            gaslessFee: 0.01 ether,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0, gaslessFee: 0.01 ether, gaslessSponsored: false, deadline: 0, signature: authSig
         });
         vm.prank(SENDER);
         vault.createLinkWithFees{value: 1 ether}(req, auth);
@@ -401,11 +385,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0, 0.01 ether, false, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0,
-            gaslessFee: 0.01 ether,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0, gaslessFee: 0.01 ether, gaslessSponsored: false, deadline: 0, signature: authSig
         });
         vm.prank(SENDER);
         uint256 idx = vault.createLinkWithFees{value: 1 ether}(req, auth);
@@ -462,7 +442,8 @@ contract EnvelopeCoverageTest is Test {
         bool[] memory mfas = new bool[](2);
 
         vm.prank(SENDER);
-        uint256[] memory indexes = vault.createCustomLinks{value: 0.5 ether}(tokens, types, amounts, tokenIds, keys, mfas);
+        uint256[] memory indexes =
+            vault.createCustomLinks{value: 0.5 ether}(tokens, types, amounts, tokenIds, keys, mfas);
 
         assertEq(indexes.length, 2);
         assertEq(vault.getLinkAsset(indexes[0]).amount, 0.5 ether);
@@ -538,7 +519,7 @@ contract EnvelopeCoverageTest is Test {
         assertEq(vault.getLinkAsset(indexes[0]).amount, 1 ether);
         assertEq(vault.getLinkAsset(indexes[1]).amount, 50);
         assertEq(vault.getLinkParties(indexes[1]).recipient, RECIPIENT);
-        assertEq(vault.accumulatedFees(address(feeToken)), 0.04 ether);
+        assertEq(vault.accumulatedFees(), 0.04 ether);
     }
 
     function test_RevertIf_createCustomLinksWithFees_lengthMismatch() public {
@@ -565,11 +546,7 @@ contract EnvelopeCoverageTest is Test {
         });
         EnvelopeLinks.FeeAuthorization[] memory auths = new EnvelopeLinks.FeeAuthorization[](1);
         auths[0] = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0,
-            gaslessFee: 0,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: ""
+            serviceFee: 0, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: ""
         });
 
         vm.prank(SENDER);
@@ -592,11 +569,7 @@ contract EnvelopeCoverageTest is Test {
         });
         EnvelopeLinks.FeeAuthorization[] memory auths = new EnvelopeLinks.FeeAuthorization[](1);
         auths[0] = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0,
-            gaslessFee: 0,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: ""
+            serviceFee: 0, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: ""
         });
 
         vm.prank(SENDER);
@@ -748,11 +721,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0.01 ether, 0, false, deadline);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0.01 ether,
-            gaslessFee: 0,
-            gaslessSponsored: false,
-            deadline: deadline,
-            signature: authSig
+            serviceFee: 0.01 ether, gaslessFee: 0, gaslessSponsored: false, deadline: deadline, signature: authSig
         });
 
         vm.warp(deadline + 1);
@@ -815,17 +784,13 @@ contract EnvelopeCoverageTest is Test {
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
-    // Claim with empty signature (claimKey == address(0))
+    // H-1: createLink with zero claimKey must revert
     // ══════════════════════════════════════════════════════════════════════════════
 
-    function test_claim_noClaimKey() public {
-        // Create a link with claimKey = address(0) — anyone can claim without signature
+    function test_RevertIf_createWithZeroClaimKey() public {
         vm.prank(SENDER);
-        uint256 idx = vault.createLink{value: 1 ether}(address(0), 0, 1 ether, 0, address(0));
-
-        uint256 balBefore = RECIPIENT.balance;
-        vault.claim(idx, RECIPIENT, "");
-        assertEq(RECIPIENT.balance, balBefore + 1 ether);
+        vm.expectRevert(EnvelopeLinks.ZeroClaimKey.selector);
+        vault.createLink{value: 1 ether}(address(0), 0, 1 ether, 0, address(0));
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -946,11 +911,7 @@ contract EnvelopeCoverageTest is Test {
         bytes memory authSig = _signFeeAuthForVault(address(vaultNoFeeToken), req, SENDER, 0.01 ether, 0, false, 0);
 
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0.01 ether,
-            gaslessFee: 0,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0.01 ether, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: authSig
         });
 
         vm.prank(SENDER);
@@ -1022,11 +983,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0, 0.01 ether, false, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0,
-            gaslessFee: 0.01 ether,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0, gaslessFee: 0.01 ether, gaslessSponsored: false, deadline: 0, signature: authSig
         });
         vm.prank(SENDER);
         return vault.createLinkWithFees{value: amount}(req, auth);
@@ -1046,11 +1003,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0, 0.01 ether, false, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0,
-            gaslessFee: 0.01 ether,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0, gaslessFee: 0.01 ether, gaslessSponsored: false, deadline: 0, signature: authSig
         });
         vm.prank(SENDER);
         return vault.createLinkWithFees{value: amount}(req, auth);
@@ -1070,39 +1023,10 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0, 0, true, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0,
-            gaslessFee: 0,
-            gaslessSponsored: true,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0, gaslessFee: 0, gaslessSponsored: true, deadline: 0, signature: authSig
         });
         vm.prank(SENDER);
         return vault.createLinkWithFees{value: amount}(req, auth);
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════════
-    // withdrawFees — ETH path where owner contract rejects the transfer
-    // Scenario: Owner is a multisig/governance contract that cannot receive ETH
-    // ══════════════════════════════════════════════════════════════════════════════
-
-    function test_RevertIf_withdrawFees_ethRejected() public {
-        // Deploy a vault owned by a contract that rejects ETH
-        EthRejecter rejecter = new EthRejecter();
-        EnvelopeLinks rejVault = new EnvelopeLinks(BACKEND_AUTHORIZER, address(rejecter), address(feeToken));
-
-        // Create a link with ETH service fees so that ETH accumulates in the vault
-        // Since fees are ERC-20 (feeToken), we need to get ETH into accumulatedFees.
-        // withdrawFees(address(0)) withdraws ETH accumulated fees.
-        // Seed directly: we can call withdrawFees with ETH balance.
-        vm.deal(address(rejVault), 1 ether);
-        // Write to the accumulatedFees[address(0)] storage slot
-        // accumulatedFees is at storage slot 7 in the contract layout
-        bytes32 slot = keccak256(abi.encode(address(0), uint256(7)));
-        vm.store(address(rejVault), slot, bytes32(uint256(1 ether)));
-
-        vm.prank(address(rejecter));
-        vm.expectRevert(EnvelopeLinks.EthTransferFailed.selector);
-        rejVault.withdrawFees(address(0));
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -1124,11 +1048,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0.05 ether, 0, false, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0.05 ether,
-            gaslessFee: 0,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0.05 ether, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: authSig
         });
 
         vm.prank(SENDER);
@@ -1155,11 +1075,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0.02 ether, 0, false, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0.02 ether,
-            gaslessFee: 0,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0.02 ether, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: authSig
         });
 
         vm.prank(SENDER);
@@ -1277,7 +1193,8 @@ contract EnvelopeCoverageTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(LINK_PRIVKEY, digest);
         bytes memory wrongMfaSig = abi.encodePacked(r, s, v);
 
-        bytes memory data = abi.encodeCall(EnvelopeLinks.claimWithMFA, (idx, RECIPIENT, claimSig, wrongMfaSig, deadline));
+        bytes memory data =
+            abi.encodeCall(EnvelopeLinks.claimWithMFA, (idx, RECIPIENT, claimSig, wrongMfaSig, deadline));
         assertFalse(vault.isValidGaslessOperation(RECIPIENT, data));
     }
 
@@ -1344,11 +1261,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0, 0.01 ether, false, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0,
-            gaslessFee: 0.01 ether,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0, gaslessFee: 0.01 ether, gaslessSponsored: false, deadline: 0, signature: authSig
         });
         vm.prank(SENDER);
         uint256 idx = vault.createLinkWithFees{value: 1 ether}(req, auth);
@@ -1422,11 +1335,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0, 0, true, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0,
-            gaslessFee: 0,
-            gaslessSponsored: true,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0, gaslessFee: 0, gaslessSponsored: true, deadline: 0, signature: authSig
         });
         vm.prank(SENDER);
         uint256 idx = vault.createLinkWithFees{value: 1 ether}(req, auth);
@@ -1459,11 +1368,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0.01 ether, 0, false, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0.01 ether,
-            gaslessFee: 0,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0.01 ether, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: authSig
         });
 
         vm.prank(SENDER);
@@ -1489,11 +1394,7 @@ contract EnvelopeCoverageTest is Test {
         });
         bytes memory authSig = _signFeeAuth(req, SENDER, 0.01 ether, 0, false, 0);
         EnvelopeLinks.FeeAuthorization memory auth = EnvelopeLinks.FeeAuthorization({
-            serviceFee: 0.01 ether,
-            gaslessFee: 0,
-            gaslessSponsored: false,
-            deadline: 0,
-            signature: authSig
+            serviceFee: 0.01 ether, gaslessFee: 0, gaslessSponsored: false, deadline: 0, signature: authSig
         });
 
         vm.prank(SENDER);
@@ -1668,9 +1569,8 @@ contract EnvelopeCoverageTest is Test {
         mfas[1] = false;
 
         vm.prank(SENDER);
-        uint256[] memory indexes = vault.createCustomLinks{value: 0.5 ether}(
-            tokenAddresses, types, amounts, tokenIds, keys, mfas
-        );
+        uint256[] memory indexes =
+            vault.createCustomLinks{value: 0.5 ether}(tokenAddresses, types, amounts, tokenIds, keys, mfas);
 
         assertEq(indexes.length, 2);
         assertEq(vault.getLinkAsset(indexes[0]).contractType, 0);
@@ -1686,9 +1586,7 @@ contract EnvelopeCoverageTest is Test {
     function test_onERC1155BatchReceived_internalTransfer() public {
         // The onERC1155BatchReceived success path is only reachable when operator == vault address.
         // We can call it directly to verify the selector is returned.
-        bytes4 result = vault.onERC1155BatchReceived(
-            address(vault), SENDER, new uint256[](1), new uint256[](1), ""
-        );
+        bytes4 result = vault.onERC1155BatchReceived(address(vault), SENDER, new uint256[](1), new uint256[](1), "");
         assertEq(result, vault.onERC1155BatchReceived.selector);
     }
 }

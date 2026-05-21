@@ -71,13 +71,7 @@ contract EnvelopeLinksGaslessTest is Test {
         uint256 deadline
     ) internal view returns (bytes memory) {
         bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
-            address(vault),
-            request,
-            feePayer,
-            serviceFee,
-            gaslessFee,
-            gaslessSponsored,
-            deadline
+            address(vault), request, feePayer, serviceFee, gaslessFee, gaslessSponsored, deadline
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BACKEND_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
@@ -153,7 +147,7 @@ contract EnvelopeLinksGaslessTest is Test {
         assertEq(fees.gaslessFee, gaslessFee);
         assertFalse(status.gaslessSponsored);
         assertEq(feeToken.balanceOf(address(vault)), serviceFee + gaslessFee);
-        assertEq(vault.accumulatedFees(address(feeToken)), serviceFee + gaslessFee);
+        assertEq(vault.accumulatedFees(), serviceFee + gaslessFee);
     }
 
     function test_SponsoredGaslessAuthorizationApprovesPaymasterWithoutGaslessFee() public {
@@ -204,7 +198,7 @@ contract EnvelopeLinksGaslessTest is Test {
         assertEq(fees.gaslessFee, 0);
         assertFalse(status.gaslessSponsored);
         assertEq(feeToken.balanceOf(address(vault)), 0);
-        assertEq(vault.accumulatedFees(address(feeToken)), 0);
+        assertEq(vault.accumulatedFees(), 0);
     }
 
     function test_ZeroFeeAuthorizationWithoutSignatureRemainsOpen() public {

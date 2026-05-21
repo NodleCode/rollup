@@ -30,7 +30,7 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         linkPubKey = vm.addr(LINK_PRIVKEY);
         backendAuthorizer = vm.addr(BACKEND_PRIVKEY);
 
-        vault = new EnvelopeLinks(address(0), address(this), address(0));
+        vault = new EnvelopeLinks(address(0xBA), address(this), address(0));
         testToken = new ERC20Mock();
         feeToken = new ERC20Mock();
         feeVault = new EnvelopeLinks(backendAuthorizer, address(this), address(feeToken));
@@ -182,7 +182,7 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         assertEq(secondStatus.requiresMFA, true);
         assertEq(secondParties.recipient, RECIPIENT);
         assertEq(feeToken.balanceOf(address(feeVault)), 0.1 ether);
-        assertEq(feeVault.accumulatedFees(address(feeToken)), 0.1 ether);
+        assertEq(feeVault.accumulatedFees(), 0.1 ether);
 
         bytes memory withdrawalSig = _signWithdrawal(feeVault, depositIndexes[0], RECIPIENT, feeVault.OPEN_CLAIM_MODE());
         bytes memory callData = abi.encodeCall(EnvelopeLinks.claim, (depositIndexes[0], RECIPIENT, withdrawalSig));
@@ -411,13 +411,7 @@ contract EnvelopeBatchingTest is Test, ERC1155Holder, ERC721Holder {
         uint256 deadline
     ) internal view returns (bytes memory) {
         bytes32 digest = EnvelopeFeeAuthTestUtils.feeAuthorizationDigest(
-            address(targetVault),
-            request,
-            feePayer,
-            serviceFee,
-            gaslessFee,
-            gaslessSponsored,
-            deadline
+            address(targetVault), request, feePayer, serviceFee, gaslessFee, gaslessSponsored, deadline
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BACKEND_PRIVKEY, digest);
         return abi.encodePacked(r, s, v);
