@@ -100,3 +100,67 @@ When deploying a new contract type, add its mapping to `CONTRACT_SOURCE_MAP` in 
 ### Automated (via deploy script)
 
 `ops/deploy_swarm_contracts_zksync.sh` calls `verify_zksync_contracts.py` automatically after deployment. No manual steps needed for the standard swarm contracts.
+
+## Hardhat-Based Deployment & Verification (Envelope Contracts)
+
+### When to Use Hardhat Instead of Forge
+
+Use Hardhat when a contract triggers `stack-too-deep` without `viaIR`, because:
+
+- The ZkSync verifier with zksolc ≤1.5.1 does **not** pass `viaIR` through to solc.
+- The ZkSync verifier with zksolc ≥1.5.13 passes `viaIR` but **crashes** on complex contracts ("internal error").
+- Hardhat with zksolc v1.5.1 (no viaIR) is the only path that produces verifiable bytecode.
+
+### Avoiding stack-too-deep Without viaIR
+
+If a function has too many local variables or parameters in a single `abi.encode` call, split it:
+
+```solidity
+// BEFORE (15 params — triggers stack-too-deep without viaIR):
+keccak256(abi.encode(TYPEHASH, a, b, c, d, e, f, g, h, i, j, k, l, m, n))
+
+// AFTER (split into 8+7 — compiles without viaIR):
+keccak256(abi.encodePacked(
+    abi.encode(TYPEHASH, a, b, c, d, e, f, g),
+    abi.encode(h, i, j, k, l, m, n)
+))
+```
+
+This works because `abi.encode` pads each value to 32 bytes, so `abi.encodePacked(abi.encode(a,b), abi.encode(c,d))` produces identical output to `abi.encode(a,b,c,d)`.
+
+### Verification for Hardhat-Compiled Contracts
+
+The Hardhat verification plugin (`@matterlabs/hardhat-zksync-verify`) has a bug (HH700 artifact not found). Use `ops/verify_hardhat_zksync.py` instead:
+
+1. Reads `artifacts-zk/build-info/*.json` (Hardhat's compilation output).
+2. Performs BFS from the contract source to find all transitive imports.
+3. Builds a **filtered** standard JSON containing only needed sources (avoids unrelated compilation errors in the verifier).
+4. Submits to the ZkSync verification API and polls for result.
+
+```bash
+# Verify after Hardhat deployment:
+python3 ops/verify_hardhat_zksync.py \
+  --address 0xff735c70f33ca4eF1768F527B5f230b76A61A89b \
+  --contract src/envelope/EnvelopeLinks.sol:EnvelopeLinks \
+  --constructor-args "$(cast abi-encode 'constructor(address,address,address)' 0xMFA 0xOwner 0xFeeToken)" \
+  --address 0x5396e4F349D863C0AD577bd9E752293524460C36 \
+  --contract src/paymasters/EnvelopePaymaster.sol:EnvelopePaymaster \
+  --constructor-args "$(cast abi-encode 'constructor(address,address,address)' 0xAdmin 0xWithdrawer 0xVault)"
+```
+
+### Envelope Deployment (Full Workflow)
+
+```bash
+# One-command deploy + verify:
+./ops/deploy_envelope_zksync.sh mainnet
+
+# Or verify-only (if deploy already succeeded):
+./ops/deploy_envelope_zksync.sh mainnet --verify-only \
+  --vault 0xVaultAddr --paymaster 0xPaymasterAddr
+```
+
+Key facts:
+
+- Deployed via `hardhat-deploy/DeployEnvelope.ts` (auto-selects `.env-prod` on mainnet).
+- `EnvelopePaymaster.envelopeLinks` is **immutable** — if vault address changes, paymaster must be redeployed.
+- The `FEE_AUTHORIZATION_TYPEHASH` digest uses a split `abi.encode` (see `_feeAuthorizationDigest`) — this is intentional to avoid viaIR.

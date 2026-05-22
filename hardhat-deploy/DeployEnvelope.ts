@@ -6,7 +6,10 @@ import "@matterlabs/hardhat-zksync-verify/dist/src/type-extensions";
 import * as dotenv from "dotenv";
 import { deployContract } from "./utils";
 
-dotenv.config({ path: ".env-test" });
+// Load .env-prod for mainnet, .env-test otherwise
+const envFile =
+  process.env.HARDHAT_NETWORK === "zkSyncMainnet" ? ".env-prod" : ".env-test";
+dotenv.config({ path: envFile });
 
 /**
  * Deploys the Envelope (vendored Peanut V4.4) suite on ZkSync Era.
