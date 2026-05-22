@@ -217,6 +217,8 @@ constructor(address mfaAuthorizer, address owner, address feeToken)
 
 For ERC-20 deposits, the vault measures the actual `balanceOf` delta rather than trusting the requested `amount`. This prevents insolvency when fee-on-transfer or rebasing tokens are deposited. The recorded `link.asset.amount` reflects what the vault actually received and can transfer back.
 
+The configured `feeToken` is stricter: fee collection requires the vault's balance delta to exactly equal `serviceFee + gaslessFee`. Fee-on-transfer or rebasing fee tokens are rejected at link creation, so production deployments must configure a standard non-fee ERC-20 as `ENVELOPE_FEE_TOKEN`.
+
 For raffle-style links (which have per-link variable amounts), a fee-on-transfer token will cause the deposit to revert because the vault asserts the received total matches the requested total.
 
 ### Fee Authorization Replay Protection

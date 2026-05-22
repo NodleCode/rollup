@@ -144,7 +144,6 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
     /// @notice Tracks consumed fee authorizations to prevent replay (keyed by the EIP-712 digest).
     mapping(bytes32 => bool) public usedFeeAuthorizations;
 
-
     // events
     event LinkCreated(uint256 indexed _index, uint8 indexed _contractType, uint256 _amount, address indexed _creator);
     event LinkRedeemed(
@@ -734,24 +733,31 @@ contract EnvelopeLinks is IERC721Receiver, IERC1155Receiver, ReentrancyGuard, Ow
         FeeAuthorization calldata _feeAuthorization,
         address _feePayer
     ) internal view returns (bytes32) {
+        // Split abi.encode into two parts to avoid stack-too-deep without viaIR.
+        // abi.encodePacked(abi.encode(a..h), abi.encode(i..n)) == abi.encode(a..n)
+        // because abi.encode already pads each value to 32 bytes.
         return _hashTypedDataV4(
             keccak256(
-                abi.encode(
-                    FEE_AUTHORIZATION_TYPEHASH,
-                    _feePayer,
-                    _request.tokenAddress,
-                    _request.contractType,
-                    _request.amount,
-                    _request.tokenId,
-                    _request.claimKey,
-                    _request.onBehalfOf,
-                    _request.withMFA,
-                    _request.recipient,
-                    _request.reclaimableAfter,
-                    _feeAuthorization.serviceFee,
-                    _feeAuthorization.gaslessFee,
-                    _feeAuthorization.gaslessSponsored,
-                    _feeAuthorization.deadline
+                abi.encodePacked(
+                    abi.encode(
+                        FEE_AUTHORIZATION_TYPEHASH,
+                        _feePayer,
+                        _request.tokenAddress,
+                        _request.contractType,
+                        _request.amount,
+                        _request.tokenId,
+                        _request.claimKey,
+                        _request.onBehalfOf
+                    ),
+                    abi.encode(
+                        _request.withMFA,
+                        _request.recipient,
+                        _request.reclaimableAfter,
+                        _feeAuthorization.serviceFee,
+                        _feeAuthorization.gaslessFee,
+                        _feeAuthorization.gaslessSponsored,
+                        _feeAuthorization.deadline
+                    )
                 )
             )
         );
