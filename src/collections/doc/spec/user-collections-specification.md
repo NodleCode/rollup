@@ -721,11 +721,21 @@ The operator account uses the existing `BondTreasuryPaymaster` for L2 gas. The o
 
 ### 9.4 Upgrade & Rollback
 
+All three on-chain operations below are driven by the orchestration wrapper
+`ops/upgrade_collection_factory_zksync.sh <testnet|mainnet> <ACTION> [--broadcast]`
+(ACTION ∈ `UPGRADE_FACTORY` / `SET_IMPL_721` / `SET_IMPL_1155`). The wrapper
+runs the `--zksync` compile (with the L1-file move/restore), the artifact gates
+(factoryDeps for the factory; no-upgrade-selector for collection impls), the
+**pre-upgrade storage-layout diff** against the committed baseline (it refuses to
+broadcast a non-append-only change without `LAYOUT_REVIEWED=YES` / interactive
+acknowledgement), an admin-key pre-check, the mainnet confirmation guard, and the
+post-broadcast asserts (slot/role/pointer preservation) plus source verification.
+
 | Operation                            | Procedure                                                                                                     |
 | :----------------------------------- | :------------------------------------------------------------------------------------------------------------ |
-| Upgrade factory logic                | Run pre-upgrade checklist (below), then admin calls `factory.upgradeTo(newImpl)` (UUPS)                       |
-| Ship a new ERC-721 template          | Deploy new implementation; admin calls `setImplementation721(newImpl)`; affects *future* collections only     |
-| Ship a new ERC-1155 template         | Deploy new implementation; admin calls `setImplementation1155(newImpl)`; affects *future* collections only    |
+| Upgrade factory logic                | Run pre-upgrade checklist (below), then `upgrade_collection_factory_zksync.sh <net> UPGRADE_FACTORY --broadcast` (admin key); wraps `upgradeToAndCall` (UUPS) |
+| Ship a new ERC-721 template          | `upgrade_collection_factory_zksync.sh <net> SET_IMPL_721 --broadcast`; wraps `setImplementation721`; affects *future* collections only |
+| Ship a new ERC-1155 template         | `upgrade_collection_factory_zksync.sh <net> SET_IMPL_1155 --broadcast`; wraps `setImplementation1155`; affects *future* collections only |
 | Rotate operator key                  | Admin calls `revokeRole(OPERATOR_ROLE, oldKey)` then `grantRole(OPERATOR_ROLE, newKey)`                       |
 | Pause new creations                  | Admin revokes all addresses from `OPERATOR_ROLE`. Existing creations unaffected; new requests revert          |
 | Rollback a faulty template           | Admin calls `setImplementation*` pointing back to the previous implementation; affects future collections only|
@@ -830,6 +840,8 @@ script/
   UpgradeCollectionFactory.s.sol
 ops/
   deploy_collection_factory_zksync.sh    (mirrors deploy_swarm_contracts_zksync.sh)
+  upgrade_collection_factory_zksync.sh   (UPGRADE_FACTORY / SET_IMPL_721 / SET_IMPL_1155 wrapper; §9.4)
+  verify_zksync_contracts.py             (source-code verification helper)
 ```
 
 License header on every Solidity file: `// SPDX-License-Identifier: BSD-3-Clause-Clear`.

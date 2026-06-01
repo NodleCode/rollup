@@ -50,12 +50,14 @@ import {UserCollection1155} from "../src/collections/UserCollection1155.sol";
  *   ACTION=SET_IMPL_1155 FACTORY_PROXY=0x... \
  *       forge script script/UpgradeCollectionFactory.s.sol --rpc-url $RPC_URL --zksync --broadcast --slow
  *
- *   COMPILE PREREQUISITE: `forge build/script --zksync` compiles the whole tree,
- *   which includes L1-only files (e.g. `SwarmRegistryL1Upgradeable`) that zksolc
- *   cannot compile. The deploy flow handles this via the temp move/restore in
- *   `ops/deploy_collection_factory_zksync.sh`; until a dedicated upgrade wrapper
- *   exists, apply the same move/restore manually (or reuse that script's
- *   `move_l1_contracts`/`restore_l1_contracts`) before running this upgrade.
+ *   RECOMMENDED: run via the orchestration wrapper
+ *   `ops/upgrade_collection_factory_zksync.sh <testnet|mainnet> <ACTION> [--broadcast]`,
+ *   which handles the `--zksync` compile (including the temp move/restore of
+ *   L1-only files like `SwarmRegistryL1Upgradeable` that zksolc cannot compile),
+ *   the pre-upgrade storage-layout diff against the committed baseline, the
+ *   admin-key check, the mainnet guard, and the post-broadcast asserts +
+ *   source verification. Invoking this Forge script directly requires doing
+ *   that move/restore yourself first.
  *
  * Environment Variables:
  *   - DEPLOYER_PRIVATE_KEY: Private key of the address holding `DEFAULT_ADMIN_ROLE` on the factory proxy.
