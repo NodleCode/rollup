@@ -146,6 +146,13 @@
     "remy",
     "aabbcc",
     "mfas",
-    "reqs"
+    "reqs",
+    "impls",
+    "zkout",
+    "pushable",
+    "remappings",
+    "staticcall",
+    "agentic",
+    "delegatecalls"
   ]
 }
