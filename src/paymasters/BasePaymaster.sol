@@ -42,7 +42,12 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         bytes32, /*_txHash*/
         bytes32, /*_suggestedSignedHash*/
         Transaction calldata transaction
-    ) external payable returns (bytes4 magic, bytes memory context) {
+    )
+        external
+        payable
+        virtual
+        returns (bytes4 magic, bytes memory context)
+    {
         _mustBeBootloader();
 
         // By default we consider the transaction as accepted.
@@ -61,7 +66,7 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         address userAddress = address(uint160(transaction.from));
 
         if (paymasterInputSelector == IPaymasterFlow.general.selector) {
-            _validateAndPayGeneralFlow(userAddress, destAddress, requiredETH);
+            _validateAndPayGeneralFlow(userAddress, destAddress, requiredETH, transaction.data);
         } else if (paymasterInputSelector == IPaymasterFlow.approvalBased.selector) {
             (address token, uint256 minimalAllowance, bytes memory data) =
                 abi.decode(transaction.paymasterInput[4:], (address, uint256, bytes));
@@ -87,7 +92,10 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         bytes32, /*_suggestedSignedHash*/
         ExecutionResult, /*_txResult*/
         uint256 /*_maxRefundedGas*/
-    ) external payable {
+    )
+        external
+        payable
+    {
         _mustBeBootloader();
 
         // Refunds are not supported yet.
@@ -111,7 +119,10 @@ abstract contract BasePaymaster is IPaymaster, AccessControl {
         }
     }
 
-    function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) internal virtual;
+    /// @dev Subclasses should validate `from`, `to`, and decoded `transactionData` before ETH is paid.
+    function _validateAndPayGeneralFlow(address from, address to, uint256 requiredETH, bytes memory transactionData)
+        internal
+        virtual;
 
     /// @dev Subclasses implementing this flow MUST verify that the token allowance
     /// from the user to this paymaster is at least `tokenAmount` before calling

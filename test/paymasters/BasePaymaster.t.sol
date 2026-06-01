@@ -3,10 +3,7 @@
 pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
-import {
-    BasePaymaster,
-    BOOTLOADER_FORMAL_ADDRESS
-} from "../../src/paymasters/BasePaymaster.sol";
+import {BasePaymaster, BOOTLOADER_FORMAL_ADDRESS} from "../../src/paymasters/BasePaymaster.sol";
 import {IPaymasterFlow} from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymasterFlow.sol";
 import {Transaction} from "lib/era-contracts/l2-contracts/contracts/L2ContractHelper.sol";
 import {ExecutionResult} from "lib/era-contracts/l2-contracts/contracts/interfaces/IPaymaster.sol";
@@ -16,7 +13,7 @@ contract MockPaymaster is BasePaymaster {
 
     constructor(address admin, address withdrawer) BasePaymaster(admin, withdrawer) {}
 
-    function _validateAndPayGeneralFlow(address, address, uint256) internal override {
+    function _validateAndPayGeneralFlow(address, address, uint256, bytes memory) internal override {
         emit MockPaymasterCalled();
     }
 
@@ -105,8 +102,9 @@ contract BasePaymasterTest is Test {
     }
 
     function test_RevertIf_notCalledByBootloader() public {
-        Transaction memory txn =
-            _buildTransaction(charlie, alice, 100_000, 1 gwei, abi.encodeWithSelector(IPaymasterFlow.general.selector, ""));
+        Transaction memory txn = _buildTransaction(
+            charlie, alice, 100_000, 1 gwei, abi.encodeWithSelector(IPaymasterFlow.general.selector, "")
+        );
 
         vm.prank(charlie);
         vm.expectRevert(BasePaymaster.AccessRestrictedToBootloader.selector);
