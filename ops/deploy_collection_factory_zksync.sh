@@ -45,9 +45,28 @@
 #   - N_FACTORY_ADMIN:      Multisig that will hold DEFAULT_ADMIN_ROLE on the factory
 #   - N_FACTORY_OPERATOR:   Backend service address that will hold OPERATOR_ROLE
 #
+# OPTIONAL ENVIRONMENT VARIABLES:
+# -------------------------------
+#   - L2_RPC:               Override the default zkSync RPC URL for the network
+#   - OPERATOR_PRIVATE_KEY: Key holding OPERATOR_ROLE, used to sign the post-deploy
+#                           createCollection721 smoke test. If unset, the smoke
+#                           test runs only when the deployer EOA is the operator.
+#   - COMPILER_VERSION:     solc version passed to source verification (default 0.8.26)
+#   - ZKSOLC_VERSION:       zksolc version passed to source verification (default v1.5.15)
+#   - CONFIRM_MAINNET:      Set to "YES" to skip the interactive mainnet confirmation
+#                           prompt (for non-interactive/CI mainnet runs)
+#   - RUN_MAINNET_SMOKE_TEST: Set to "true" to allow the smoke test to create a
+#                           (permanent) collection on mainnet; default skips it
+#
+# NOTE: For mainnet, prefer a keystore/--account over a raw private key in the
+# env file — raw keys passed to `cast --private-key` are visible in `ps`.
+#
 # =============================================================================
 
-set -e  # Exit on any error
+# Exit on any error, and make pipelines fail if ANY stage fails (not just the
+# last). Without pipefail, `forge ... | tee log` would mask a failed deploy
+# because tee's exit status (0) would win. See H1 in the deploy-script review.
+set -eo pipefail
 
 # =============================================================================
 # Configuration
@@ -87,6 +106,16 @@ log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Normalize an address or a 32-byte left-padded slot word to a comparable form:
+# lowercase, 0x-prefixed, low 20 bytes only. Lets us compare `cast storage`
+# output (padded) against a plain address regardless of case/padding.
+_norm_addr() {
+  local hex="${1#0x}"
+  hex=$(echo "$hex" | tr '[:upper:]' '[:lower:]')
+  # Keep the rightmost 40 hex chars (20 bytes).
+  echo "0x${hex: -40}"
+}
 
 # =============================================================================
 # Pre-flight Checks
@@ -138,6 +167,23 @@ preflight_checks() {
 
   if [[ "$DEPLOYER_PRIVATE_KEY" != 0x* ]]; then
     export DEPLOYER_PRIVATE_KEY="0x${DEPLOYER_PRIVATE_KEY}"
+  fi
+
+  # Mainnet guardrail: require explicit confirmation before an irreversible
+  # broadcast. Set CONFIRM_MAINNET=YES to bypass for non-interactive runs.
+  if [ "$NETWORK" = "mainnet" ] && [ "$BROADCAST" = "--broadcast" ]; then
+    if [ "${CONFIRM_MAINNET:-}" = "YES" ]; then
+      log_warning "CONFIRM_MAINNET=YES set — proceeding with mainnet broadcast without prompt."
+    else
+      log_warning "About to deploy to ZkSync MAINNET (irreversible)."
+      log_warning "  Admin:    $N_FACTORY_ADMIN"
+      log_warning "  Operator: $N_FACTORY_OPERATOR"
+      read -r -p "Type 'YES' to confirm mainnet deployment: " confirm
+      if [ "$confirm" != "YES" ]; then
+        log_error "Mainnet deployment aborted by user."
+        exit 1
+      fi
+    fi
   fi
 
   log_success "Pre-flight checks passed"
@@ -370,31 +416,52 @@ verify_deployment() {
     RPC_URL="${L2_RPC:-https://rpc.ankr.com/zksync_era_sepolia}"
   fi
 
-  ADMIN_ROLE_HASH=$(cast keccak "")  # DEFAULT_ADMIN_ROLE = 0x00..00
-  ADMIN_ROLE_HASH="0x0000000000000000000000000000000000000000000000000000000000000000"
+  local ADMIN_ROLE_HASH="0x0000000000000000000000000000000000000000000000000000000000000000"
+  local OPERATOR_ROLE_HASH
   OPERATOR_ROLE_HASH=$(cast keccak "OPERATOR_ROLE")
 
   log_info "Checking DEFAULT_ADMIN_ROLE granted to admin..."
   HAS_ADMIN=$(cast call "$COLLECTION_FACTORY_PROXY" \
     "hasRole(bytes32,address)(bool)" \
     "$ADMIN_ROLE_HASH" "$N_FACTORY_ADMIN" --rpc-url "$RPC_URL")
+  if [ "$HAS_ADMIN" != "true" ]; then
+    log_error "DEFAULT_ADMIN_ROLE is NOT granted to $N_FACTORY_ADMIN (got: $HAS_ADMIN)"
+    exit 1
+  fi
   log_success "Admin role granted: $HAS_ADMIN"
 
   log_info "Checking OPERATOR_ROLE granted to operator..."
   HAS_OP=$(cast call "$COLLECTION_FACTORY_PROXY" \
     "hasRole(bytes32,address)(bool)" \
     "$OPERATOR_ROLE_HASH" "$N_FACTORY_OPERATOR" --rpc-url "$RPC_URL")
+  if [ "$HAS_OP" != "true" ]; then
+    log_error "OPERATOR_ROLE is NOT granted to $N_FACTORY_OPERATOR (got: $HAS_OP)"
+    exit 1
+  fi
   log_success "Operator role granted: $HAS_OP"
 
   log_info "Checking implementation pointers..."
   IMPL_721=$(cast call "$COLLECTION_FACTORY_PROXY" "erc721Implementation()(address)" --rpc-url "$RPC_URL")
   IMPL_1155=$(cast call "$COLLECTION_FACTORY_PROXY" "erc1155Implementation()(address)" --rpc-url "$RPC_URL")
+  if [ "$(_norm_addr "$IMPL_721")" != "$(_norm_addr "$USER_COLLECTION_721_IMPL")" ]; then
+    log_error "erc721Implementation mismatch: on-chain $IMPL_721 != deployed $USER_COLLECTION_721_IMPL"
+    exit 1
+  fi
+  if [ "$(_norm_addr "$IMPL_1155")" != "$(_norm_addr "$USER_COLLECTION_1155_IMPL")" ]; then
+    log_error "erc1155Implementation mismatch: on-chain $IMPL_1155 != deployed $USER_COLLECTION_1155_IMPL"
+    exit 1
+  fi
   log_success "erc721Implementation:  $IMPL_721"
   log_success "erc1155Implementation: $IMPL_1155"
 
   log_info "Checking EIP-1967 implementation slot points at factory logic..."
   IMPL_SLOT="0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
   STORED_IMPL=$(cast storage "$COLLECTION_FACTORY_PROXY" "$IMPL_SLOT" --rpc-url "$RPC_URL")
+  # The slot stores a left-padded 32-byte word; compare the low 20 bytes.
+  if [ "$(_norm_addr "$STORED_IMPL")" != "$(_norm_addr "$COLLECTION_FACTORY_IMPL")" ]; then
+    log_error "EIP-1967 slot mismatch: stored $STORED_IMPL != factory logic $COLLECTION_FACTORY_IMPL"
+    exit 1
+  fi
   log_success "EIP-1967 stored impl: $STORED_IMPL"
 
   log_success "Post-deploy sanity checks passed"
@@ -407,6 +474,15 @@ verify_deployment() {
 
 smoke_test_createCollection() {
   if [ "$BROADCAST" != "--broadcast" ]; then
+    return 0
+  fi
+
+  # The smoke test creates a real, PERMANENT collection (collections are
+  # immutable and the externalId is consumed forever). On mainnet that pollutes
+  # the production registry, so skip it unless explicitly opted in.
+  if [ "$NETWORK" = "mainnet" ] && [ "${RUN_MAINNET_SMOKE_TEST:-}" != "true" ]; then
+    log_warning "Skipping createCollection721 smoke test on mainnet (would create a permanent collection)."
+    log_warning "Set RUN_MAINNET_SMOKE_TEST=true to run it intentionally."
     return 0
   fi
 
@@ -475,9 +551,13 @@ smoke_test_createCollection() {
   local EIP1967_IMPL_SLOT="0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
   local stored
   stored=$(cast storage "$collection" "$EIP1967_IMPL_SLOT" --rpc-url "$rpc")
-  log_info "EIP-1967 impl slot: $stored (expected impl: $USER_COLLECTION_721_IMPL)"
+  if [ "$(_norm_addr "$stored")" != "$(_norm_addr "$USER_COLLECTION_721_IMPL")" ]; then
+    log_error "Smoke collection EIP-1967 slot mismatch: stored $stored != expected impl $USER_COLLECTION_721_IMPL"
+    exit 1
+  fi
+  log_info "EIP-1967 impl slot: $stored (matches expected impl: $USER_COLLECTION_721_IMPL)"
 
-  log_success "Smoke test passed: createCollection721 succeeded; collection has code; EIP-1967 slot set"
+  log_success "Smoke test passed: createCollection721 succeeded; collection has code; EIP-1967 slot verified"
 }
 
 # =============================================================================
@@ -510,14 +590,21 @@ verify_source_code() {
     return 1
   fi
 
+  # Versions default to the toolchain this script was written against; override
+  # via COMPILER_VERSION / ZKSOLC_VERSION when the installed toolchain differs,
+  # otherwise verification silently fails on a version mismatch.
+  # Capture the exit code WITHOUT letting `set -e` abort here: source
+  # verification failing is non-fatal (the contracts are already deployed), it
+  # just needs a manual retry. The `|| exit_code=$?` keeps set -e from killing
+  # the script before we can warn.
+  local exit_code=0
   python3 "$SCRIPT_DIR/verify_zksync_contracts.py" \
     --broadcast "$BROADCAST_JSON" \
     --verifier-url "$VERIFIER_URL" \
-    --compiler-version "0.8.26" \
-    --zksolc-version "v1.5.15" \
-    --project-root "$PROJECT_ROOT"
+    --compiler-version "${COMPILER_VERSION:-0.8.26}" \
+    --zksolc-version "${ZKSOLC_VERSION:-v1.5.15}" \
+    --project-root "$PROJECT_ROOT" || exit_code=$?
 
-  local exit_code=$?
   if [ "$exit_code" -eq 0 ]; then
     log_success "All contracts source-code verified on block explorer!"
   else

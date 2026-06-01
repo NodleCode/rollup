@@ -38,15 +38,24 @@ import {UserCollection1155} from "../src/collections/UserCollection1155.sol";
  *        2. Confirm the post-`setImplementation*` `cast call` matches the new
  *           implementation address.
  *
- * Usage:
+ * Usage (zkSync Era — the `--zksync` flag is REQUIRED; without it forge compiles
+ * and deploys EVM bytecode, which is the wrong VM and will not register the new
+ * implementation as a factoryDep):
  *   ACTION=UPGRADE_FACTORY FACTORY_PROXY=0x... \
- *       forge script script/UpgradeCollectionFactory.s.sol --rpc-url $RPC_URL --broadcast
+ *       forge script script/UpgradeCollectionFactory.s.sol --rpc-url $RPC_URL --zksync --broadcast --slow
  *
  *   ACTION=SET_IMPL_721 FACTORY_PROXY=0x... \
- *       forge script script/UpgradeCollectionFactory.s.sol --rpc-url $RPC_URL --broadcast
+ *       forge script script/UpgradeCollectionFactory.s.sol --rpc-url $RPC_URL --zksync --broadcast --slow
  *
  *   ACTION=SET_IMPL_1155 FACTORY_PROXY=0x... \
- *       forge script script/UpgradeCollectionFactory.s.sol --rpc-url $RPC_URL --broadcast
+ *       forge script script/UpgradeCollectionFactory.s.sol --rpc-url $RPC_URL --zksync --broadcast --slow
+ *
+ *   COMPILE PREREQUISITE: `forge build/script --zksync` compiles the whole tree,
+ *   which includes L1-only files (e.g. `SwarmRegistryL1Upgradeable`) that zksolc
+ *   cannot compile. The deploy flow handles this via the temp move/restore in
+ *   `ops/deploy_collection_factory_zksync.sh`; until a dedicated upgrade wrapper
+ *   exists, apply the same move/restore manually (or reuse that script's
+ *   `move_l1_contracts`/`restore_l1_contracts`) before running this upgrade.
  *
  * Environment Variables:
  *   - DEPLOYER_PRIVATE_KEY: Private key of the address holding `DEFAULT_ADMIN_ROLE` on the factory proxy.
