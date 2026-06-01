@@ -169,6 +169,14 @@ This makes operator-driven minting a **contract-level invariant** rather than a 
 
 `additionalMinters` remains available for creators who want extra minters seeded at creation (e.g. a co-creator wallet) and is orthogonal to the operator auto-grant.
 
+### 2.4 Collection Role Finality (intentional)
+
+Per-collection role wiring is deliberately minimal and final:
+
+- **Collections have no `DEFAULT_ADMIN_ROLE` holder.** `initialize` grants only `OWNER_ROLE` + `MINTER_ROLE` (to the owner), `MINTER_ROLE` (to the operator and `additionalMinters`), and sets `_setRoleAdmin(MINTER_ROLE, OWNER_ROLE)`. It never grants `DEFAULT_ADMIN_ROLE` to anyone. This is a feature: there is no super-admin that could later seize a collection, reinforcing the §1.3 immutability promise.
+- **`OWNER_ROLE` is non-transferable.** Its role-admin is the default `0x00` (`DEFAULT_ADMIN_ROLE`), which has no members — so `OWNER_ROLE` can never be granted to a new address. The creator is the permanent owner; they can self-manage `MINTER_ROLE` (grant co-minters, revoke the operator) but cannot hand off ownership on-chain.
+- **Consequence — owner key loss is unrecoverable.** If the creator loses their key, all owner-only functions (`setBaseURI`/`setURI`, `setContractURI`, `setDefaultRoyalty`, `lockMetadata`, `lockRoyalties`, minter management) are permanently frozen. Token transfers, burns, and any already-granted minters are unaffected — the collection keeps functioning, it just can no longer be reconfigured. A creator may also `renounceRole(OWNER_ROLE, self)`, intentionally bricking owner governance (e.g. to credibly signal "settings are final" without using the lock flags). Backends should surface owner-key custody as a one-way decision to creators.
+
 <div class="page-break"></div>
 
 ## 3. Contract Interfaces
@@ -323,6 +331,7 @@ interface IUserCollection721 {
     event RoyaltiesLocked();
     event ContractURIUpdated(string newURI);
     event BaseURIUpdated(string newBase);
+    event DefaultRoyaltyUpdated(address recipient, uint96 bps);
 
     error MetadataIsLocked();
     error RoyaltiesAreLocked();
@@ -354,11 +363,11 @@ interface IUserCollection721 {
 - Implementation contract calls `_disableInitializers()` in its constructor so the implementation itself can never be initialized directly.
 - **Bytecode-permanence invariants** (load-bearing for the §1.3 immutability promise): the implementation contains no `SELFDESTRUCT` opcode (no `selfdestruct(...)` calls in the implementation's own code or in any inherited contract), and performs no `delegatecall` to caller-provided addresses. Both properties are asserted by the unit test in §8.2 and reviewed by the auditor.
 - `initialize` (initializer-gated): sets name/symbol via `__ERC721_init`, sets `baseURI` and `contractURI`, sets default royalty if `royaltyBps > 0`, grants `OWNER_ROLE` and `MINTER_ROLE` to `owner`, grants `MINTER_ROLE` to `operatorMinter` (passed by the factory; see §2.3), grants `MINTER_ROLE` to each `additionalMinters` entry, and calls `_setRoleAdmin(MINTER_ROLE, OWNER_ROLE)`. Reverts `ZeroAddress` if `operatorMinter == address(0)`. Re-granting an already-held role is a no-op (OZ `grantRole` is idempotent), so duplicates between `owner`, `operatorMinter`, and `additionalMinters` are safe.
-- `mint`: `MINTER_ROLE`-gated. Increments `nextTokenId`, calls `_safeMint`, sets per-token URI via `ERC721URIStorage._setTokenURI`. Returns the new token ID.
+- `mint`: `MINTER_ROLE`-gated. Increments `nextTokenId`, calls `_safeMint`, sets per-token URI via `ERC721URIStorage._setTokenURI`. Returns the new token ID. Callers pass a *relative suffix* for `tokenURI_` (see §7.2 row 7 / the URI convention): the resolved `tokenURI` is `baseURI + tokenURI_` when `baseURI` is non-empty.
 - `mintBatch`: `MINTER_ROLE`-gated. Reverts `LengthMismatch` if `to.length != uris.length`. Reverts `BatchTooLarge` if `to.length > MAX_BATCH` (100). Returns `uint256[] tokenIds` in the same order as `to`; the values are a contiguous range starting at the value of `nextTokenId` at call entry. The return lets backends reconcile per-buyer attribution synchronously without parsing `Transfer` logs or racing against concurrent minters.
 - `setBaseURI`: `OWNER_ROLE`-gated. Reverts `MetadataIsLocked` when `metadataLocked == true`.
-- `setContractURI`: `OWNER_ROLE`-gated. Reverts `MetadataIsLocked` when `metadataLocked == true`. The single `metadataLocked` flag covers both per-collection (`baseURI`) and collection-level (`contractURI`) metadata so that buyers see one verifiable "metadata is frozen" signal across the whole collection. (Per-token URIs minted via `ERC721URIStorage._setTokenURI` are anchored at mint time independently of this flag — see §7.2 row 7.)
-- `setDefaultRoyalty`: `OWNER_ROLE`-gated. Reverts `RoyaltiesAreLocked` when `royaltiesLocked == true`. No additional cap beyond OZ's ERC-2981 100% bound (see §1.4 row 11) — creators may set any value up to 10000 bps.
+- `setContractURI`: `OWNER_ROLE`-gated. Reverts `MetadataIsLocked` when `metadataLocked == true`. The single `metadataLocked` flag covers both per-collection (`baseURI`) and collection-level (`contractURI`) metadata so that buyers see one verifiable "metadata is frozen" signal across the whole collection. (Per-token *suffixes* set via `ERC721URIStorage._setTokenURI` are fixed at mint, but the resolved `tokenURI` is `baseURI + suffix` — so it is **not** stable while `baseURI` remains mutable. Only `metadataLocked` provides the freeze guarantee — see §7.2 row 7.)
+- `setDefaultRoyalty`: `OWNER_ROLE`-gated. Reverts `RoyaltiesAreLocked` when `royaltiesLocked == true`. No additional cap beyond OZ's ERC-2981 100% bound (see §1.4 row 11) — creators may set any value up to 10000 bps. Emits `DefaultRoyaltyUpdated(recipient, bps)` (a `bps == 0` emission signals the royalty was cleared) — ERC-2981 itself is event-less, so this is the only on-chain signal indexers can use to track royalty changes for buyer due-diligence.
 - `lockMetadata` / `lockRoyalties`: `OWNER_ROLE`-gated, one-way; emit events for indexers.
 
 ### 3.6 `UserCollection1155`
@@ -566,7 +575,7 @@ All upgradeable contracts in this package follow the same conventions used by `s
 | 4   | Initialization front-run on a fresh collection                    | Atomic deploy+init inside the proxy constructor; collection never observable uninitialized          |
 | 5   | Storage-layout corruption on factory upgrade                      | `__gap` reserved slots; manual pre-upgrade `forge inspect storageLayout` diff against previous release (§9.4)  |
 | 6   | Royalty rug (creator sets 100% post-mint)                         | `royaltiesLocked` opt-in; `RoyaltiesLocked` event indexed for buyer due-diligence                   |
-| 7   | Metadata rug (creator changes baseURI mid-mint)                   | `metadataLocked` opt-in; per-token URIs anchored via `ERC721URIStorage`, stable post-mint           |
+| 7   | Metadata rug (creator changes baseURI mid-mint)                   | `metadataLocked` opt-in, one-way. **Important:** with a non-empty `baseURI`, OZ `ERC721URIStorage` resolves `tokenURI(id) = baseURI + perTokenSuffix`. The per-token *suffix* is fixed at mint, but the shared `baseURI` stays mutable until `lockMetadata` — so changing `baseURI` re-points the resolved URI of **every already-minted token**. Buyers therefore get a freeze guarantee **only** from `metadataLocked`; the per-token suffix alone is not sufficient. Backend convention (option b): pass a *relative suffix* (not a full URI) to `mint`/`mintBatch`, since a full URI would be double-prefixed by `baseURI`. |
 | 8   | Reentrancy on `_safeMint` callback                                | OZ default ordering: state writes precede `onERC721Received`; no post-callback reads in our code    |
 | 9   | DoS via huge `mintBatch` arrays                                   | `MAX_BATCH = 100`; revert `BatchTooLarge` if exceeded                                               |
 | 10  | UUPS bricking via mis-set `_authorizeUpgrade`                     | Standard OZ pattern; unit test asserts non-admin cannot upgrade                                     |
@@ -574,7 +583,7 @@ All upgradeable contracts in this package follow the same conventions used by `s
 | 12  | Creator revokes operator's `MINTER_ROLE` mid-flow                 | Operator-driven mints revert cleanly; backend surfaces error to operations                          |
 | 13  | Operator key rotation leaves old collections without the new operator | Auto-grant only applies to *future* collections; runbook step requires creators to grant `MINTER_ROLE` to the new key for continued operator-driven sales on pre-rotation collections |
 | 14  | Admin sets factory implementation pointer to zero / EOA / non-contract | `setImplementation*` and `initialize` reject zero addresses (`ZeroAddress`) and addresses with no bytecode (`NotAContract`); wrong-standard pointers caught by the §9.4 post-upgrade `cast` checks |
-| 15a | Implementation bytecode permanence | Implementations deployed via `CREATE` only (sequential nonce, never `CREATE2`); no `SELFDESTRUCT` in own/inherited code; no `delegatecall` to caller-provided addresses; verified by opcode-walker test |
+| 15a | Implementation bytecode permanence | Implementations deployed via `CREATE` only (sequential nonce, never `CREATE2`); no `SELFDESTRUCT` in own/inherited code; no `delegatecall` to caller-provided addresses; verified by opcode-walker test. **EVM vs EraVM:** the opcode-walker runs against the **EVM**-compiled bytecode (Foundry default backend), so it does not directly cover the zksolc/**EraVM** artifact that ships to zkSync. On EraVM this is acceptable because `selfdestruct` is unsupported at the VM level (the impl cannot be wiped on the target chain by construction). The deploy script adds a VM-agnostic gate that *does* cover the deployed artifact: `verify_implementation_permanence` (in `ops/deploy_collection_factory_zksync.sh`) asserts the zksolc-emitted ABI of both implementations exposes no `upgradeTo`/`upgradeToAndCall`/`proxiableUUID` selector, catching any accidental future `UUPSUpgradeable` inheritance that would break the §1.3 promise. |
 | 15b | Per-collection proxy permanence    | Deployed via `CREATE2` with `externalId` salt using canonical OZ `ERC1967Proxy` unmodified; impls do not inherit `UUPSUpgradeable`; no `ProxyAdmin` pattern; therefore the EIP-1967 impl slot is constructor-fixed and the proxy bytecode is permanent. Verified by: (i) lockfile-pinned OZ import, (ii) opcode-walker test on `ERC1967Proxy` runtime, (iii) unit test asserting impls have no `upgradeTo*` selectors |
 | 16  | Audit posture for OZ proxy import | Audit must verify `import {ERC1967Proxy} from '@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol'` resolves to canonical OZ at the lockfile-pinned version; remappings or forks of OZ proxy contracts are out of band and would invalidate the bytecode-permanence proof |
 

@@ -115,6 +115,33 @@ contract CollectionFactoryTest is Test {
         new ERC1967Proxy(address(logic), bad);
     }
 
+    function test_initialize_revertsOnZeroOperator() public {
+        CollectionFactory logic = new CollectionFactory();
+        bytes memory bad = abi.encodeCall(
+            CollectionFactory.initialize, (ADMIN, address(0), address(impl721), address(impl1155))
+        );
+        vm.expectRevert();
+        new ERC1967Proxy(address(logic), bad);
+    }
+
+    function test_initialize_revertsOnZeroImpl1155() public {
+        CollectionFactory logic = new CollectionFactory();
+        bytes memory bad = abi.encodeCall(
+            CollectionFactory.initialize, (ADMIN, OPERATOR, address(impl721), address(0))
+        );
+        vm.expectRevert();
+        new ERC1967Proxy(address(logic), bad);
+    }
+
+    function test_initialize_revertsOnNonContractImpl1155() public {
+        CollectionFactory logic = new CollectionFactory();
+        bytes memory bad = abi.encodeCall(
+            CollectionFactory.initialize, (ADMIN, OPERATOR, address(impl721), address(0xBEEF))
+        );
+        vm.expectRevert();
+        new ERC1967Proxy(address(logic), bad);
+    }
+
     // ──────────────────────────────────────────────
     // Creation
     // ──────────────────────────────────────────────
@@ -232,6 +259,26 @@ contract CollectionFactoryTest is Test {
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, STRANGER, OPERATOR_ROLE)
         );
         factory.createCollection721(_params721(CREATOR), keccak256("x"));
+    }
+
+    function test_createCollection1155_onlyOperator() public {
+        vm.prank(STRANGER);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, STRANGER, OPERATOR_ROLE)
+        );
+        factory.createCollection1155(_params1155(CREATOR), keccak256("x"));
+    }
+
+    function test_createCollection_externalIdSharedAcrossStandards() public {
+        bytes32 externalId = keccak256("shared-namespace");
+        vm.prank(OPERATOR);
+        factory.createCollection721(_params721(CREATOR), externalId);
+
+        // `_collectionByExternalId` is a single namespace across both standards —
+        // a 721 id must collide when reused on the 1155 path.
+        vm.prank(OPERATOR);
+        vm.expectRevert(abi.encodeWithSelector(ICollectionFactory.ExternalIdAlreadyUsed.selector, externalId));
+        factory.createCollection1155(_params1155(CREATOR), externalId);
     }
 
     function test_createCollection_revertsZeroExternalId() public {

@@ -246,6 +246,53 @@ verify_build_artifacts() {
 }
 
 # =============================================================================
+# Implementation permanence (EraVM artifact gate).
+#
+# The Foundry opcode-walker test (test/collections/*.t.sol) asserts "no
+# SELFDESTRUCT" against the EVM-compiled bytecode. That check does NOT carry
+# over to the deployed artifact: EraVM uses a different bytecode format and ISA,
+# and `selfdestruct` is unsupported at the VM level — so the impl can't be wiped
+# on the target chain regardless. What CAN still regress is the impl
+# accidentally exposing an upgrade entry point (e.g. someone adds
+# `UUPSUpgradeable` later), which would break the §1.3 per-collection
+# immutability promise. Function selectors are VM-agnostic, so we gate on the
+# zksolc-emitted ABI of the actual deployed implementations.
+# =============================================================================
+
+verify_implementation_permanence() {
+  log_info "Verifying implementation ABIs expose no upgrade selectors..."
+
+  local impls=(
+    "zkout/UserCollection721.sol/UserCollection721.json"
+    "zkout/UserCollection1155.sol/UserCollection1155.json"
+  )
+  local forbidden='["upgradeTo","upgradeToAndCall","proxiableUUID"]'
+
+  for artifact in "${impls[@]}"; do
+    if [ ! -f "$artifact" ]; then
+      log_error "Compiled artifact not found: $artifact"
+      exit 1
+    fi
+
+    local hits
+    if ! hits=$(jq -r --argjson f "$forbidden" \
+      '[.abi[] | select(.type=="function") | .name] | map(select(. as $n | $f | index($n))) | length' \
+      "$artifact" 2>&1); then
+      log_error "jq failed parsing $artifact: $hits"
+      exit 1
+    fi
+
+    if [ -z "$hits" ] || [ "$hits" -ne 0 ]; then
+      log_error "$artifact exposes an upgrade selector (proxiableUUID/upgradeTo*)."
+      log_error "Implementations must NOT inherit UUPSUpgradeable — see design §3.5.2 / §7.2 row 15b."
+      exit 1
+    fi
+
+    log_success "$(basename "$artifact"): no upgrade selectors"
+  done
+}
+
+# =============================================================================
 # Deploy
 # =============================================================================
 
@@ -577,6 +624,7 @@ main() {
   move_l1_contracts
   compile_contracts
   verify_build_artifacts
+  verify_implementation_permanence
   deploy_contracts
   verify_deployment
   smoke_test_createCollection

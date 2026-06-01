@@ -22,6 +22,16 @@ import {CreateParams1155} from "./interfaces/CollectionTypes.sol";
  *      Bytecode-permanence invariants apply identically to UserCollection721
  *      (see §7.2 row 15 and the §8.3 unit test): no `selfdestruct`, no
  *      caller-controlled `delegatecall`, deployment via `CREATE` only.
+ *
+ *      Metadata convention (see spec §7.2 row 7): `uri` is mutable until
+ *      `lockMetadata`; a shared `setURI` re-points the resolved URI for all IDs.
+ *      Buyers get a freeze guarantee only from `metadataLocked`.
+ *
+ *      Role finality (see spec §2.4): collections are deliberately created with
+ *      NO `DEFAULT_ADMIN_ROLE` holder. `OWNER_ROLE` is its own non-transferable
+ *      anchor (it admins `MINTER_ROLE`, but nothing admins `OWNER_ROLE`). Owner
+ *      key loss permanently freezes owner-only functions; token transfers and
+ *      existing minters are unaffected.
  */
 contract UserCollection1155 is
     Initializable,
@@ -151,6 +161,7 @@ contract UserCollection1155 is
         } else {
             _setDefaultRoyalty(recipient, bps);
         }
+        emit DefaultRoyaltyUpdated(recipient, bps);
     }
 
     /// @inheritdoc IUserCollection1155

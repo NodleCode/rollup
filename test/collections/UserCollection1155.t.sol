@@ -36,6 +36,7 @@ contract UserCollection1155Test is Test {
     event RoyaltiesLocked();
     event ContractURIUpdated(string newURI);
     event URIUpdated(string newURI);
+    event DefaultRoyaltyUpdated(address recipient, uint96 bps);
 
     function setUp() public {
         impl = new UserCollection1155();
@@ -207,6 +208,32 @@ contract UserCollection1155Test is Test {
         clone.mintBatch(ALICE, ids, amounts, "");
     }
 
+    function test_mintBatch_atMaxBatchSucceeds() public {
+        // Boundary: exactly MAX_BATCH (100) must succeed — the oversize test
+        // covers 101, this pins the inclusive upper bound.
+        UserCollection1155 clone = _deployCloneDefault();
+        uint256[] memory ids = new uint256[](100);
+        uint256[] memory amounts = new uint256[](100);
+        for (uint256 i = 0; i < 100; ++i) { ids[i] = i; amounts[i] = 2; }
+
+        vm.prank(OPERATOR_MINTER);
+        clone.mintBatch(ALICE, ids, amounts, "");
+
+        assertEq(clone.balanceOf(ALICE, 99), 2);
+        assertEq(clone.totalSupply(99), 2);
+    }
+
+    function test_mintBatch_emptyIsNoOp() public {
+        UserCollection1155 clone = _deployCloneDefault();
+        uint256[] memory ids = new uint256[](0);
+        uint256[] memory amounts = new uint256[](0);
+
+        vm.prank(OPERATOR_MINTER);
+        clone.mintBatch(ALICE, ids, amounts, "");
+
+        assertEq(clone.balanceOf(ALICE, 0), 0);
+    }
+
     // ──────────────────────────────────────────────
     // Owner-mutable settings + locks
     // ──────────────────────────────────────────────
@@ -259,6 +286,8 @@ contract UserCollection1155Test is Test {
 
     function test_setDefaultRoyalty_zeroBpsClears() public {
         UserCollection1155 clone = _deployCloneDefault();
+        vm.expectEmit(true, true, true, true);
+        emit DefaultRoyaltyUpdated(address(0), 0);
         vm.prank(OWNER);
         clone.setDefaultRoyalty(address(0), 0);
         (address recv, uint256 amount) = clone.royaltyInfo(0, 10_000);
@@ -268,6 +297,8 @@ contract UserCollection1155Test is Test {
 
     function test_setDefaultRoyalty_nonZeroBpsUpdates() public {
         UserCollection1155 clone = _deployCloneDefault();
+        vm.expectEmit(true, true, true, true);
+        emit DefaultRoyaltyUpdated(ALICE, 1000);
         vm.prank(OWNER);
         clone.setDefaultRoyalty(ALICE, 1000);
         (address recv, uint256 amount) = clone.royaltyInfo(0, 10_000);

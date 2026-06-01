@@ -13,6 +13,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {UserCollection721} from "../../src/collections/UserCollection721.sol";
 import {IUserCollection721} from "../../src/collections/interfaces/IUserCollection721.sol";
 import {CreateParams721} from "../../src/collections/interfaces/CollectionTypes.sol";
+import {ReentrantERC721Receiver, IMintable721} from "./mocks/ReentrantERC721Receiver.sol";
 
 contract UserCollection721Test is Test {
     UserCollection721 internal impl;
@@ -32,6 +33,7 @@ contract UserCollection721Test is Test {
     event RoyaltiesLocked();
     event ContractURIUpdated(string newURI);
     event BaseURIUpdated(string newBase);
+    event DefaultRoyaltyUpdated(address recipient, uint96 bps);
 
     function setUp() public {
         impl = new UserCollection721();
@@ -189,13 +191,39 @@ contract UserCollection721Test is Test {
         vm.expectEmit(true, true, true, true);
         emit Transfer(address(0), ALICE, 0);
 
+        // Convention (spec §7.2 row 7, option b): with a non-empty baseURI the
+        // caller passes a RELATIVE SUFFIX, and OZ ERC721URIStorage resolves
+        // tokenURI to `baseURI + suffix`. Passing a full URI here would yield a
+        // broken double-prefixed value.
         vm.prank(OPERATOR_MINTER);
-        uint256 id = clone.mint(ALICE, "ipfs://0.json");
+        uint256 id = clone.mint(ALICE, "0.json");
 
         assertEq(id, 0);
         assertEq(clone.nextTokenId(), 1);
         assertEq(clone.ownerOf(0), ALICE);
-        assertEq(clone.tokenURI(0), "ipfs://base/ipfs://0.json");
+        assertEq(clone.tokenURI(0), "ipfs://base/0.json");
+    }
+
+    function test_tokenURI_baseUriChangeRepointsExistingToken() public {
+        // Documents the F1/§7.2-row-7 property: the per-token suffix is fixed at
+        // mint, but the shared baseURI is mutable until lockMetadata, so changing
+        // it re-points an ALREADY-MINTED token's resolved URI. Buyers get a freeze
+        // guarantee only from metadataLocked.
+        UserCollection721 clone = _deployCloneDefault();
+        vm.prank(OPERATOR_MINTER);
+        uint256 id = clone.mint(ALICE, "0.json");
+        assertEq(clone.tokenURI(id), "ipfs://base/0.json");
+
+        vm.prank(OWNER);
+        clone.setBaseURI("ipfs://moved/");
+        assertEq(clone.tokenURI(id), "ipfs://moved/0.json");
+
+        // After locking, the base can no longer move — the URI is frozen.
+        vm.prank(OWNER);
+        clone.lockMetadata();
+        vm.prank(OWNER);
+        vm.expectRevert(IUserCollection721.MetadataIsLocked.selector);
+        clone.setBaseURI("ipfs://again/");
     }
 
     function test_mint_revertsForNonMinter() public {
@@ -269,6 +297,68 @@ contract UserCollection721Test is Test {
         clone.mintBatch(recipients, uris);
     }
 
+    function test_mintBatch_atMaxBatchSucceeds() public {
+        // Boundary: exactly MAX_BATCH (100) must succeed — the oversize test
+        // covers 101, this pins the inclusive upper bound.
+        UserCollection721 clone = _deployCloneDefault();
+        address[] memory recipients = new address[](100);
+        string[] memory uris = new string[](100);
+        for (uint256 i = 0; i < 100; ++i) {
+            recipients[i] = ALICE;
+            uris[i] = "x";
+        }
+        vm.prank(OPERATOR_MINTER);
+        uint256[] memory ids = clone.mintBatch(recipients, uris);
+
+        assertEq(ids.length, 100);
+        assertEq(ids[99], 99);
+        assertEq(clone.nextTokenId(), 100);
+        assertEq(clone.ownerOf(99), ALICE);
+    }
+
+    function test_mintBatch_emptyIsNoOp() public {
+        UserCollection721 clone = _deployCloneDefault();
+        address[] memory recipients = new address[](0);
+        string[] memory uris = new string[](0);
+
+        vm.prank(OPERATOR_MINTER);
+        uint256[] memory ids = clone.mintBatch(recipients, uris);
+
+        assertEq(ids.length, 0);
+        assertEq(clone.nextTokenId(), 0);
+    }
+
+    function test_mintBatch_reentrantMintGetsFreshIdNoCollision() public {
+        // F5 regression: mintBatch reserves [startId, startId+len) BEFORE the
+        // _safeMint loop, so a mint reentered from an onERC721Received callback
+        // takes a fresh ID (startId+len) and cannot collide with a batch ID.
+        // Under the old post-loop counter write this reentrancy reverted the
+        // whole batch ("token already minted"); now it succeeds cleanly.
+        UserCollection721 clone = _deployCloneDefault();
+        ReentrantERC721Receiver receiver = new ReentrantERC721Receiver();
+        receiver.setCollection(IMintable721(address(clone)));
+        vm.prank(OWNER);
+        clone.grantRole(MINTER_ROLE, address(receiver));
+
+        address[] memory to = new address[](2);
+        to[0] = address(receiver); // first mint triggers the reentrant mint
+        to[1] = BOB;
+        string[] memory uris = new string[](2);
+        uris[0] = "a";
+        uris[1] = "b";
+
+        vm.prank(OPERATOR_MINTER);
+        uint256[] memory ids = clone.mintBatch(to, uris);
+
+        assertEq(ids[0], 0);
+        assertEq(ids[1], 1);
+        assertEq(receiver.reentrantTokenId(), 2, "reentrant mint must take the reserved-beyond ID");
+        assertEq(clone.nextTokenId(), 3);
+        assertEq(clone.ownerOf(0), address(receiver));
+        assertEq(clone.ownerOf(1), BOB);
+        assertEq(clone.ownerOf(2), address(receiver));
+    }
+
     // ──────────────────────────────────────────────
     // Owner-mutable settings + locks
     // ──────────────────────────────────────────────
@@ -326,6 +416,8 @@ contract UserCollection721Test is Test {
 
     function test_setDefaultRoyalty_zeroBpsClears() public {
         UserCollection721 clone = _deployCloneDefault();
+        vm.expectEmit(true, true, true, true);
+        emit DefaultRoyaltyUpdated(address(0), 0);
         vm.prank(OWNER);
         clone.setDefaultRoyalty(address(0), 0);
         (address recv, uint256 amount) = clone.royaltyInfo(0, 10_000);
@@ -335,6 +427,8 @@ contract UserCollection721Test is Test {
 
     function test_setDefaultRoyalty_nonZeroBpsUpdates() public {
         UserCollection721 clone = _deployCloneDefault();
+        vm.expectEmit(true, true, true, true);
+        emit DefaultRoyaltyUpdated(ALICE, 1000);
         vm.prank(OWNER);
         clone.setDefaultRoyalty(ALICE, 1000);
         (address recv, uint256 amount) = clone.royaltyInfo(0, 10_000);

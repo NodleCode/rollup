@@ -19,6 +19,13 @@ interface IUserCollection1155 {
     event ContractURIUpdated(string newURI);
     event URIUpdated(string newURI);
 
+    /// @notice Emitted whenever the default royalty is set, updated, or cleared
+    ///         via `setDefaultRoyalty`. ERC-2981 itself emits no event, so this
+    ///         is the only on-chain signal indexers can use to track royalty
+    ///         changes for buyer due-diligence. A `bps == 0` emission means the
+    ///         royalty was cleared.
+    event DefaultRoyaltyUpdated(address recipient, uint96 bps);
+
     // ──────────────────────────────────────────────
     // Errors
     // ──────────────────────────────────────────────

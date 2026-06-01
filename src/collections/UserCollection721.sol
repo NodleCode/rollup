@@ -24,6 +24,22 @@ import {CreateParams721} from "./interfaces/CollectionTypes.sol";
  *      - This contract contains no `selfdestruct`.
  *      - This contract performs no `delegatecall` to caller-provided addresses.
  *      - Implementation must be deployed via `CREATE`, not `CREATE2`.
+ *
+ *      Token-URI resolution convention (see spec §7.2 row 7): this contract uses
+ *      OZ `ERC721URIStorage` unmodified, so `tokenURI(id)` resolves to
+ *      `baseURI() + perTokenSuffix` whenever `baseURI` is non-empty. Callers MUST
+ *      therefore pass a *relative suffix* (not a full URI) to `mint`/`mintBatch`.
+ *      The per-token suffix is fixed at mint, but the shared `baseURI` stays
+ *      mutable until `lockMetadata`: changing it re-points the resolved URI of
+ *      every already-minted token. Buyers get a freeze guarantee only from
+ *      `metadataLocked`, never from the per-token suffix alone.
+ *
+ *      Role finality (see spec §2.4): collections are deliberately created with
+ *      NO `DEFAULT_ADMIN_ROLE` holder. `OWNER_ROLE` is its own non-transferable
+ *      anchor — `OWNER_ROLE` admins `MINTER_ROLE`, but nothing admins
+ *      `OWNER_ROLE`, so it can never be granted to a new address. Owner key loss
+ *      permanently freezes owner-only functions (metadata/royalty/minter
+ *      management); token transfers and existing minters are unaffected.
  */
 contract UserCollection721 is
     Initializable,
@@ -137,13 +153,20 @@ contract UserCollection721 is
 
         tokenIds = new uint256[](len);
         uint256 startId = _nextTokenId;
+        // Reserve the whole [startId, startId+len) range BEFORE the mint loop.
+        // `_safeMint` calls `onERC721Received`; reserving up front means a
+        // reentrant `mint`/`mintBatch` reads an already-advanced counter and
+        // can only take IDs at or beyond `startId+len`, so it can never collide
+        // with an ID this batch is about to assign. Without this, the counter
+        // would be stale during every callback and correctness would rest on
+        // OZ's duplicate-mint revert rather than on our own invariant.
+        _nextTokenId = startId + len;
         for (uint256 i = 0; i < len; ++i) {
             uint256 id = startId + i;
             tokenIds[i] = id;
             _safeMint(to[i], id);
             _setTokenURI(id, uris[i]);
         }
-        _nextTokenId = startId + len;
     }
 
     // ──────────────────────────────────────────────
@@ -172,6 +195,7 @@ contract UserCollection721 is
         } else {
             _setDefaultRoyalty(recipient, bps);
         }
+        emit DefaultRoyaltyUpdated(recipient, bps);
     }
 
     /// @inheritdoc IUserCollection721

@@ -105,6 +105,13 @@ contract CollectionFactory is
             IUserCollection721.initialize,
             (p, msg.sender)
         );
+        // SECURITY INVARIANT: the `_collectionByExternalId` write below lands
+        // AFTER the proxy deploy+init. This is reentrancy-safe ONLY because the
+        // implementation's `initialize` makes no calls to attacker-controlled
+        // addresses (it only grants roles and sets ERC-2981 royalty, none of
+        // which call out). Any future implementation MUST preserve that — if
+        // `initialize` ever performs an external call, reorder so the registry
+        // write precedes the deploy, or add a reentrancy guard here.
         collection = address(
             new ERC1967Proxy{salt: externalId}(_erc721Implementation, initData)
         );
@@ -125,6 +132,9 @@ contract CollectionFactory is
             IUserCollection1155.initialize,
             (p, msg.sender)
         );
+        // SECURITY INVARIANT: see `createCollection721` — the registry write
+        // trails the deploy+init and is safe only while `initialize` makes no
+        // external calls. Preserve that property in any future implementation.
         collection = address(
             new ERC1967Proxy{salt: externalId}(_erc1155Implementation, initData)
         );

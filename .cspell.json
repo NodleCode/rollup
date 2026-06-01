@@ -153,6 +153,8 @@
     "remappings",
     "staticcall",
     "agentic",
-    "delegatecalls"
+    "delegatecalls",
+    "repoints",
+    "reentrant"
   ]
 }
