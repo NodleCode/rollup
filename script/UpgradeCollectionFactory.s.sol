@@ -23,10 +23,12 @@ import {UserCollection1155} from "../src/collections/UserCollection1155.sol";
  *        - `SET_IMPL_1155`: same as above for `UserCollection1155`.
  *
  *      **Pre-Upgrade Checklist (factory upgrade)**:
- *        1. Snapshot storage layout: `forge inspect CollectionFactory storageLayout`
- *           and compare against the committed
- *           `src/collections/layouts/CollectionFactory.v1.json` baseline.
- *           Verify slot index AND byte offset for sub-word fields (lock bools).
+ *        1. Diff storage layout against the previous released ref:
+ *           `forge inspect CollectionFactory storageLayout --json` on the new code
+ *           vs. the same on the released ref (see §9.4 for the exact commands).
+ *           Only appended fields (consuming `__gap`) are safe; verify slot index
+ *           AND byte offset for sub-word fields (lock bools). No static baseline
+ *           JSON is committed.
  *        2. Run all collections tests: `forge test --match-path "test/collections/**"`.
  *        3. Test on a fork: re-run this script with `--fork-url $RPC_URL` first.
  *        4. After broadcast, verify the new EIP-1967 implementation slot via

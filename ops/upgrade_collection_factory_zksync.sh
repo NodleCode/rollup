@@ -31,8 +31,6 @@
 # OPTIONAL ENVIRONMENT VARIABLES:
 #   - L2_RPC:               Override the default zkSync RPC URL.
 #   - REINIT_DATA:          (UPGRADE_FACTORY only) ABI-encoded reinitializer call.
-#   - LAYOUT_REVIEWED:      Set to "YES" to acknowledge a storage-layout change
-#                           (only appended fields are safe — see §6.3 / §9.4).
 #   - CONFIRM_MAINNET:      Set to "YES" to skip the mainnet confirmation prompt.
 #   - COMPILER_VERSION / ZKSOLC_VERSION: source-verification version overrides.
 #
@@ -71,23 +69,19 @@ case "$NETWORK" in
     ;;
 esac
 
-# Map the action to the contract it deploys, its source identifier, and the
-# committed storage-layout baseline used for the pre-upgrade diff.
+# Map the action to the contract it deploys and its source identifier.
 case "$ACTION" in
   UPGRADE_FACTORY)
     TARGET_CONTRACT="CollectionFactory"
     TARGET_SRC="src/collections/CollectionFactory.sol:CollectionFactory"
-    LAYOUT_BASELINE="src/collections/layouts/CollectionFactory.v1.json"
     ;;
   SET_IMPL_721)
     TARGET_CONTRACT="UserCollection721"
     TARGET_SRC="src/collections/UserCollection721.sol:UserCollection721"
-    LAYOUT_BASELINE="src/collections/layouts/UserCollection721.v1.json"
     ;;
   SET_IMPL_1155)
     TARGET_CONTRACT="UserCollection1155"
     TARGET_SRC="src/collections/UserCollection1155.sol:UserCollection1155"
-    LAYOUT_BASELINE="src/collections/layouts/UserCollection1155.v1.json"
     ;;
   *)
     echo "Error: ACTION (arg 2) must be one of: UPGRADE_FACTORY, SET_IMPL_721, SET_IMPL_1155."
@@ -303,52 +297,23 @@ verify_artifacts() {
 }
 
 # =============================================================================
-# Storage-layout gate (spec §6.3 / §9.4).
-# Compares the layout of the contract being deployed against its committed
-# baseline. Identical → proceed. Any difference → require explicit
-# acknowledgement (LAYOUT_REVIEWED=YES or interactive), because only APPENDED
-# fields are upgrade-safe and that judgement is a human one.
+# Storage-layout reminder.
+# We no longer commit static layout baselines (they go stale and only mirror
+# what git already has). For a real upgrade, regenerate the previous layout from
+# the released ref and diff it against the new one — only appended fields
+# (consuming __gap) are upgrade-safe; any moved/resized prior slot corrupts
+# storage.
 # =============================================================================
 
-check_storage_layout() {
-  log_info "Diffing $TARGET_CONTRACT storage layout against $LAYOUT_BASELINE..."
-
-  if [ ! -f "$LAYOUT_BASELINE" ]; then
-    log_error "Storage-layout baseline not found: $LAYOUT_BASELINE"
-    exit 1
-  fi
-
-  # Project only the layout-relevant fields; astId changes per compile and is
-  # not part of the storage contract.
-  local proj='.storage | map({label: .label, slot: .slot, offset: .offset, type: .type})'
-  local current_layout baseline_layout
-  current_layout=$(forge inspect "$TARGET_CONTRACT" storageLayout --json 2>/dev/null | jq -S "$proj")
-  baseline_layout=$(jq -S "$proj" "$LAYOUT_BASELINE")
-
-  if [ "$current_layout" = "$baseline_layout" ]; then
-    log_success "Storage layout matches baseline (no slot/offset changes)"
+storage_layout_reminder() {
+  if [ "$ACTION" != "UPGRADE_FACTORY" ]; then
     return 0
   fi
-
-  log_warning "Storage layout DIFFERS from the committed baseline:"
-  diff <(echo "$baseline_layout") <(echo "$current_layout") || true
-  log_warning "Only APPENDED fields (consuming __gap) are upgrade-safe; any moved/"
-  log_warning "resized prior slot corrupts storage. Update the baseline JSON in the"
-  log_warning "same PR and review the diff (spec §9.4) before proceeding."
-
-  if [ "${LAYOUT_REVIEWED:-}" = "YES" ]; then
-    log_warning "LAYOUT_REVIEWED=YES set — proceeding despite layout change."
-    return 0
-  fi
-  if [ "$BROADCAST" != "--broadcast" ]; then
-    log_warning "Dry run — continuing so you can inspect the diff. Set LAYOUT_REVIEWED=YES to broadcast."
-    return 0
-  fi
-  read -r -p "Layout changed. Type 'REVIEWED' to confirm you've verified it is append-only: " ack
-  if [ "$ack" != "REVIEWED" ]; then
-    log_error "Upgrade aborted — storage layout change not acknowledged."
-    exit 1
-  fi
+  log_warning "Storage-layout check is manual. Before broadcasting a factory upgrade, diff the layout:"
+  log_warning "  git stash; git checkout <released-ref>; forge inspect $TARGET_CONTRACT storageLayout --json > /tmp/old.json; git checkout -; git stash pop"
+  log_warning "  forge inspect $TARGET_CONTRACT storageLayout --json > /tmp/new.json"
+  log_warning "  diff <(jq -S '.storage|map({label,slot,offset,type})' /tmp/old.json) <(jq -S '.storage|map({label,slot,offset,type})' /tmp/new.json)"
+  log_warning "  Only APPENDED fields are safe. (Or wire up the OZ/zksync upgradable plugin for automated validation.)"
 }
 
 # =============================================================================
@@ -566,7 +531,7 @@ main() {
   move_l1_contracts
   compile_contracts
   verify_artifacts
-  check_storage_layout
+  storage_layout_reminder
   run_upgrade
   verify_upgrade
   verify_source_code

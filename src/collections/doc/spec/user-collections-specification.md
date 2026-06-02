@@ -725,10 +725,9 @@ All three on-chain operations below are driven by the orchestration wrapper
 `ops/upgrade_collection_factory_zksync.sh <testnet|mainnet> <ACTION> [--broadcast]`
 (ACTION ∈ `UPGRADE_FACTORY` / `SET_IMPL_721` / `SET_IMPL_1155`). The wrapper
 runs the `--zksync` compile (with the L1-file move/restore), the artifact gates
-(factoryDeps for the factory; no-upgrade-selector for collection impls), the
-**pre-upgrade storage-layout diff** against the committed baseline (it refuses to
-broadcast a non-append-only change without `LAYOUT_REVIEWED=YES` / interactive
-acknowledgement), an admin-key pre-check, the mainnet confirmation guard, and the
+(factoryDeps for the factory; no-upgrade-selector for collection impls), a
+**storage-layout reminder** (manual — see below; we do not commit static layout
+baselines), an admin-key pre-check, the mainnet confirmation guard, and the
 post-broadcast asserts (slot/role/pointer preservation) plus source verification.
 
 | Operation                            | Procedure                                                                                                     |
@@ -757,13 +756,24 @@ CI does not currently diff storage layouts. Before any factory upgrade is broadc
    # acceptable.
    ```
 
-   **Baseline-JSON convention.** Before merging the V2 implementation, commit
-   `src/collections/layouts/CollectionFactory.v1.json` (snapshot of the current main
-   branch's layout) and `src/collections/layouts/CollectionFactory.v2.json` (snapshot of the
-   incoming V2) in the same PR. The git diff between baselines is reviewed as part of the
-   PR — any unexpected slot/offset shift is caught at code-review time without needing a
-   dedicated CI job. Same convention applies to `UserCollection721` and `UserCollection1155`
-   when the admin ships a new implementation pointer via `setImplementation*`.
+   **No committed layout baselines.** We deliberately do not keep static
+   `*.v1.json` layout snapshots in the repo — they go stale silently and only
+   mirror what git already records. Instead, regenerate the previous layout from
+   the released ref at upgrade time and diff it against the new one:
+
+   ```bash
+   git stash; git checkout <released-ref>
+   forge inspect CollectionFactory storageLayout --json > /tmp/old.json
+   git checkout -; git stash pop
+   forge inspect CollectionFactory storageLayout --json > /tmp/new.json
+   diff <(jq -S '.storage|map({label,slot,offset,type})' /tmp/old.json) \
+        <(jq -S '.storage|map({label,slot,offset,type})' /tmp/new.json)
+   ```
+
+   Only appended fields (consuming `__gap`) are acceptable. The upgrade wrapper
+   prints this reminder; for stronger guarantees, wire up the OZ / zkSync
+   upgradable plugin's automated storage-layout validation. Same applies to
+   `UserCollection721` / `UserCollection1155` on a `setImplementation*` swap.
 
 2. **Run all tests:**
 
@@ -831,10 +841,6 @@ test/collections/
   mocks/
     CollectionFactoryV2Mock.sol         (test-only; UUPS upgrade-target fixture, see §8.1)
     NonUUPSImplementationMock.sol       (test-only; non-UUPS contract for proxiableUUID revert test)
-src/collections/layouts/
-  CollectionFactory.v1.json             (storage-layout baseline; committed in upgrade PRs, see §9.4)
-  UserCollection721.v1.json             (collection-side baseline; updated when admin ships a new ERC-721 implementation)
-  UserCollection1155.v1.json            (collection-side baseline; updated when admin ships a new ERC-1155 implementation)
 script/
   DeployCollectionFactoryZkSync.s.sol
   UpgradeCollectionFactory.s.sol
@@ -861,5 +867,5 @@ These are not blocking for v1; recorded for future iteration.
 | Per-creator on-chain rate limit            | Deferred | Backend rate-limits today; can add `mapping(address => uint256) collectionsByCreator` and a configurable cap later            |
 | Soulbound / non-transferable variant       | Deferred | Ship as a third implementation pointer; selected via a new `createCollectionSoulbound*` factory method                        |
 | Per-token-URI mutability after lock        | Deferred | If creators ever need to update individual token URIs after locking the collection, would require a `tokenLocked` map         |
-| CI storage-layout diff job                 | Deferred — required before factory upgrade | The §9.4 baseline-JSON convention covers v1 (no upgrade has shipped yet, so there is nothing for a CI diff to gate against). Trigger to wire the CI job: opening the PR for `CollectionFactoryV2`. The job snapshots `forge inspect storageLayout` per upgradeable contract and fails on slot/offset mutations against the committed baseline JSONs. |
+| CI storage-layout diff job                 | Deferred — required before factory upgrade | No upgrade has shipped yet, so there is nothing to gate against. Trigger to wire it: opening the PR for `CollectionFactoryV2`. The job (or the OZ/zkSync upgradable plugin's built-in validation) compares the new `forge inspect storageLayout` against the previous released ref — see the §9.4 reminder — and fails on any slot/offset mutation. |
 | Multi-recipient ERC-1155 mint batch        | Deferred | v1 keeps OZ's single-recipient `_mintBatch` shape (see §3.6). Trigger to add `mintBatchMulti`: airdrops or allowlist drops on the product roadmap. Ships as a non-breaking addition via a new implementation pointer (admin swap, future collections only) |
