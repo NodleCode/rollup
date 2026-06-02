@@ -47,17 +47,6 @@ interface ICollectionFactory {
     error NotAContract(address impl);
 
     // ──────────────────────────────────────────────
-    // Initialization
-    // ──────────────────────────────────────────────
-
-    function initialize(
-        address admin,
-        address operator,
-        address impl721,
-        address impl1155
-    ) external;
-
-    // ──────────────────────────────────────────────
     // Creation
     // ──────────────────────────────────────────────
 

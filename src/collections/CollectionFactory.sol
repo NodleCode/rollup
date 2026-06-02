@@ -66,7 +66,13 @@ contract CollectionFactory is
     // Initialization
     // ──────────────────────────────────────────────
 
-    /// @inheritdoc ICollectionFactory
+    /// @notice One-time proxy initializer (not part of the `ICollectionFactory`
+    ///         consumer API — it is the `Initializable` deployment hook, invoked
+    ///         once via the proxy constructor at deploy time).
+    /// @param admin Receives `DEFAULT_ADMIN_ROLE` (factory upgrades, role admin).
+    /// @param operator Receives `OPERATOR_ROLE` (may call `createCollection*`).
+    /// @param impl721 `UserCollection721` implementation; must be a contract.
+    /// @param impl1155 `UserCollection1155` implementation; must be a contract.
     function initialize(
         address admin,
         address operator,
