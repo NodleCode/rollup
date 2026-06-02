@@ -155,6 +155,7 @@
     "agentic",
     "delegatecalls",
     "repoints",
-    "reentrant"
+    "reentrant",
+    "zkvm"
   ]
 }

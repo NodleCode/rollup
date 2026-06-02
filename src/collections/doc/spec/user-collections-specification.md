@@ -121,7 +121,7 @@ The factory is upgradeable so new implementation templates and bug fixes can be 
 | 11 | Royalty ceiling                | None beyond OpenZeppelin's ERC-2981 100% (10000 bps) bound. Creators have full autonomy over `royaltyBps` until they call `lockRoyalties`. Marketplace-norm enforcement (e.g. ≤10%) is deliberately out of scope — buyers and frontends are expected to inspect the on-chain value |
 | 12 | OZ alignment                   | Stay aligned with OpenZeppelin's `*Upgradeable` shapes; avoid overriding inherited methods or diverging from canonical signatures unless strictly required (e.g. role gating, lock checks). Custom batch / utility helpers ship as net-new functions, not overrides — keeps the audit surface small and lets us track upstream OZ patches without merge friction |
 
-[^upgradeability]: We use `ERC1967Proxy` directly (not `TransparentUpgradeableProxy`, not `BeaconProxy`) because the implementation contracts deliberately do not inherit `UUPSUpgradeable`. With no upgrade selector exposed and no `ProxyAdmin` slot pattern, the proxy's implementation pointer is constructor-fixed and the per-collection immutability promise is enforced by code that already exists in the OZ canonical libraries — no custom upgrade gating needed. We migrated away from the EIP-1167 minimal-proxy pattern because it is incompatible with zkSync Era's `ContractDeployer` factoryDeps model (see `2026-05-08-clones-replacement-design.md`).
+[^upgradeability]: We use `ERC1967Proxy` directly (not `TransparentUpgradeableProxy`, not `BeaconProxy`) because the implementation contracts deliberately do not inherit `UUPSUpgradeable`. With no upgrade selector exposed and no `ProxyAdmin` slot pattern, the proxy's implementation pointer is constructor-fixed and the per-collection immutability promise is enforced by code that already exists in the OZ canonical libraries — no custom upgrade gating needed. We migrated away from the EIP-1167 minimal-proxy pattern because it is incompatible with zkSync Era's `ContractDeployer` factoryDeps model (see `design-and-implementation.md`).
 
 ### 1.5 Non-Goals
 
@@ -833,6 +833,7 @@ src/collections/
     README.md
     spec/
       user-collections-specification.md
+      design-and-implementation.md
 test/collections/
   CollectionFactory.t.sol
   UserCollection721.t.sol
