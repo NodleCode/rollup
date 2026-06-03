@@ -205,10 +205,15 @@ export async function fetchZyfiSponsored(
     body: JSON.stringify(request),
   });
 
+  const responseBody = await response.json();
   if (!response.ok) {
-    throw new Error(`Failed to fetch zyfi sponsored`);
+    console.error(
+      `Failed to fetch zyfi sponsored: ${response.statusText}`,
+      responseBody,
+    );
+    throw new Error(`Failed to fetch zyfi sponsored: ${responseBody.message}`);
   }
-  const sponsoredResponse = (await response.json()) as ZyfiSponsoredResponse;
+  const sponsoredResponse = responseBody as ZyfiSponsoredResponse;
 
   return sponsoredResponse;
 }
