@@ -156,6 +156,7 @@
     "delegatecalls",
     "repoints",
     "reentrant",
-    "zkvm"
+    "zkvm",
+    "MRPC"
   ]
 }

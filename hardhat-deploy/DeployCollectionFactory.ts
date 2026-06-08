@@ -55,6 +55,23 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
     throw new Error("N_FACTORY_OPERATOR is required and must be non-zero");
   }
 
+  // Mainnet guardrail: this is a permanent, irreversible broadcast. Require an
+  // explicit acknowledgement (the deploy task is non-interactive, so we gate on
+  // an env flag rather than a prompt).
+  if (hre.network.name === "zkSyncMainnet") {
+    if (process.env.CONFIRM_MAINNET !== "YES") {
+      throw new Error(
+        "Refusing MAINNET deploy without CONFIRM_MAINNET=YES. Set it to acknowledge a real, permanent broadcast.",
+      );
+    }
+    if (admin.toLowerCase() === wallet.address.toLowerCase()) {
+      console.log(
+        "WARNING: N_FACTORY_ADMIN == deployer EOA. This key controls factory upgrades + impl-pointer swaps " +
+          "(the bytecode of all FUTURE collections). Rotate DEFAULT_ADMIN_ROLE to a Safe multisig soon after launch.",
+      );
+    }
+  }
+
   console.log("=== Deploying User Collections on ZkSync ===");
   console.log("Network:  ", hre.network.name);
   console.log("Deployer: ", wallet.address);
