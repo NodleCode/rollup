@@ -173,6 +173,43 @@ N_WHITELIST=0x732e40223f57d7a1dbf340f5c0cc5b363b60428b \
 forge script script/ContentSignWhitelist.s.sol -i 1 --zksync --rpc-url https://sepolia.era.zksync.dev --broadcast
 ```
 
+## Claiming vested grants manually
+
+Vested NODL is held by the [`Grants`](src/Grants.sol) contract. The Nodle client at
+[zkclient.nodle.com](https://zkclient.nodle.com) (the "Grants" tab) is the easiest way to claim, but
+claiming is fully self-service on-chain and needs no app and no off-chain signature — you only need
+the wallet that holds the grant and a small amount of ETH on ZKsync Era for gas. This section shows
+how to claim directly with [`cast`](https://book.getfoundry.sh/cast/).
+
+```shell
+export ETH_RPC_URL=https://mainnet.era.zksync.io
+# Grants contract — confirm the current address against the docs (see "Mainnet Deployments" above)
+export GRANTS=0x5855c486d2381ba41762876f18684951d5902829
+export ME=0xYourGranteeAddress
+
+# How many vesting schedules does your address have, and how many pages they span?
+cast call $GRANTS "getGrantsCount(address)(uint256)" $ME
+cast call $GRANTS "currentPage(address)(uint256)" $ME
+
+# Claim everything that has vested up to now, across all pages.
+# claim(uint256 start, uint256 end) iterates pages [start, end); passing 0, 0 means "all pages".
+cast send -i $GRANTS "claim(uint256,uint256)" 0 0
+```
+
+Notes:
+
+- `claim` transfers only what has vested up to the current block timestamp; you can call it again
+  later as more periods vest. On success it emits `Claimed(address who, uint256 amount, uint256 start, uint256 end)`.
+- If nothing is currently claimable the call reverts with `NoOpIsFailure()`.
+- For large numbers of schedules you can claim a single page range (e.g. `claim 0 1`) to bound gas
+  rather than sweeping every page at once.
+- Prefer a UI? The same `claim` call can be made from the **Write Contract** tab of the verified
+  `Grants` contract on [explorer.zksync.io](https://explorer.zksync.io).
+
+DePIN rewards are different: they are minted via `Rewards.mintReward` against an oracle-signed
+voucher (domain `rewards.depin.nodle`), which is normally submitted for you by the Nodle backend, so
+the self-service path above applies to vested grants rather than reward issuance.
+
 ## Contract verification
 
 > [!CAUTION]
