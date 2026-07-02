@@ -24,6 +24,7 @@
     "contentsign",
     "matterlabs",
     "zksync",
+    "zkclient",
     "zksolc",
     "Parachain",
     "subql",
@@ -157,6 +158,9 @@
     "repoints",
     "reentrant",
     "zkvm",
-    "MRPC"
+    "MRPC",
+    "girlnext",
+    "Checksummed",
+    "checksummed"
   ]
 }
