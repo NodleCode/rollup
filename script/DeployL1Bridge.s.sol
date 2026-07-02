@@ -9,24 +9,31 @@ import {L1Nodl} from "../src/L1Nodl.sol";
 /// @notice Forge script to deploy L1Bridge on EVM networks (e.g., Sepolia)
 /// Env vars required:
 /// - L1_BRIDGE_OWNER (address)
-/// - L1_MAILBOX     (address)
+/// - L1_MAILBOX     (address) — Diamond proxy, used for L2->L1 proofs
+/// - BRIDGEHUB      (address) — Bridgehub, used for deposits and base-cost quotes
+/// - L2_CHAIN_ID    (uint)    — chain id of the target L2 as registered on the Bridgehub
 /// - NODL_L1        (address)
 /// - L2_BRIDGE      (address)
 /// Deployer key must have DEFAULT_ADMIN_ROLE on L1Nodl to grant MINTER_ROLE.
 contract DeployL1Bridge is Script {
     address internal ownerAddr;
     address internal l1Mailbox;
+    address internal bridgehub;
+    uint256 internal l2ChainId;
     address internal l1Token;
     address internal l2Bridge;
 
     function setUp() public {
         ownerAddr = vm.envAddress("L1_BRIDGE_OWNER");
         l1Mailbox = vm.envAddress("L1_MAILBOX");
+        bridgehub = vm.envAddress("BRIDGEHUB");
+        l2ChainId = vm.envUint("L2_CHAIN_ID");
         l1Token = vm.envAddress("L1_NODL");
         l2Bridge = vm.envAddress("L2_BRIDGE");
 
         vm.label(ownerAddr, "L1_BRIDGE_OWNER");
         vm.label(l1Mailbox, "L1_MAILBOX");
+        vm.label(bridgehub, "BRIDGEHUB");
         vm.label(l1Token, "L1_NODL");
         vm.label(l2Bridge, "L2_BRIDGE");
     }
@@ -34,7 +41,7 @@ contract DeployL1Bridge is Script {
     function run() public {
         vm.startBroadcast();
 
-        L1Bridge bridge = new L1Bridge(ownerAddr, l1Mailbox, l1Token, l2Bridge);
+        L1Bridge bridge = new L1Bridge(ownerAddr, l1Mailbox, bridgehub, l2ChainId, l1Token, l2Bridge);
 
         L1Nodl nodl = L1Nodl(l1Token);
         bytes32 minterRole = keccak256("MINTER_ROLE");

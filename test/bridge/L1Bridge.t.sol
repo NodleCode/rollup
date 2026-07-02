@@ -10,22 +10,16 @@ import {IL2Bridge} from "src/bridge/interfaces/IL2Bridge.sol";
 import {IWithdrawalMessage} from "src/bridge/interfaces/IWithdrawalMessage.sol";
 import {L1Nodl} from "src/L1Nodl.sol";
 import {IMailbox} from "lib/era-contracts/l1-contracts/contracts/state-transition/chain-interfaces/IMailbox.sol";
+import {L2TransactionRequestDirect} from "lib/era-contracts/l1-contracts/contracts/bridgehub/IBridgehub.sol";
 import {L2Message, TxStatus} from "lib/era-contracts/l1-contracts/contracts/common/Messaging.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
-/// @dev Minimal mock for zkSync Era Mailbox to drive L1Bridge tests.
+/// @dev Minimal mock for zkSync Era Mailbox (Diamond proxy) to drive the L2->L1 proof paths.
 contract MockMailbox { /* not inheriting IMailbox on purpose */
     mapping(bytes32 => bool) public l1ToL2Failed; // txHash => failed?
     mapping(uint256 => mapping(uint256 => bool)) public l2InclusionOk; // batch=>index => ok?
-
-    bytes32 public lastRequestedTxHash;
-    address public lastRefundRecipient;
-    uint256 public baseCostReturn;
-    uint256 public expectedBaseCostGasPrice;
-    uint256 public expectedBaseCostGasLimit;
-    uint256 public expectedBaseCostGasPerPubdata;
 
     // Allow tests to toggle outcomes
     function setL1ToL2Failed(bytes32 txHash, bool failed) external {
@@ -34,33 +28,6 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
 
     function setInclusion(uint256 batch, uint256 index, bool ok) external {
         l2InclusionOk[batch][index] = ok;
-    }
-
-    function setBaseCostReturn(uint256 value) external {
-        baseCostReturn = value;
-    }
-
-    function expectBaseCostParams(uint256 gasPrice, uint256 gasLimit, uint256 gasPerPubdata) external {
-        expectedBaseCostGasPrice = gasPrice;
-        expectedBaseCostGasLimit = gasLimit;
-        expectedBaseCostGasPerPubdata = gasPerPubdata;
-    }
-
-    // --- Methods used by L1Bridge ---
-    function requestL2Transaction(
-        address _contractL2,
-        uint256 _l2Value,
-        bytes calldata _calldata,
-        uint256 _l2GasLimit,
-        uint256 _l2GasPerPubdataByte,
-        bytes[] calldata, /*_factoryDeps*/
-        address _refundRecipient
-    ) external payable returns (bytes32) {
-        lastRefundRecipient = _refundRecipient;
-        lastRequestedTxHash = keccak256(
-            abi.encode(_contractL2, _l2Value, _calldata, _l2GasLimit, _l2GasPerPubdataByte, msg.value, _refundRecipient)
-        );
-        return lastRequestedTxHash;
     }
 
     function proveL1ToL2TransactionStatus(
@@ -86,13 +53,78 @@ contract MockMailbox { /* not inheriting IMailbox on purpose */
         return l2InclusionOk[_batchNumber][_index];
     }
 
-    function l2TransactionBaseCost(uint256 _l1GasPrice, uint256 _l2GasLimit, uint256 _l2GasPerPubdataByte)
+}
+
+/// @dev Minimal mock for the zkSync Bridgehub to drive deposits and base-cost quotes.
+contract MockBridgehub { /* not inheriting IBridgehub on purpose */
+    bytes32 public lastRequestedTxHash;
+    uint256 public lastChainId;
+    uint256 public lastMintValue;
+    address public lastL2Contract;
+    uint256 public lastL2Value;
+    uint256 public lastL2GasLimit;
+    uint256 public lastL2GasPerPubdata;
+    address public lastRefundRecipient;
+    uint256 public lastMsgValue;
+
+    uint256 public baseCostReturn;
+    uint256 public expectedBaseCostChainId;
+    uint256 public expectedBaseCostGasPrice;
+    uint256 public expectedBaseCostGasLimit;
+    uint256 public expectedBaseCostGasPerPubdata;
+
+    function setBaseCostReturn(uint256 value) external {
+        baseCostReturn = value;
+    }
+
+    function expectBaseCostParams(uint256 chainId, uint256 gasPrice, uint256 gasLimit, uint256 gasPerPubdata)
+        external
+    {
+        expectedBaseCostChainId = chainId;
+        expectedBaseCostGasPrice = gasPrice;
+        expectedBaseCostGasLimit = gasLimit;
+        expectedBaseCostGasPerPubdata = gasPerPubdata;
+    }
+
+    // --- Methods used by L1Bridge ---
+    function requestL2TransactionDirect(L2TransactionRequestDirect calldata _request)
+        external
+        payable
+        returns (bytes32)
+    {
+        // Mirrors the real Bridgehub check for ETH-based chains.
+        require(msg.value == _request.mintValue, "msg.value != mintValue");
+        lastChainId = _request.chainId;
+        lastMintValue = _request.mintValue;
+        lastL2Contract = _request.l2Contract;
+        lastL2Value = _request.l2Value;
+        lastL2GasLimit = _request.l2GasLimit;
+        lastL2GasPerPubdata = _request.l2GasPerPubdataByteLimit;
+        lastRefundRecipient = _request.refundRecipient;
+        lastMsgValue = msg.value;
+        lastRequestedTxHash = keccak256(
+            abi.encode(
+                _request.chainId,
+                _request.l2Contract,
+                _request.l2Value,
+                _request.l2Calldata,
+                _request.l2GasLimit,
+                _request.l2GasPerPubdataByteLimit,
+                msg.value,
+                _request.refundRecipient
+            )
+        );
+        return lastRequestedTxHash;
+    }
+
+    function l2TransactionBaseCost(uint256 _chainId, uint256 _gasPrice, uint256 _l2GasLimit, uint256 _l2GasPerPubdataByte)
         external
         view
         returns (uint256)
     {
+        require(_chainId == expectedBaseCostChainId, "unexpected chain id");
         // The gas price of zero is allowed as `forge test --zksync` sets it to zero
-        require(_l1GasPrice == expectedBaseCostGasPrice || _l1GasPrice == 0, "unexpected gas price");
+        require(_gasPrice == expectedBaseCostGasPrice || _gasPrice == 0, "unexpected gas price");
         require(_l2GasLimit == expectedBaseCostGasLimit, "unexpected gas limit");
         require(_l2GasPerPubdataByte == expectedBaseCostGasPerPubdata, "unexpected gas per pubdata");
         return baseCostReturn;
@@ -107,16 +139,19 @@ contract L1BridgeTest is Test {
 
     // Deployed contracts
     MockMailbox internal mailbox;
+    MockBridgehub internal bridgehub;
     L1Nodl internal token;
     L1Bridge internal bridge;
 
     // Config
     address internal constant L2_BRIDGE_ADDR = address(0x1234);
+    uint256 internal constant L2_CHAIN_ID = 271;
 
     function setUp() public {
         mailbox = new MockMailbox();
+        bridgehub = new MockBridgehub();
         token = new L1Nodl(ADMIN, ADMIN);
-        bridge = new L1Bridge(ADMIN, address(mailbox), address(token), L2_BRIDGE_ADDR);
+        bridge = new L1Bridge(ADMIN, address(mailbox), address(bridgehub), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR);
 
         vm.startPrank(ADMIN);
         bytes32 minterRole = keccak256("MINTER_ROLE");
@@ -143,7 +178,7 @@ contract L1BridgeTest is Test {
 
         assertEq(bridge.depositAmount(USER, txHash), amount, "deposit amount recorded");
         assertEq(token.balanceOf(USER), 1_000_000 ether - amount, "user burned amount");
-        assertEq(mailbox.lastRefundRecipient(), refundRecipient, "refund recipient passed to mailbox");
+        assertEq(bridgehub.lastRefundRecipient(), refundRecipient, "refund recipient passed to bridgehub");
     }
 
     function test_Deposit_Overload_DefaultRefundRecipient() public {
@@ -163,7 +198,7 @@ contract L1BridgeTest is Test {
 
         assertEq(bridge.depositAmount(USER, txHash), amount, "deposit amount recorded");
         assertEq(token.balanceOf(USER), 1_000_000 ether - amount, "user burned amount");
-        assertEq(mailbox.lastRefundRecipient(), USER, "refund recipient is user");
+        assertEq(bridgehub.lastRefundRecipient(), USER, "refund recipient is user");
     }
 
     function test_Deposit_RefundRecipientZero_DefaultsToUser() public {
@@ -178,7 +213,7 @@ contract L1BridgeTest is Test {
         vm.stopPrank();
 
         assertEq(bridge.depositAmount(USER, txHash), amount, "deposit amount recorded");
-        assertEq(mailbox.lastRefundRecipient(), USER, "refund recipient defaults to sender");
+        assertEq(bridgehub.lastRefundRecipient(), USER, "refund recipient defaults to sender");
     }
 
     function test_Deposit_Revert_ZeroAmount() public {
@@ -357,12 +392,12 @@ contract L1BridgeTest is Test {
         uint256 gasPerPubdata = 800;
         uint256 quotedValue = 123;
         vm.txGasPrice(42 gwei);
-        mailbox.setBaseCostReturn(quotedValue);
-        mailbox.expectBaseCostParams(tx.gasprice, gasLimit, gasPerPubdata);
+        bridgehub.setBaseCostReturn(quotedValue);
+        bridgehub.expectBaseCostParams(L2_CHAIN_ID, tx.gasprice, gasLimit, gasPerPubdata);
 
         uint256 quote = bridge.quoteL2BaseCost(gasLimit, gasPerPubdata);
 
-        assertEq(quote, quotedValue, "returns quoted base cost from mailbox");
+        assertEq(quote, quotedValue, "returns quoted base cost from bridgehub");
     }
 
     function test_QuoteL2BaseCostAtGasPrice() public {
@@ -370,11 +405,11 @@ contract L1BridgeTest is Test {
         uint256 gasPerPubdata = 900;
         uint256 gasPrice = 15 gwei;
         uint256 quotedValue = 456;
-        mailbox.setBaseCostReturn(quotedValue);
-        mailbox.expectBaseCostParams(gasPrice, gasLimit, gasPerPubdata);
+        bridgehub.setBaseCostReturn(quotedValue);
+        bridgehub.expectBaseCostParams(L2_CHAIN_ID, gasPrice, gasLimit, gasPerPubdata);
         uint256 quote = bridge.quoteL2BaseCostAtGasPrice(gasPrice, gasLimit, gasPerPubdata);
 
-        assertEq(quote, quotedValue, "returns mailbox quote");
+        assertEq(quote, quotedValue, "returns bridgehub quote");
     }
 
     function test_Pause_Gates_Functions() public {
@@ -428,6 +463,40 @@ contract L1BridgeTest is Test {
 
     function test_Constructor_Revert_ZeroAddress() public {
         vm.expectRevert(abi.encodeWithSelector(L1Bridge.ZeroAddress.selector));
-        new L1Bridge(ADMIN, address(0), address(token), L2_BRIDGE_ADDR);
+        new L1Bridge(ADMIN, address(0), address(bridgehub), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR);
+    }
+
+    function test_Constructor_Revert_ZeroBridgehub() public {
+        vm.expectRevert(abi.encodeWithSelector(L1Bridge.ZeroAddress.selector));
+        new L1Bridge(ADMIN, address(mailbox), address(0), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR);
+    }
+
+    function test_Constructor_Revert_ZeroChainId() public {
+        vm.expectRevert(abi.encodeWithSelector(L1Bridge.ZeroChainId.selector));
+        new L1Bridge(ADMIN, address(mailbox), address(bridgehub), 0, address(token), L2_BRIDGE_ADDR);
+    }
+
+    function test_Deposit_PassesBridgehubRequestFields() public {
+        uint256 amount = 42 ether;
+        address l2Receiver = address(0x7777);
+        uint256 gasLimit = 750_000;
+        uint256 gasPerPubdata = 800;
+        address refundRecipient = address(0x9999);
+        uint256 fee = 0.01 ether;
+
+        vm.deal(USER, fee);
+        vm.startPrank(USER);
+        token.approve(address(bridge), amount);
+        bytes32 txHash = bridge.deposit{value: fee}(l2Receiver, amount, gasLimit, gasPerPubdata, refundRecipient);
+        vm.stopPrank();
+
+        assertEq(bridgehub.lastChainId(), L2_CHAIN_ID, "chain id passed to bridgehub");
+        assertEq(bridgehub.lastMintValue(), fee, "mintValue equals msg.value");
+        assertEq(bridgehub.lastMsgValue(), fee, "msg.value forwarded to bridgehub");
+        assertEq(bridgehub.lastL2Contract(), L2_BRIDGE_ADDR, "target is the L2 bridge");
+        assertEq(bridgehub.lastL2Value(), 0, "no L2 value");
+        assertEq(bridgehub.lastL2GasLimit(), gasLimit, "gas limit forwarded");
+        assertEq(bridgehub.lastL2GasPerPubdata(), gasPerPubdata, "gas per pubdata forwarded");
+        assertEq(txHash, bridgehub.lastRequestedTxHash(), "returns bridgehub canonical tx hash");
     }
 }

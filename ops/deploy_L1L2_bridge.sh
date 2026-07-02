@@ -131,7 +131,7 @@ main() {
     L2_VERIFIER_URL="${L2_VERIFIER_URL:?Please set L2_VERIFIER_URL in .env}"
     
     # Check required environment variables
-    required_vars=("NODL_ADMIN" "NODL_MINTER" "L2_BRIDGE_OWNER" "L1_MAILBOX" "L1_BRIDGE_OWNER" "L1_CHAIN_ID" "L2_CHAIN_NAME")
+    required_vars=("NODL_ADMIN" "NODL_MINTER" "L2_BRIDGE_OWNER" "L1_MAILBOX" "BRIDGEHUB" "L2_CHAIN_ID" "L1_BRIDGE_OWNER" "L1_CHAIN_ID" "L2_CHAIN_NAME")
     for var in "${required_vars[@]}"; do
         if [ -z "${!var:-}" ]; then
             print_error "Required environment variable $var is not set!"
@@ -281,7 +281,9 @@ main() {
         LOG_FILE="logs/deploy_l1_bridge.log"
         print_info "Deploying L1 Bridge..."
         print_info "Owner: $L1_BRIDGE_OWNER"
-        print_info "Mailbox: $L1_MAILBOX"
+        print_info "Mailbox (proofs): $L1_MAILBOX"
+        print_info "Bridgehub: $BRIDGEHUB"
+        print_info "L2 Chain ID: $L2_CHAIN_ID"
         print_info "L1 Token: $L1_NODL_ADDR"
         print_info "L2 Bridge: $L2_BRIDGE_ADDR"
         
