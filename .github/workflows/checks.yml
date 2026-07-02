@@ -66,6 +66,9 @@ jobs:
         run: apt-get update && apt-get install -y lcov
 
       - name: Report coverage to PR
+        # GITHUB_TOKEN is read-only on pull_request runs from forks, so the
+        # sticky comment can never post there; skip it and keep the job green.
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: zgosalvez/github-actions-report-lcov@v4
         with:
           coverage-files: coverage.lcov
