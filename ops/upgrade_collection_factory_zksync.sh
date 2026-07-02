@@ -466,6 +466,20 @@ verify_source_code() {
     return 0
   fi
 
+  # The standard-JSON helper cannot verify CollectionFactory: the factory
+  # carries factoryDependencies (the ERC1967Proxy bytecode hash) which the
+  # standard-JSON payload doesn't convey — only the hardhat-zksync-verify
+  # plugin does (see design-and-implementation.md §7.3). Don't submit a
+  # request that is known to fail; point at the working path instead.
+  if [ "$TARGET_CONTRACT" = "CollectionFactory" ]; then
+    local hh_network="zkSyncSepoliaTestnet"
+    if [ "$NETWORK" = "mainnet" ]; then hh_network="zkSyncMainnet"; fi
+    log_warning "Standard-JSON verification cannot handle CollectionFactory (factoryDependencies not conveyed)."
+    log_info "Verify via the Hardhat plugin (same zksolc pin as foundry, see hardhat.config.ts):"
+    log_info "  npx hardhat compile && npx hardhat verify --network $hh_network --contract $TARGET_SRC $NEW_IMPL"
+    return 0
+  fi
+
   log_info "Verifying $TARGET_CONTRACT source on the block explorer ($NEW_IMPL)..."
 
   # All upgrade targets have parameterless constructors → no constructor args.

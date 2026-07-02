@@ -577,17 +577,20 @@ verify_source_code() {
     CHAIN_ID="300"
   fi
 
+  # Skips must return 0: main() calls this unguarded under `set -e`, and a
+  # non-zero return would abort the script before update_env_file/print_summary
+  # persist the already-deployed addresses.
   BROADCAST_JSON="broadcast/DeployCollectionFactoryZkSync.s.sol/${CHAIN_ID}/run-latest.json"
   if [ ! -f "$BROADCAST_JSON" ]; then
     log_error "Broadcast file not found: $BROADCAST_JSON"
     log_warning "Skipping source code verification"
-    return 1
+    return 0
   fi
 
   if ! command -v python3 &> /dev/null; then
     log_error "python3 not found. Install Python 3.8+ for source code verification."
     log_warning "Skipping source code verification"
-    return 1
+    return 0
   fi
 
   # Versions default to the toolchain this script was written against; override
@@ -628,7 +631,10 @@ update_env_file() {
 
   if grep -q "COLLECTION_FACTORY_PROXY" "$ENV_FILE"; then
     log_info "Updating existing collections addresses in $ENV_FILE..."
-    sed -i.bak '/^# User Collections/,/^$/d' "$ENV_FILE"
+    # Delete only the marker comment and the four keys individually — a
+    # marker-to-blank-line range delete would also eat unrelated vars appended
+    # right after the block (and everything to EOF if no blank line follows).
+    sed -i.bak '/^# User Collections/d' "$ENV_FILE"
     sed -i.bak '/^COLLECTION_FACTORY_PROXY=/d' "$ENV_FILE"
     sed -i.bak '/^COLLECTION_FACTORY_IMPL=/d' "$ENV_FILE"
     sed -i.bak '/^USER_COLLECTION_721_IMPL=/d' "$ENV_FILE"

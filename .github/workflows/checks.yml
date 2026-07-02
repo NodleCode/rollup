@@ -110,10 +110,7 @@ jobs:
 
       - name: Check line coverage threshold (collections)
         run: |
-          # Extract line coverage from lcov report for src/collections/ contracts only.
-          # While src/collections/ is documentation-only, this step skips cleanly with a
-          # warning. As soon as Solidity sources land, the gate enforces the same 95%
-          # threshold as swarms.
+          # Extract line coverage from lcov report for src/collections/ contracts only
           LINES_FOUND=$(awk '
             /^SF:.*src\/collections\// { in_section = 1 }
             /^end_of_record/ { in_section = 0 }
@@ -129,8 +126,8 @@ jobs:
           ' coverage.lcov)
 
           if [ "$LINES_FOUND" -eq 0 ]; then
-            echo "::warning::No Solidity sources found under src/collections/ — coverage gate skipped (will enforce once contracts land)"
-            exit 0
+            echo "Error: No lines found in coverage report for src/collections/"
+            exit 1
           fi
 
           COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($LINES_HIT / $LINES_FOUND) * 100}")

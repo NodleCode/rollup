@@ -5,11 +5,6 @@ import "@matterlabs/hardhat-zksync-node/dist/type-extensions";
 import "@matterlabs/hardhat-zksync-verify/dist/src/type-extensions";
 import * as dotenv from "dotenv";
 
-// Load .env-prod for mainnet, .env-test otherwise
-const envFile =
-  process.env.HARDHAT_NETWORK === "zkSyncMainnet" ? ".env-prod" : ".env-test";
-dotenv.config({ path: envFile });
-
 /**
  * Deploys the user collections system (CollectionFactory + UserCollection721 +
  * UserCollection1155) on ZkSync Era, then verifies all four contracts.
@@ -39,6 +34,14 @@ dotenv.config({ path: envFile });
  */
 module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const ZERO = "0x0000000000000000000000000000000000000000";
+
+  // Load .env-prod for mainnet, .env-test otherwise. Must key off
+  // hre.network.name: process.env.HARDHAT_NETWORK is NOT set when the network
+  // comes from the --network CLI flag (deploy-zksync loads this script
+  // in-process), so an env-var check would silently pick .env-test on mainnet.
+  const envFile =
+    hre.network.name === "zkSyncMainnet" ? ".env-prod" : ".env-test";
+  dotenv.config({ path: envFile });
 
   const rpcUrl = hre.network.config.url!;
   const provider = new Provider(rpcUrl);
