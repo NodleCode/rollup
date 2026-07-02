@@ -28,7 +28,7 @@ USAGE:
     --address 0xDEF... --contract src/B.sol:B --constructor-args 0x...
 
   # Override compiler versions (defaults from build-info):
-  python3 ops/verify_hardhat_zksync.py ... --zksolc-version v1.5.1 --solc-version 0.8.26
+  python3 ops/verify_hardhat_zksync.py ... --zksolc-version v1.5.15 --solc-version 0.8.26
 
   # Specify verifier URL (defaults to mainnet):
   python3 ops/verify_hardhat_zksync.py ... --verifier-url https://explorer.sepolia.era.zksync.dev/contract_verification
@@ -150,12 +150,11 @@ def extract_compiler_versions(build_info: dict) -> tuple:
     match = re.search(r"(\d+\.\d+\.\d+)", solc_version_raw)
     solc_version = match.group(1) if match else "0.8.26"
 
-    # zksolc version from settings or default
+    # zksolc version: build-info from this toolchain does not record it, so the
+    # fallback MUST match the pin in hardhat.config.ts (or pass --zksolc-version).
     zksolc_version = build_info.get("zksolcVersion")
     if not zksolc_version:
-        # Try to find it in the output compiler metadata
-        settings = build_info.get("input", {}).get("settings", {})
-        zksolc_version = "v1.5.1"  # Hardhat default
+        zksolc_version = "v1.5.15"  # keep in sync with hardhat.config.ts
 
     if not zksolc_version.startswith("v"):
         zksolc_version = f"v{zksolc_version}"
