@@ -44,9 +44,12 @@ import {
 import { getBatchInfo, fetchZyfiSponsored } from "./helpers";
 import reservedHashes from "./reservedHashes";
 import namesRouter from "./routes/names";
+import resolveRouter from "./routes/resolve";
 
 const app = express();
-app.use(express.json());
+// CCIP-Read clients (and the ENS app) often POST with Content-Type: text/plain
+// to avoid triggering a CORS preflight. Parse JSON regardless of content type.
+app.use(express.json({ type: ["application/json", "text/plain"] }));
 
 const corsOptions = {
   origin: "*",
@@ -512,6 +515,7 @@ app.post(
 );
 
 app.use('/name', namesRouter);
+app.use('/resolve', resolveRouter);
 
 app.use((err: Error, req: Request, res: Response, next: NextFunction): void => {
   if (err instanceof HttpError) {
