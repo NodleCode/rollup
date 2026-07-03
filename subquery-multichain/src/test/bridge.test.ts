@@ -14,7 +14,7 @@ describe("Bridge Mappings", () => {
   describe("handleDepositFinalized (L2)", () => {
     it("should create a new BridgeDeposit when deposit is finalized on L2", async () => {
       const expectedDeposit = {
-        id: "deposit-0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        id: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
         l2TransactionHash: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
         amount: "1000000000000000000",
       };
@@ -61,7 +61,7 @@ describe("Bridge Mappings", () => {
         l2TransactionHash: l2TxHash,
         amount: "500000000000000000",
         l2BlockNumber: "65260493",
-        receiverId: "0x2222222222222222222222222222222222222222", // Required for store.getByFields query
+        receiverId: "0x2222222222222222222222222222222222222222",
       };
 
       // Expected withdrawal after L1 finalization
@@ -95,7 +95,7 @@ describe("Bridge Mappings", () => {
   describe("handleDepositInitiated (L1)", () => {
     it("should create a new BridgeDeposit when deposit is initiated on L1", async () => {
       const expectedDeposit = {
-        id: "deposit-0x4444444444444444444444444444444444444444444444444444444444444444",
+        id: "0x4444444444444444444444444444444444444444444444444444444444444444",
         amount: "2000000000000000000",
       };
 

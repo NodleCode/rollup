@@ -1,22 +1,9 @@
-import { EthereumLog } from "@subql/types-ethereum";
 import { fetchAccount, fetchTransaction } from "../utils/utils";
 import { BridgeWithdrawal, BridgeDeposit } from "../types";
-
-// Event types based on IL2Bridge interface
-interface DepositFinalizedEventArgs {
-  l1Sender: string;
-  l2Receiver: string;
-  amount: { toBigInt(): bigint };
-}
-
-interface WithdrawalInitiatedEventArgs {
-  l2Sender: string;
-  l1Receiver: string;
-  amount: { toBigInt(): bigint };
-}
-
-type DepositFinalizedLog = EthereumLog<DepositFinalizedEventArgs>;
-type WithdrawalInitiatedLog = EthereumLog<WithdrawalInitiatedEventArgs>;
+import {
+  DepositFinalizedLog,
+  WithdrawalInitiatedLog,
+} from "../types/abi-interfaces/BridgeL2Abi";
 
 export async function handleDepositFinalized(
   event: DepositFinalizedLog
@@ -90,11 +77,11 @@ export async function handleWithdrawalInitiated(
     timestamp,
     l2SenderAccount.id,
     l1ReceiverAccount.id,
-    amount.toBigInt()
+    amount.toBigInt(),
+    false // finalized
   );
 
   withdrawal.hash = event.transaction.hash;
-  withdrawal.finalized = false;
 
   await Promise.all([
     withdrawal.save(),

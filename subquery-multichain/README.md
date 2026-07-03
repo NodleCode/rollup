@@ -155,7 +155,7 @@ This ensures that deposits and withdrawals are properly linked between L1 and L2
 
 ## Start Blocks
 
-- **Ethereum L1**: Block 23635846
+- **Ethereum L1**: Block 23635689
 - **zkSync L2**: Block 65260492
 
 ## Development

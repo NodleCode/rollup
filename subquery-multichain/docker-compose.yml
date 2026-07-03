@@ -34,6 +34,8 @@ services:
       DB_DATABASE: postgres
       DB_HOST: postgres
       DB_PORT: 5432
+      # Compose reads .env automatically for ${} interpolation
+      ZKSYNC_MAINNET_RPC: ${ZKSYNC_MAINNET_RPC:-https://mainnet.era.zksync.io}
     volumes:
       - ./:/app
     command:

@@ -28,9 +28,6 @@ contract BatchMintNFT is
     /// @notice Whether minting is currently enabled
     bool public mintingEnabled;
 
-    /// @notice Role identifier for minters (reserved for future use if minting restrictions are needed)
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-
     /// @notice Error thrown when arrays length mismatch in batch operations
     error UnequalLengths();
     /// @notice Error thrown when zero address is provided
@@ -180,13 +177,6 @@ contract BatchMintNFT is
         // Access control is handled by the onlyRole modifier
         // This function intentionally left empty as the authorization is done via modifier
         newImplementation; // Silence unused parameter warning
-    }
-
-    /// @notice Burn a token (only owner or approved operator can burn)
-    /// @param tokenId The token ID to burn
-    /// @dev The caller must own the token or be an approved operator
-    function burn(uint256 tokenId) public override(ERC721BurnableUpgradeable) {
-        super.burn(tokenId);
     }
 
     /// @notice Internal burn function (required override for ERC721URIStorage)

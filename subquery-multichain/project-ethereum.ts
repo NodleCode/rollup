@@ -33,7 +33,7 @@ const project: EthereumProject = {
   dataSources: [
     {
       kind: EthereumDatasourceKind.Runtime,
-      startBlock: 23635846,
+      startBlock: 23635689,
       options: {
         abi: "BridgeL1",
         address: "0x2d02b651ea9630351719c8c55210e042e940d69a",

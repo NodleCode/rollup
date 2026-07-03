@@ -4,16 +4,15 @@
   "description": "SubQuery Multi-Chain Project for NODL Bridge (Ethereum L1 and zkSync L2)",
   "main": "dist/index.js",
   "scripts": {
-    "codegen": "npm run export:env && subql codegen subquery-multichain.yaml",
-    "build": "npm run export:env && subql build",
+    "codegen": "subql codegen subquery-multichain.yaml",
+    "build": "subql build",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:failed": "jest --onlyFailures",
     "publish": "subql publish",
-    "export:env": "export $(grep -v '^#' .env | xargs)",
-    "start:docker": "npm run export:env && docker-compose pull && docker-compose up --remove-orphans",
-    "dev": "npm run export:env && npm run codegen && npm run prepack && docker-compose pull && docker-compose up --remove-orphans",
+    "start:docker": "docker-compose pull && docker-compose up --remove-orphans",
+    "dev": "npm run codegen && npm run prepack && docker-compose pull && docker-compose up --remove-orphans",
     "prepack": "rm -rf dist && npm run build"
   },
   "files": [

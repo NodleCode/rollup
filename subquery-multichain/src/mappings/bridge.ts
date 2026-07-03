@@ -19,23 +19,37 @@ export async function handleDepositFinalized(
   }
 
   const timestamp = BigInt(event.block.timestamp) * BigInt(1000);
+  const { l1Sender, l2Receiver, amount } = event.args;
 
   // Use l2TransactionHash as common ID between L1 and L2
   // In L2, event.transaction.hash IS the l2TransactionHash that was emitted in L1
   const depositId = event.transaction.hash;
 
-  // Try to find existing deposit from L1, or create new one
+  // The two chain indexers run independently with no ordering guarantee, so
+  // the L1-side DepositInitiated may not be indexed yet — create the deposit
+  // from L2 data if missing (handleDepositInitiated fills in the L1 fields).
   let deposit = await BridgeDeposit.get(depositId);
 
   if (!deposit) {
-    throw new Error(`Deposit ${depositId} not found`);
+    const senderAccount = await fetchAccount(l1Sender.toLowerCase(), timestamp);
+    const receiverAccount = await fetchAccount(
+      l2Receiver.toLowerCase(),
+      timestamp
+    );
+    deposit = new BridgeDeposit(
+      depositId,
+      timestamp,
+      senderAccount.id,
+      receiverAccount.id,
+      amount.toBigInt(),
+      "finalized"
+    );
   } else {
-    // Update existing deposit from L1 with L2 data
-    // L2 data takes precedence for receiver and amount
-    deposit.l2TransactionHash = event.transaction.hash;
     deposit.status = "finalized";
-    deposit.finalizedAt = timestamp;
   }
+
+  deposit.l2TransactionHash = event.transaction.hash;
+  deposit.finalizedAt = timestamp;
 
   return deposit.save();
 }
@@ -102,19 +116,27 @@ export async function handleDepositInitiated(
   // Use l2TransactionHash as common ID between L1 and L2
   const depositId = l2DepositTxHash;
 
-  // Try to find existing deposit from L2, or create new one
+  // The L2 handler may have already created (and finalized) this deposit —
+  // fill in the L1-side fields without regressing finalization state.
   let deposit = await BridgeDeposit.get(depositId);
 
-  // Create new deposit if not found from L2
-  deposit = new BridgeDeposit(
-    depositId,
-    timestamp,
-    senderAccount.id,
-    receiverAccount.id,
-    amount.toBigInt(),
-    event.transaction.hash,
-    "initiated"
-  );
+  if (!deposit) {
+    deposit = new BridgeDeposit(
+      depositId,
+      timestamp,
+      senderAccount.id,
+      receiverAccount.id,
+      amount.toBigInt(),
+      "initiated"
+    );
+  } else {
+    deposit.timestamp = timestamp;
+    deposit.senderId = senderAccount.id;
+    deposit.receiverId = receiverAccount.id;
+    deposit.amount = amount.toBigInt();
+  }
+
+  deposit.l1TransactionHash = event.transaction.hash;
 
   return deposit.save();
 }
@@ -142,39 +164,14 @@ export async function handleWithdrawalFinalized(
   // Use batchNumber and txNumberInBatch (which is the transaction index in the batch) to find the L2 transaction hash
   let l2TransactionHash: string | null = null;
 
-  // Get initiated withdrawals for this receiver
-  // Query database directly to avoid SubQuery index validation issues
-  const entities = (await store.getByFields(
-    "BridgeWithdrawal",
-    [
-      ["receiver_id" as keyof BridgeWithdrawal, "=", receiverAccount.id],
-      ["status", "=", "initiated"],
-    ],
-    {
-      limit: 100,
-    }
-  )) as BridgeWithdrawal[];
-
-  if (entities.length === 0) {
-    logger.error(
-      `No initiated withdrawals found for receiver ${receiverAccount.id}`
-    );
-    throw new Error(
-      `No initiated withdrawals found for receiver ${receiverAccount.id}`
-    );
-  }
-
   try {
     const rpcUrl =
       process.env.ZKSYNC_MAINNET_RPC || "https://mainnet.era.zksync.io";
-    const batchNum =
-      typeof batchNumber === "bigint"
-        ? Number(batchNumber)
-        : Number(batchNumber);
+    const batchNum = Number(batchNumber);
     const txIndex = Number(txNumberInBatchBigInt);
 
     logger.info(
-      `Looking up L2 transaction hash for batch ${batchNum}, index ${txIndex} (from ${entities.length} initiated withdrawals)`
+      `Looking up L2 transaction hash for batch ${batchNum}, index ${txIndex}`
     );
 
     l2TransactionHash = await getL2TransactionHashByBatchAndIndex(
@@ -203,11 +200,15 @@ export async function handleWithdrawalFinalized(
   const withdrawalId = l2TransactionHash;
 
   // Check if withdrawal already exists
-  let withdrawal = await BridgeWithdrawal.get(withdrawalId);
+  const withdrawal = await BridgeWithdrawal.get(withdrawalId);
 
   if (!withdrawal) {
-    logger.error(`Withdrawal ${withdrawalId} not found`);
-    throw new Error(`Withdrawal ${withdrawalId} not found`);
+    // Withdrawals initiated before the L2 startBlock are never indexed —
+    // throwing here would permanently halt the L1 indexer on this block.
+    logger.warn(
+      `Withdrawal ${withdrawalId} not found, skipping finalization update`
+    );
+    return;
   }
 
   // Update existing withdrawal with L1 finalization data
@@ -240,10 +241,7 @@ export async function handleClaimedFailedDeposit(
   // ID is the transaction hash (unique identifier)
   const claimId = event.transaction.hash;
 
-  // Check if claim already exists
-  let failedDepositClaim = await BridgeFailedDepositClaim.get(claimId);
-
-  failedDepositClaim = new BridgeFailedDepositClaim(
+  const failedDepositClaim = new BridgeFailedDepositClaim(
     claimId,
     timestamp,
     receiverAccount.id,
