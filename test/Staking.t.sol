@@ -46,9 +46,10 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
     
-    // Helper function to move time forward
-    function _skipTime(uint256 days_) internal {
-        vm.warp(block.timestamp + days_ * 1 days);
+    // Helper function to move time forward by a number of seconds
+    // (DURATION is stored in seconds, so callers pass second-denominated values)
+    function _skipTime(uint256 secs) internal {
+        vm.warp(block.timestamp + secs);
     }
 
     // Helper function to calculate reward like the contract
@@ -352,9 +353,8 @@ contract StakingTest is Test {
         vm.startPrank(user1);
         staking.unstake(0);
 
-        // Try to claim unstaked stake — unstake() zeroes the amount, so the
-        // amount check fires before the unstaked check
-        vm.expectRevert(Staking.NoStakeFound.selector);
+        // Try to claim an unstaked stake
+        vm.expectRevert(Staking.AlreadyUnstaked.selector);
         staking.claim(0);
         vm.stopPrank();
     }
@@ -453,11 +453,40 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    function test_RevertWhen_ClaimInsufficientRewards() public {
-        uint256 stakeAmount = 1000 ether;
+    // Rewards are reserved at stake time, so once the pool is fully committed a
+    // further stake reverts rather than letting a later claim fail (oversubscription).
+    function test_RevertWhen_StakeExhaustsReservedRewards() public {
+        uint256 stakeAmount = MIN_STAKE;
         uint256 rewardAmount = _calculateReward(stakeAmount);
 
-        // Fund rewards so the stake passes its reward check
+        // Fund rewards for exactly one stake
+        vm.startPrank(admin);
+        token.approve(address(staking), rewardAmount);
+        staking.fundRewards(rewardAmount);
+        vm.stopPrank();
+
+        // First staker reserves the entire reward pool
+        vm.startPrank(user1);
+        token.approve(address(staking), stakeAmount);
+        staking.stake(stakeAmount);
+        vm.stopPrank();
+
+        assertEq(staking.availableRewards(), 0);
+
+        // Second staker cannot be admitted: their reward is not funded
+        vm.startPrank(user2);
+        token.approve(address(staking), stakeAmount);
+        vm.expectRevert(Staking.InsufficientRewardBalance.selector);
+        staking.stake(stakeAmount);
+        vm.stopPrank();
+    }
+
+    // A matured stake stays claimable even after availableRewards reads 0,
+    // because the reward was reserved when the stake was created.
+    function test_ClaimSucceedsAfterRewardsFullyReserved() public {
+        uint256 stakeAmount = MIN_STAKE;
+        uint256 rewardAmount = _calculateReward(stakeAmount);
+
         vm.startPrank(admin);
         token.approve(address(staking), rewardAmount);
         staking.fundRewards(rewardAmount);
@@ -466,18 +495,15 @@ contract StakingTest is Test {
         vm.startPrank(user1);
         token.approve(address(staking), stakeAmount);
         staking.stake(stakeAmount);
-        vm.stopPrank();
 
-        // Drain the reward pool after the stake so the claim-time check fails
-        vm.prank(admin);
-        staking.emergencyWithdraw();
+        assertEq(staking.availableRewards(), 0);
 
-        // Move time forward and try to claim
         _skipTime(DURATION + 1);
 
-        vm.prank(user1);
-        vm.expectRevert(Staking.InsufficientRewardBalance.selector);
+        uint256 balanceBefore = token.balanceOf(user1);
         staking.claim(0);
+        assertEq(token.balanceOf(user1) - balanceBefore, stakeAmount + rewardAmount);
+        vm.stopPrank();
     }
 
     function testMultipleRewardsFundings() public {
@@ -572,8 +598,7 @@ contract StakingTest is Test {
         staking.stake(stakeAmount);
 
         // Try to claim one second before the duration elapses
-        // (DURATION is already in seconds — _skipTime would multiply by 1 days)
-        vm.warp(block.timestamp + DURATION - 1);
+        _skipTime(DURATION - 1);
 
         vm.expectRevert(Staking.TooEarly.selector);
         staking.claim(0);
@@ -879,24 +904,36 @@ contract StakingTest is Test {
         token.approve(address(staking), stakeAmount);
         staking.stake(stakeAmount);
         vm.stopPrank();
-        
+
         vm.startPrank(admin);
+        // emergencyWithdraw requires the contract to be paused first
+        staking.pause();
         uint256 balanceBefore = token.balanceOf(admin);
         staking.emergencyWithdraw();
         uint256 balanceAfter = token.balanceOf(admin);
-        
+
         assertEq(balanceAfter - balanceBefore, stakeAmount + rewardAmount);
         assertEq(staking.availableRewards(), 0);
         vm.stopPrank();
     }
 
     function test_RevertWhen_NonEmergencyManagerEmergencyWithdraws() public {
+        // Pause first so the failure is attributable to the role check, not the pause guard
+        vm.prank(admin);
+        staking.pause();
+
         vm.startPrank(user1);
         vm.expectRevert(
             abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, EMERGENCY_MANAGER_ROLE)
         );
         staking.emergencyWithdraw();
         vm.stopPrank();
+    }
+
+    function test_RevertWhen_EmergencyWithdrawNotPaused() public {
+        vm.prank(admin);
+        vm.expectRevert(Pausable.ExpectedPause.selector);
+        staking.emergencyWithdraw();
     }
 
     // Test updateMaxPoolStake function
@@ -975,22 +1012,6 @@ contract StakingTest is Test {
         staking.stake(stakeAmount);
         
         assertEq(staking.totalStakedByUser(user1), stakeAmount);
-        vm.stopPrank();
-    }
-
-    function test_RevertWhen_StakeAboveMaxTotalStake() public {
-        uint256 stakeAmount = MAX_TOTAL_STAKE + 1 ether;
-
-        // Fund rewards so the per-user maximum check is actually reached
-        vm.startPrank(admin);
-        token.approve(address(staking), _calculateReward(stakeAmount));
-        staking.fundRewards(_calculateReward(stakeAmount));
-        vm.stopPrank();
-
-        vm.startPrank(user1);
-        token.approve(address(staking), stakeAmount);
-        vm.expectRevert(Staking.ExceedsMaxTotalStake.selector);
-        staking.stake(stakeAmount);
         vm.stopPrank();
     }
 

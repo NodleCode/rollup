@@ -2,17 +2,18 @@
 pragma solidity ^0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
-import {NODL} from "./NODL.sol";
 
 contract Staking is AccessControl, ReentrancyGuard, Pausable {
+    using SafeERC20 for IERC20;
+
     bytes32 public constant REWARDS_MANAGER_ROLE = keccak256("REWARDS_MANAGER_ROLE");
     bytes32 public constant EMERGENCY_MANAGER_ROLE = keccak256("EMERGENCY_MANAGER_ROLE");
-    uint256 private constant PRECISION = 1e18;
 
-    NODL public immutable token;
+    IERC20 public immutable token;
 
     uint256 public immutable MIN_STAKE;
     uint256 public immutable MAX_TOTAL_STAKE;
@@ -43,15 +44,11 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
     error MinStakeNotMet();
     error ExceedsMaxTotalStake();
     error ExceedsMaxPoolStake();
-    error AlreadyStaked();
-    error NoStakeFound();
     error AlreadyClaimed();
     error TooEarly();
     error NoStake();
     error UnstakeNotAllowed();
     error InsufficientRewardBalance();
-    error InsufficientAllowance();
-    error InsufficientTotalStaked();
     error InsufficientBalance();
     error UnmetRequiredHoldingToken();
     error InvalidMaxPoolStake();
@@ -72,22 +69,22 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
     @param _rewardRate The reward rate, represented in percentage
     @param _minStake The minimum stake per user, represented in Wei
     @param _maxTotalStake The maximum total stake per user, represented in Wei
-    @param _duration The duration of the stake, represented in days
+    @param _duration The duration of the stake, represented in seconds
     @param _admin The address of the admin
     */
     constructor(address nodlToken, uint256 _requiredHoldingToken, uint256 _rewardRate, uint256 _minStake, uint256 _maxTotalStake, uint256 _duration, address _admin) {
         if (nodlToken == address(0)) revert ZeroAddress();
-        if (_rewardRate <= 0) revert InvalidRewardRate();
+        if (_rewardRate == 0) revert InvalidRewardRate();
         if (_minStake == 0) revert InvalidMinStake();
         if (_maxTotalStake <= _minStake) revert InvalidMaxTotalStake();
         if (_duration == 0) revert InvalidDuration();
         if (_admin == address(0)) revert ZeroAddress();
 
-        token = NODL(nodlToken);
+        token = IERC20(nodlToken);
         REWARD_RATE = _rewardRate;
         MIN_STAKE = _minStake;
         MAX_TOTAL_STAKE = _maxTotalStake;
-        DURATION = _duration * 1 seconds;
+        DURATION = _duration;
         REQUIRED_HOLDING_TOKEN = _requiredHoldingToken;
         
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
@@ -95,13 +92,13 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
         _grantRole(EMERGENCY_MANAGER_ROLE, _admin);
     }
 
-    /* 
-    @dev Calculate reward with high precision
+    /*
+    @dev Calculate reward
     @param amount The staked amount
     @return reward The calculated reward
     */
     function _calculateReward(uint256 amount) private view returns (uint256) {
-        return (amount * REWARD_RATE * PRECISION) / (100 * PRECISION);
+        return (amount * REWARD_RATE) / 100;
     }
 
     /* 
@@ -109,18 +106,19 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
     @param amount The amount of tokens to stake
     @notice The stake can only be staked if the amount is greater than the minimum stake
     @notice The stake can only be staked if the total staked amount is less than the maximum total stake
-    @notice The stake can only be staked if the user has not already staked
+    @notice The stake's future reward is reserved from availableRewards so every accepted stake is claimable
     */
     function stake(uint256 amount) external nonReentrant whenNotPaused {
         if (amount < MIN_STAKE) revert MinStakeNotMet();
         if (totalStakedInPool + amount > MAX_POOL_STAKE) revert ExceedsMaxPoolStake();
 
-        // check if the contract has enough balance to give rewards 
+        // reserve the reward so concurrent stakes cannot oversubscribe the pool
         uint256 reward = _calculateReward(amount);
 
         if (availableRewards < reward) {
             revert InsufficientRewardBalance();
         }
+        availableRewards -= reward;
 
         // check if the user do not exceed the max total stake per user
         uint256 newTotal = totalStakedByUser[msg.sender] + amount;
@@ -133,7 +131,7 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
         // check if the user has enough balance
         if (balance < amount) revert InsufficientBalance();
 
-        token.transferFrom(msg.sender, address(this), amount);
+        token.safeTransferFrom(msg.sender, address(this), amount);
 
         stakes[msg.sender].push(StakeInfo({amount: amount, start: block.timestamp, claimed: false, unstaked: false}));
 
@@ -150,10 +148,7 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
     @notice Requires sufficient allowance from owner to contract
     */
     function fundRewards(uint256 amount) external onlyRole(REWARDS_MANAGER_ROLE) whenNotPaused {
-        uint256 allowance = token.allowance(msg.sender, address(this));
-        if (allowance < amount) revert InsufficientAllowance();
-        
-        token.transferFrom(msg.sender, address(this), amount);
+        token.safeTransferFrom(msg.sender, address(this), amount);
         availableRewards += amount;
         emit RewardsFunded(amount);
     }
@@ -162,28 +157,25 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
     @dev Claim
     @notice The stake can only be claimed if the stake has not been claimed
     @notice The stake can only be claimed if the stake has not been unstaked
-    @notice The contract must have enough balance for both stake and reward
+    @notice The reward was reserved at stake time, so a matured stake is always claimable
     */
     function claim(uint256 index) external nonReentrant whenNotPaused {
         StakeInfo[] storage userStakes = stakes[msg.sender];
         if (index >= userStakes.length) revert NoStake();
 
         StakeInfo storage s = userStakes[index];
-        if (s.amount == 0) revert NoStakeFound();
         if (s.claimed) revert AlreadyClaimed();
         if (s.unstaked) revert AlreadyUnstaked();
         if (block.timestamp < s.start + DURATION) revert TooEarly();
 
         uint256 reward = _calculateReward(s.amount);
-        if (availableRewards < reward) revert InsufficientRewardBalance();
 
         uint256 amountToTransfer = s.amount;
         s.amount = 0;
         s.claimed = true;
         totalStakedInPool -= amountToTransfer;
         totalStakedByUser[msg.sender] -= amountToTransfer;
-        availableRewards -= reward;
-        token.transfer(msg.sender, amountToTransfer + reward);
+        token.safeTransfer(msg.sender, amountToTransfer + reward);
 
         emit Claimed(msg.sender, amountToTransfer, reward);
     }
@@ -192,11 +184,11 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
     @dev Emergency withdraw
     @notice The owner can withdraw the tokens in case of emergency
     */
-    function emergencyWithdraw() external onlyRole(EMERGENCY_MANAGER_ROLE) {
+    function emergencyWithdraw() external onlyRole(EMERGENCY_MANAGER_ROLE) whenPaused {
         uint256 balance = token.balanceOf(address(this));
         availableRewards = 0;
-        
-        token.transfer(msg.sender, balance);
+
+        token.safeTransfer(msg.sender, balance);
         emit EmergencyWithdrawn(msg.sender, balance);
     }
 
@@ -222,8 +214,8 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
 
         StakeInfo storage s = userStakes[index];
         if (!unstakeAllowed) revert UnstakeNotAllowed();
-        if (s.amount == 0) revert NoStake();
         if (s.claimed) revert AlreadyClaimed();
+        if (s.unstaked) revert AlreadyUnstaked();
 
         uint256 returnAmount = s.amount;
         totalStakedInPool -= returnAmount;
@@ -231,7 +223,10 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
         s.amount = 0;
         s.unstaked = true;
 
-        token.transfer(msg.sender, returnAmount);
+        // the reward reserved at stake time is forfeited back to the pool
+        availableRewards += _calculateReward(returnAmount);
+
+        token.safeTransfer(msg.sender, returnAmount);
 
         emit Unstaked(msg.sender, returnAmount);
     }
@@ -258,28 +253,31 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
             uint256 potentialReward
         )
     {
-        StakeInfo[] memory userStakes = stakes[user];
-        if (index >= userStakes.length) revert NoStake();
+        if (index >= stakes[user].length) revert NoStake();
 
-        StakeInfo memory s = userStakes[index];
+        StakeInfo storage s = stakes[user][index];
         amount = s.amount;
         start = s.start;
         claimed = s.claimed;
         unstaked = s.unstaked;
 
-        // remaining time in seconds
         if (s.amount > 0 && !s.claimed && !s.unstaked) {
             if (block.timestamp < s.start + DURATION) {
                 timeLeft = s.start + DURATION - block.timestamp;
             }
-        }
-
-        // potential reward
-        if (s.amount > 0 && !s.claimed && !s.unstaked) {
             potentialReward = _calculateReward(s.amount);
         }
 
         return (amount, start, claimed, unstaked, timeLeft, potentialReward);
+    }
+
+    /*
+    @dev Number of stakes recorded for a user (including claimed/unstaked entries)
+    @param user The address to query
+    @return The length of the user's stakes array
+    */
+    function stakesCount(address user) external view returns (uint256) {
+        return stakes[user].length;
     }
 
     /* 
@@ -306,7 +304,7 @@ contract Staking is AccessControl, ReentrancyGuard, Pausable {
     @notice The new value must be greater than or equal to the current total staked
     */
     function updateMaxPoolStake(uint256 newMaxPoolStake) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
-        if (newMaxPoolStake <= 0) revert InvalidMaxPoolStake();
+        if (newMaxPoolStake == 0) revert InvalidMaxPoolStake();
         if (newMaxPoolStake < totalStakedInPool) revert InvalidMaxPoolStake();
         
         uint256 oldValue = MAX_POOL_STAKE;

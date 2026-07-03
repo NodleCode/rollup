@@ -168,6 +168,7 @@ Allow users with at least 50,000 NODL (Dolphin level) to participate in a stakin
 ### Deployment
 
 ```shell
+DEPLOYER_PRIVATE_KEY=0x... \
 GOV_ADDR=0x2D1941280530027B6bA80Af0e7bD8c2135783368 \
 STAKE_TOKEN=0xb4B74C2BfeA877672B938E408Bae8894918fE41C \
 MIN_STAKE=50000 \
@@ -177,13 +178,18 @@ REWARD_RATE=12 \
 REQUIRED_HOLDING_TOKEN=50000 \
 npx hardhat deploy-zksync --script deploy_staking.dp.ts --network zkSyncSepoliaTestnet
 ```
-- GOV_ADDR: Address of the governance contract.
+- DEPLOYER_PRIVATE_KEY: Private key of the deploying account.
+- GOV_ADDR: Address of the governance contract (receives admin, rewards-manager, and emergency-manager roles).
 - STAKE_TOKEN: Address of the token to stake.
-- MIN_STAKE: Minimum amount of tokens a user can stake.
-- MAX_TOTAL_STAKE: Maximum amount of tokens a user can stake.
-- DURATION: Duration of the staking period in seconds.
-- REWARD_RATE: Reward rate of the staking contract.
-- REQUIRED_HOLDING_TOKEN: Minimum amount of tokens a user must hold to participate in the staking contract.
+- MIN_STAKE: Minimum amount of tokens a user can stake (whole tokens, scaled by 1e18 in the script).
+- MAX_TOTAL_STAKE: Maximum amount of tokens a single user can stake (whole tokens, scaled by 1e18).
+- DURATION: Duration of the staking period, in seconds.
+- REWARD_RATE: Reward rate as a whole-number percent of the staked amount, paid at the end of the period.
+- REQUIRED_HOLDING_TOKEN: Minimum token balance a user must hold to participate (whole tokens, scaled by 1e18).
+
+### Trust assumptions
+
+The admin account (GOV_ADDR) holds the default-admin, rewards-manager, and emergency-manager roles. It can pause the contract (which blocks `claim`/`unstake`), toggle `unstakeAllowed` (which defaults to false, so before the period ends users can only exit once the admin enables it), and — while paused — call `emergencyWithdraw` to sweep the entire contract balance, including staked principal. Deployments intended for untrusted users should split these roles and/or place them behind a timelock or multisig.
 
 ## Scripts
 
@@ -271,12 +277,6 @@ In the sample case above, we are using `solc` `0.8.23` and `zksolc` `1.4.1`. 3. 
 8. Copy paste its value and **strip the `0x prefix** as Etherscan will throw an error otherwise
 
 Use all these artifacts on the contract verification page on Etherscan for your given contract (open your contract on Etherscan, select `Contract` and the link starting with `Verify`). When prompted, enter the compiler versions, the license (we use BSD-3 Clause Clear). Then on the next page, enter your normalized JSON input file, and the contract constructor inputs.
-
-## Deploying Staking contract
-
-```shell
-npx hardhat run --network zkSync deploy/deploy_staking.dp.ts
-```
 
 ## Additional resources
 
