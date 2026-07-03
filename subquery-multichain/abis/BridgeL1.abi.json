@@ -1,0 +1,627 @@
+[
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_owner",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "_l1Mailbox",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "_l1Token",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "_l2Bridge",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+    },
+    {
+        "inputs": [],
+        "name": "EnforcedPause",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "ExpectedPause",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "InvalidProof",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "bytes4",
+                "name": "sel",
+                "type": "bytes4"
+            }
+        ],
+        "name": "InvalidSelector",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "L2FailureProofFailed",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "length",
+                "type": "uint256"
+            }
+        ],
+        "name": "L2WithdrawalMessageWrongLength",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "owner",
+                "type": "address"
+            }
+        ],
+        "name": "OwnableInvalidOwner",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "OwnableUnauthorizedAccount",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "UnknownTxHash",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "WithdrawalAlreadyFinalized",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "ZeroAddress",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "ZeroAmount",
+        "type": "error"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "to",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            }
+        ],
+        "name": "ClaimedFailedDeposit",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "bytes32",
+                "name": "l2DepositTxHash",
+                "type": "bytes32"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "from",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "to",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            }
+        ],
+        "name": "DepositInitiated",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "previousOwner",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }
+        ],
+        "name": "OwnershipTransferStarted",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "previousOwner",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }
+        ],
+        "name": "OwnershipTransferred",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "Paused",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "Unpaused",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "to",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "batchNumber",
+                "type": "uint256"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "messageIndex",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint16",
+                "name": "txNumberInBatch",
+                "type": "uint16"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            }
+        ],
+        "name": "WithdrawalFinalized",
+        "type": "event"
+    },
+    {
+        "inputs": [],
+        "name": "L1_MAILBOX",
+        "outputs": [
+            {
+                "internalType": "contract IMailbox",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "L1_NODL",
+        "outputs": [
+            {
+                "internalType": "contract L1Nodl",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "L2_BRIDGE_ADDR",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "acceptOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_l1Sender",
+                "type": "address"
+            },
+            {
+                "internalType": "bytes32",
+                "name": "_l2TxHash",
+                "type": "bytes32"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_l2BatchNumber",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_l2MessageIndex",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint16",
+                "name": "_l2TxNumberInBatch",
+                "type": "uint16"
+            },
+            {
+                "internalType": "bytes32[]",
+                "name": "_merkleProof",
+                "type": "bytes32[]"
+            }
+        ],
+        "name": "claimFailedDeposit",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_l2Receiver",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_amount",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_l2TxGasLimit",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_l2TxGasPerPubdataByte",
+                "type": "uint256"
+            },
+            {
+                "internalType": "address",
+                "name": "_refundRecipient",
+                "type": "address"
+            }
+        ],
+        "name": "deposit",
+        "outputs": [
+            {
+                "internalType": "bytes32",
+                "name": "txHash",
+                "type": "bytes32"
+            }
+        ],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_l2Receiver",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_amount",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_l2TxGasLimit",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_l2TxGasPerPubdataByte",
+                "type": "uint256"
+            }
+        ],
+        "name": "deposit",
+        "outputs": [
+            {
+                "internalType": "bytes32",
+                "name": "txHash",
+                "type": "bytes32"
+            }
+        ],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            },
+            {
+                "internalType": "bytes32",
+                "name": "depositL2TxHash",
+                "type": "bytes32"
+            }
+        ],
+        "name": "depositAmount",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_l2BatchNumber",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_l2MessageIndex",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint16",
+                "name": "_l2TxNumberInBatch",
+                "type": "uint16"
+            },
+            {
+                "internalType": "bytes",
+                "name": "_message",
+                "type": "bytes"
+            },
+            {
+                "internalType": "bytes32[]",
+                "name": "_merkleProof",
+                "type": "bytes32[]"
+            }
+        ],
+        "name": "finalizeWithdrawal",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "l2BatchNumber",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "l2ToL1MessageNumber",
+                "type": "uint256"
+            }
+        ],
+        "name": "isWithdrawalFinalized",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "isFinalized",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "owner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "pause",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "paused",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "pendingOwner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_l2TxGasLimit",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_l2TxGasPerPubdataByte",
+                "type": "uint256"
+            }
+        ],
+        "name": "quoteL2BaseCost",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "baseCost",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_l1GasPrice",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_l2TxGasLimit",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_l2TxGasPerPubdataByte",
+                "type": "uint256"
+            }
+        ],
+        "name": "quoteL2BaseCostAtGasPrice",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "baseCost",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "renounceOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "newOwner",
+                "type": "address"
+            }
+        ],
+        "name": "transferOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "unpause",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    }
+]
