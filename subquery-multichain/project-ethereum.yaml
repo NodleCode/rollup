@@ -1,0 +1,47 @@
+# // Auto-generated , DO NOT EDIT
+specVersion: 1.0.0
+version: 0.0.1
+name: Nodle-ethereum-l1-bridge
+description: L1 Bridge indexing for NODL token bridge
+runner:
+  node:
+    name: '@subql/node-ethereum'
+    version: '>=3.0.0'
+    options:
+      unsafe: true
+  query:
+    name: '@subql/query'
+    version: '*'
+schema:
+  file: ./schema.graphql
+network:
+  chainId: '1'
+  endpoint:
+    - 'https://ethereum-rpc.publicnode.com'
+dataSources:
+  - kind: ethereum/Runtime
+    startBlock: 23635689 
+    options:
+      abi: BridgeL1
+      address: '0x2d02b651ea9630351719c8c55210e042e940d69a'
+    assets:
+      BridgeL1:
+        file: ./abis/BridgeL1.abi.json
+    mapping:
+      file: ./dist/index.js
+      handlers:
+        - kind: ethereum/LogHandler
+          handler: handleDepositInitiated
+          filter:
+            topics:
+              - 'DepositInitiated(bytes32,address,address,uint256)'
+        - kind: ethereum/LogHandler
+          handler: handleWithdrawalFinalized
+          filter:
+            topics:
+              - 'WithdrawalFinalized(address,uint256,uint256,uint16,uint256)'
+        - kind: ethereum/LogHandler
+          handler: handleClaimedFailedDeposit
+          filter:
+            topics:
+              - 'ClaimedFailedDeposit(address,uint256)'

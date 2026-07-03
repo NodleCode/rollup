@@ -4,10 +4,14 @@
   "solidity.formatter": "forge",
   "github.copilot.chat.scopeSelection": true,
   "github.copilot.chat.localeOverride": "en",
-  "github.copilot.chat.temporalContext.enabled": true,
   "github.copilot.chat.generateTests.codeLens": true,
   "github.copilot.chat.inlineChatCompletionTrigger.enabled": true,
   "github.copilot.chat.inlineChatHint.enabled": true,
   "github.copilot.chat.search.semanticTextResults": true,
-  "editor.defaultFormatter": null
+  "editor.defaultFormatter": null,
+  "github.copilot.chat.editor.temporalContext.enabled": true,
+  "editor.formatOnSave": true,
+  "[solidity]": {
+    "editor.defaultFormatter": "JuanBlanco.solidity"
+  }
 }

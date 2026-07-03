@@ -12,7 +12,7 @@ contract MockWhitelistPaymaster is WhitelistPaymaster {
     constructor(address admin, address withdrawer) WhitelistPaymaster(admin, withdrawer) {}
 
     function mock_validateAndPayGeneralFlow(address from, address to, uint256 requiredETH) public view {
-        _validateAndPayGeneralFlow(from, to, requiredETH);
+        _validateAndPayGeneralFlow(from, to, requiredETH, "");
     }
 
     function mock_validateAndPayApprovalBasedFlow(
@@ -121,5 +121,16 @@ contract WhitelistPaymasterTest is Test {
         paymaster.mock_validateAndPayGeneralFlow(charlie, charlie, 0);
 
         vm.stopPrank();
+    }
+
+    function test_RevertIf_paymasterBalanceTooLow() public {
+        vm.startPrank(alice);
+        paymaster.addWhitelistedContracts(whitelistTargets);
+        paymaster.addWhitelistedUsers(whitelistTargets);
+        vm.stopPrank();
+
+        // Paymaster has 0 balance, but requiredETH > 0
+        vm.expectRevert(WhitelistPaymaster.PaymasterBalanceTooLow.selector);
+        paymaster.mock_validateAndPayGeneralFlow(charlie, charlie, 1 ether);
     }
 }

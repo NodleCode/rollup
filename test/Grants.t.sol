@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
-pragma solidity ^0.8.23;
+pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
 import "../src/Grants.sol";
@@ -72,7 +72,8 @@ contract GrantsTest is Test {
     function test_nothingToClaimBeforeOnePeriod() public {
         vm.startPrank(alice);
         token.approve(address(grants), 400);
-        grants.addVestingSchedule(bob, block.timestamp + 1 days, 2 days, 4, 100, alice);
+        uint256 vestingStart = block.timestamp + 1 days;
+        grants.addVestingSchedule(bob, vestingStart, 2 days, 4, 100, alice);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 2 days);
@@ -83,7 +84,7 @@ contract GrantsTest is Test {
         vm.stopPrank();
 
         assertEq(token.balanceOf(bob), 0);
-        checkP0Schedule(bob, 0, alice, block.timestamp + 1 days, 2 days, 4, 100);
+        checkP0Schedule(bob, 0, alice, vestingStart, 2 days, 4, 100);
         emit log("Test Nothing to Claim Before One Period!");
     }
 

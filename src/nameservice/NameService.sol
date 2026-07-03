@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
-pragma solidity ^0.8.23;
+pragma solidity ^0.8.26;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721Burnable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
@@ -72,7 +72,9 @@ contract NameService is INameService, ERC721Burnable, AccessControl {
      * @param tokenName The name of the token
      * @param tokenSymbol The symbol of the token
      */
-    constructor(address admin, address registrar, string memory tokenName, string memory tokenSymbol) ERC721(tokenName, tokenSymbol) {
+    constructor(address admin, address registrar, string memory tokenName, string memory tokenSymbol)
+        ERC721(tokenName, tokenSymbol)
+    {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(REGISTERER_ROLE, registrar);
     }

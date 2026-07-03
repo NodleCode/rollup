@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
-pragma solidity ^0.8.23;
+pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {NameService} from "../../src/nameservice/NameService.sol";
@@ -79,4 +79,4 @@ contract NameServiceTest is Test {
         vm.expectRevert(abi.encodeWithSelector(NameService.NameExpired.selector, user, block.timestamp - 1 days));
         nameService.getTextRecord(TEST_NAME, AVATAR_KEY);
     }
-} 
+}

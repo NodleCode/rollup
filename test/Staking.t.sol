@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
-pragma solidity 0.8.23;
+pragma solidity ^0.8.26;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {NODL} from "../src/NODL.sol";
 import {Staking} from "../src/Staking.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract StakingTest is Test {
     NODL public token;
@@ -84,8 +85,11 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    function testFailNonAdminGrantRole() public {
+    function test_RevertWhen_NonAdminGrantsRole() public {
         vm.startPrank(user1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, bytes32(0))
+        );
         staking.grantRole(REWARDS_MANAGER_ROLE, user2);
         vm.stopPrank();
     }
@@ -102,11 +106,14 @@ contract StakingTest is Test {
         assertEq(staking.availableRewards(), amount);
     }
 
-    function testFailNonRewardsManagerFundRewards() public {
+    function test_RevertWhen_NonRewardsManagerFundsRewards() public {
         uint256 amount = 1000 ether;
-        
+
         vm.startPrank(user1);
         token.approve(address(staking), amount);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, REWARDS_MANAGER_ROLE)
+        );
         staking.fundRewards(amount);
         vm.stopPrank();
     }
@@ -122,8 +129,11 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    function testFailNonAdminPause() public {
+    function test_RevertWhen_NonAdminPauses() public {
         vm.startPrank(user1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, bytes32(0))
+        );
         staking.pause();
         vm.stopPrank();
     }
@@ -152,38 +162,63 @@ contract StakingTest is Test {
         assertEq(potentialReward, _calculateReward(stakeAmount));
     }
 
-    function testFailStakeBelowMinimum() public {
+    function test_RevertWhen_StakeBelowMinimum() public {
         uint256 stakeAmount = (MIN_STAKE - (1 ether));
-        
+
         vm.startPrank(user1);
         token.approve(address(staking), stakeAmount);
+        vm.expectRevert(Staking.MinStakeNotMet.selector);
         staking.stake(stakeAmount);
         vm.stopPrank();
     }
 
-    function testFailStakeAboveMaximum() public {
+    function test_RevertWhen_StakeAboveMaximum() public {
         uint256 stakeAmount = (MAX_TOTAL_STAKE + (1 ether));
-        
+
+        // Fund rewards so the per-user maximum check is actually reached
+        vm.startPrank(admin);
+        token.approve(address(staking), _calculateReward(stakeAmount));
+        staking.fundRewards(_calculateReward(stakeAmount));
+        vm.stopPrank();
+
         vm.startPrank(user1);
         token.approve(address(staking), stakeAmount);
+        vm.expectRevert(Staking.ExceedsMaxTotalStake.selector);
         staking.stake(stakeAmount);
         vm.stopPrank();
     }
 
-    function testFailStakeInsufficientBalance() public {
-        uint256 stakeAmount = MIN_STAKE + (1000 ether);
-        
-        vm.startPrank(user1);
-        token.approve(address(staking), stakeAmount);
-        staking.stake(stakeAmount);
-        vm.stopPrank();
-    }
+    function test_RevertWhen_StakeInsufficientBalance() public {
+        // user needs >= REQUIRED_HOLDING_TOKEN balance but less than the stake
+        // amount (which must stay within MAX_TOTAL_STAKE) to reach the balance check
+        uint256 stakeAmount = 500 ether;
+        vm.prank(admin);
+        token.mint(user3, 200 ether); // user3 now holds 300 ether
 
-    function testFailStakeUnmetRequiredHoldingToken() public {
-        uint256 stakeAmount = MIN_STAKE;
+        vm.startPrank(admin);
+        token.approve(address(staking), _calculateReward(stakeAmount));
+        staking.fundRewards(_calculateReward(stakeAmount));
+        vm.stopPrank();
 
         vm.startPrank(user3);
         token.approve(address(staking), stakeAmount);
+        vm.expectRevert(Staking.InsufficientBalance.selector);
+        staking.stake(stakeAmount);
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_StakeUnmetRequiredHoldingToken() public {
+        uint256 stakeAmount = MIN_STAKE;
+
+        // Fund rewards so the holding requirement check is actually reached
+        vm.startPrank(admin);
+        token.approve(address(staking), _calculateReward(stakeAmount));
+        staking.fundRewards(_calculateReward(stakeAmount));
+        vm.stopPrank();
+
+        vm.startPrank(user3);
+        token.approve(address(staking), stakeAmount);
+        vm.expectRevert(Staking.UnmetRequiredHoldingToken.selector);
         staking.stake(stakeAmount);
         vm.stopPrank();
     }
@@ -275,24 +310,25 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    function testFailClaimTooEarly() public {
+    function test_RevertWhen_ClaimTooEarly() public {
         uint256 stakeAmount = MIN_STAKE;
-        
+
         // Fund rewards first
         vm.startPrank(admin);
         uint256 rewardAmount = _calculateReward(stakeAmount);
         token.approve(address(staking), rewardAmount);
         staking.fundRewards(rewardAmount);
         vm.stopPrank();
-        
+
         vm.startPrank(user1);
         token.approve(address(staking), stakeAmount);
         staking.stake(stakeAmount);
+        vm.expectRevert(Staking.TooEarly.selector);
         staking.claim(0);
         vm.stopPrank();
     }
 
-    function testFailClaimAlreadyUnstaked() public {
+    function test_RevertWhen_ClaimAlreadyUnstaked() public {
         uint256 stakeAmount = MIN_STAKE;
         
         // Fund rewards first
@@ -315,8 +351,10 @@ contract StakingTest is Test {
         
         vm.startPrank(user1);
         staking.unstake(0);
-        
-        // Try to claim unstaked stake
+
+        // Try to claim unstaked stake — unstake() zeroes the amount, so the
+        // amount check fires before the unstaked check
+        vm.expectRevert(Staking.NoStakeFound.selector);
         staking.claim(0);
         vm.stopPrank();
     }
@@ -358,7 +396,7 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    function testFailUnstakeNotAllowed() public {
+    function test_RevertWhen_UnstakeNotAllowed() public {
         uint256 stakeAmount = MIN_STAKE;
         
         // Fund rewards first
@@ -371,12 +409,14 @@ contract StakingTest is Test {
         vm.startPrank(user1);
         token.approve(address(staking), stakeAmount);
         staking.stake(stakeAmount);
+        vm.expectRevert(Staking.UnstakeNotAllowed.selector);
         staking.unstake(0);
         vm.stopPrank();
     }
 
-    function testFailUnstakeNonExistentStake() public {
+    function test_RevertWhen_UnstakeNonExistentStake() public {
         vm.startPrank(user1);
+        vm.expectRevert(Staking.NoStake.selector);
         staking.unstake(0);
         vm.stopPrank();
     }
@@ -413,26 +453,31 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    function testFailClaimInsufficientRewards() public {
+    function test_RevertWhen_ClaimInsufficientRewards() public {
         uint256 stakeAmount = 1000 ether;
         uint256 rewardAmount = _calculateReward(stakeAmount);
-        
-        // Fund rewards for stake but not enough for claim
+
+        // Fund rewards so the stake passes its reward check
         vm.startPrank(admin);
         token.approve(address(staking), rewardAmount);
         staking.fundRewards(rewardAmount);
         vm.stopPrank();
-        
+
         vm.startPrank(user1);
         token.approve(address(staking), stakeAmount);
         staking.stake(stakeAmount);
-        
+        vm.stopPrank();
+
+        // Drain the reward pool after the stake so the claim-time check fails
+        vm.prank(admin);
+        staking.emergencyWithdraw();
+
         // Move time forward and try to claim
         _skipTime(DURATION + 1);
-        
+
+        vm.prank(user1);
         vm.expectRevert(Staking.InsufficientRewardBalance.selector);
         staking.claim(0);
-        vm.stopPrank();
     }
 
     function testMultipleRewardsFundings() public {
@@ -512,23 +557,24 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    function testFailClaimBeforeDuration() public {
+    function test_RevertWhen_ClaimBeforeDuration() public {
         uint256 stakeAmount = MIN_STAKE;
-        
+
         // Fund rewards first
         vm.startPrank(admin);
         uint256 rewardAmount = _calculateReward(stakeAmount);
         token.approve(address(staking), rewardAmount);
         staking.fundRewards(rewardAmount);
         vm.stopPrank();
-        
+
         vm.startPrank(user1);
         token.approve(address(staking), stakeAmount);
         staking.stake(stakeAmount);
-        
-        // Try to claim before duration
-        _skipTime(DURATION - 1);
-        
+
+        // Try to claim one second before the duration elapses
+        // (DURATION is already in seconds — _skipTime would multiply by 1 days)
+        vm.warp(block.timestamp + DURATION - 1);
+
         vm.expectRevert(Staking.TooEarly.selector);
         staking.claim(0);
         vm.stopPrank();
@@ -653,11 +699,12 @@ contract StakingTest is Test {
     }
 
     // Pool limits
-    function testFailStakeExceedsMaxPoolStake() public {
+    function test_RevertWhen_StakeExceedsMaxPoolStake() public {
         uint256 stakeAmount = staking.MAX_POOL_STAKE() + 1 ether;
-        
+
         vm.startPrank(user1);
         token.approve(address(staking), stakeAmount);
+        vm.expectRevert(Staking.ExceedsMaxPoolStake.selector);
         staking.stake(stakeAmount);
         vm.stopPrank();
     }
@@ -843,8 +890,11 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    function testFailNonEmergencyManagerEmergencyWithdraw() public {
+    function test_RevertWhen_NonEmergencyManagerEmergencyWithdraws() public {
         vm.startPrank(user1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, EMERGENCY_MANAGER_ROLE)
+        );
         staking.emergencyWithdraw();
         vm.stopPrank();
     }
@@ -860,21 +910,25 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    function testFailNonAdminUpdateMaxPoolStake() public {
+    function test_RevertWhen_NonAdminUpdatesMaxPoolStake() public {
         uint256 newMaxPoolStake = 10_000_000 ether;
-        
+
         vm.startPrank(user1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, user1, bytes32(0))
+        );
         staking.updateMaxPoolStake(newMaxPoolStake);
         vm.stopPrank();
     }
 
-    function testFailUpdateMaxPoolStakeToZero() public {
+    function test_RevertWhen_UpdateMaxPoolStakeToZero() public {
         vm.startPrank(admin);
+        vm.expectRevert(Staking.InvalidMaxPoolStake.selector);
         staking.updateMaxPoolStake(0);
         vm.stopPrank();
     }
 
-    function testFailUpdateMaxPoolStakeBelowCurrentStake() public {
+    function test_RevertWhen_UpdateMaxPoolStakeBelowCurrentStake() public {
         uint256 stakeAmount = MIN_STAKE;
         
         // Fund rewards first
@@ -892,13 +946,15 @@ contract StakingTest is Test {
         
         // Try to update max pool stake below current stake
         vm.startPrank(admin);
+        vm.expectRevert(Staking.InvalidMaxPoolStake.selector);
         staking.updateMaxPoolStake(stakeAmount - 1);
         vm.stopPrank();
     }
 
-    function testFailUpdateMaxPoolStakeWhenPaused() public {
+    function test_RevertWhen_UpdateMaxPoolStakeWhenPaused() public {
         vm.startPrank(admin);
         staking.pause();
+        vm.expectRevert(Pausable.EnforcedPause.selector);
         staking.updateMaxPoolStake(10_000_000 ether);
         vm.stopPrank();
     }
@@ -922,11 +978,18 @@ contract StakingTest is Test {
         vm.stopPrank();
     }
 
-    function testFailStakeAboveMaxTotalStake() public {
+    function test_RevertWhen_StakeAboveMaxTotalStake() public {
         uint256 stakeAmount = MAX_TOTAL_STAKE + 1 ether;
-        
+
+        // Fund rewards so the per-user maximum check is actually reached
+        vm.startPrank(admin);
+        token.approve(address(staking), _calculateReward(stakeAmount));
+        staking.fundRewards(_calculateReward(stakeAmount));
+        vm.stopPrank();
+
         vm.startPrank(user1);
         token.approve(address(staking), stakeAmount);
+        vm.expectRevert(Staking.ExceedsMaxTotalStake.selector);
         staking.stake(stakeAmount);
         vm.stopPrank();
     }

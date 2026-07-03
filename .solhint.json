@@ -9,7 +9,15 @@
             }
         ],
         "constructor-syntax": "error",
-        "immutable-vars-naming": "off",
-        "gas-custom-errors": "error"
+        "immutable-vars-naming": "warn",
+        "gas-custom-errors": "error",
+        "use-natspec": "off",
+        "import-path-check": "off",
+        "gas-struct-packing": "warn",
+        "gas-calldata-parameters": "warn",
+        "gas-increment-by-one": "warn",
+        "gas-small-strings": "warn",
+        "gas-strict-inequalities": "warn",
+        "gas-indexed-events": "warn"
     }
 }
