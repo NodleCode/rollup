@@ -6,11 +6,6 @@ import "@matterlabs/hardhat-zksync-verify/dist/src/type-extensions";
 import * as dotenv from "dotenv";
 import { deployContract } from "./utils";
 
-// Load .env-prod for mainnet, .env-test otherwise
-const envFile =
-  process.env.HARDHAT_NETWORK === "zkSyncMainnet" ? ".env-prod" : ".env-test";
-dotenv.config({ path: envFile });
-
 /**
  * Deploys the Envelope (vendored Peanut V4.4) suite on ZkSync Era.
  *
@@ -35,6 +30,14 @@ dotenv.config({ path: envFile });
  */
 module.exports = async function (hre: HardhatRuntimeEnvironment) {
   const ZERO = "0x0000000000000000000000000000000000000000";
+
+  // Load .env-prod for mainnet, .env-test otherwise. Must key off
+  // hre.network.name: process.env.HARDHAT_NETWORK is NOT set when the network
+  // comes from the --network CLI flag (deploy-zksync loads this script
+  // in-process), so an env-var check would silently pick .env-test on mainnet.
+  const envFile =
+    hre.network.name === "zkSyncMainnet" ? ".env-prod" : ".env-test";
+  dotenv.config({ path: envFile });
 
   const rpcUrl = hre.network.config.url!;
   const provider = new Provider(rpcUrl);
@@ -111,7 +114,7 @@ module.exports = async function (hre: HardhatRuntimeEnvironment) {
   }
 
   console.log("");
-  console.log("=== Add these to .env-test: ===");
+  console.log(`=== Add these to ${envFile}: ===`);
   console.log(`ENVELOPE_VAULT=${vaultAddr}`);
   if (paymasterAddr) console.log(`ENVELOPE_PAYMASTER=${paymasterAddr}`);
 

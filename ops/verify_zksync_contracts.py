@@ -86,6 +86,9 @@ CONTRACT_SOURCE_MAP = {
     "SwarmRegistryUniversalUpgradeable": "src/swarms/SwarmRegistryUniversalUpgradeable.sol:SwarmRegistryUniversalUpgradeable",
     "ERC1967Proxy": "lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy",
     "BondTreasuryPaymaster": "src/paymasters/BondTreasuryPaymaster.sol:BondTreasuryPaymaster",
+    "CollectionFactory": "src/collections/CollectionFactory.sol:CollectionFactory",
+    "UserCollection721": "src/collections/UserCollection721.sol:UserCollection721",
+    "UserCollection1155": "src/collections/UserCollection1155.sol:UserCollection1155",
 }
 
 # Some zkSync forge broadcasts record deployments as calls to ContractDeployer
@@ -104,6 +107,14 @@ BROADCAST_CONTRACT_SEQUENCE = {
         "SwarmRegistryUniversalUpgradeable",
         "ERC1967Proxy",
         "BondTreasuryPaymaster",
+    ],
+    # Order must match DeployCollectionFactoryZkSync.run(): the two impls via
+    # CREATE, the factory logic, then the factory's own ERC1967Proxy.
+    "DeployCollectionFactoryZkSync.s.sol": [
+        "UserCollection721",
+        "UserCollection1155",
+        "CollectionFactory",
+        "ERC1967Proxy",
     ],
 }
 
@@ -408,6 +419,18 @@ def main():
             else args.broadcast
         )
         print(f"Found {len(contracts)} contracts in broadcast\n")
+
+        # A broadcast that maps to zero verifiable contracts is almost always a
+        # misconfiguration (missing CONTRACT_SOURCE_MAP / BROADCAST_CONTRACT_SEQUENCE
+        # entry), not a real "nothing to do". Fail loudly instead of reporting a
+        # vacuous success.
+        if not contracts:
+            print(
+                "  [ERROR] No verifiable contracts resolved from this broadcast.\n"
+                "          Add the deploy script to BROADCAST_CONTRACT_SEQUENCE and the\n"
+                "          contract types to CONTRACT_SOURCE_MAP in this script."
+            )
+            sys.exit(2)
 
         success = 0
         failed = 0

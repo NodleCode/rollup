@@ -53,7 +53,7 @@ jobs:
         run: yarn
 
       - name: Run coverage
-        run: forge coverage --match-path "test/{Swarm*,ServiceProvider,FleetIdentity}*.t.sol" --ir-minimum --report lcov --report-file coverage.lcov
+        run: forge coverage --match-path "test/{Swarm*,ServiceProvider,FleetIdentity,collections/*}*.t.sol" --ir-minimum --report lcov --report-file coverage.lcov
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -76,7 +76,7 @@ jobs:
           update-comment: true
           working-directory: ./
 
-      - name: Check line coverage threshold
+      - name: Check line coverage threshold (swarms)
         run: |
           # Extract line coverage from lcov report for src/swarms/ contracts only
           # Parse lcov format: find swarm file sections and sum their LF/LH values
@@ -103,6 +103,39 @@ jobs:
           echo "Swarms line coverage: $COVERAGE% ($LINES_HIT / $LINES_FOUND lines)"
 
           # Check if coverage is below 95%
+          THRESHOLD=95
+          if awk "BEGIN {exit !($COVERAGE < $THRESHOLD)}"; then
+            echo "Error: Line coverage ($COVERAGE%) is below the required threshold ($THRESHOLD%)"
+            exit 1
+          fi
+
+          echo "Coverage check passed: $COVERAGE% >= $THRESHOLD%"
+
+      - name: Check line coverage threshold (collections)
+        run: |
+          # Extract line coverage from lcov report for src/collections/ contracts only
+          LINES_FOUND=$(awk '
+            /^SF:.*src\/collections\// { in_section = 1 }
+            /^end_of_record/ { in_section = 0 }
+            in_section && /^LF:/ { sum += substr($0, 4) }
+            END { print sum+0 }
+          ' coverage.lcov)
+
+          LINES_HIT=$(awk '
+            /^SF:.*src\/collections\// { in_section = 1 }
+            /^end_of_record/ { in_section = 0 }
+            in_section && /^LH:/ { sum += substr($0, 4) }
+            END { print sum+0 }
+          ' coverage.lcov)
+
+          if [ "$LINES_FOUND" -eq 0 ]; then
+            echo "Error: No lines found in coverage report for src/collections/"
+            exit 1
+          fi
+
+          COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($LINES_HIT / $LINES_FOUND) * 100}")
+          echo "Collections line coverage: $COVERAGE% ($LINES_HIT / $LINES_FOUND lines)"
+
           THRESHOLD=95
           if awk "BEGIN {exit !($COVERAGE < $THRESHOLD)}"; then
             echo "Error: Line coverage ($COVERAGE%) is below the required threshold ($THRESHOLD%)"
