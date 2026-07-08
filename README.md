@@ -151,6 +151,46 @@ N_LEVELS_URI_2=example.com \
 forge script script/DeployMigrationNFT.s.sol --zksync --rpc-url https://sepolia.era.zksync.dev --zk-optimizer -i 1 --broadcast
 ```
 
+## Deploying Staking contract
+Allow users with at least 50,000 NODL (Dolphin level) to participate in a staking contract with the following characteristics:
+
+### Functional Requirements
+- Restricted access: Only users holding 50,000 NODL or more can stake.
+
+- Staking cap: The contract accepts a maximum total of 5 million NODL per staker. Additionally, the contract has a global staking cap MAX_POOL_STAKE.
+
+- Limited duration: Staking lasts the DURATION in seconds passed as a parameter.
+
+- Guaranteed yield: Users receive a fixed reward, predefined in the contract, at the end of the staking period.
+
+- Return: Once the staking period ends, both the staked tokens and the yield are returned to the user via a claim function.
+
+### Deployment
+
+```shell
+DEPLOYER_PRIVATE_KEY=0x... \
+GOV_ADDR=0x2D1941280530027B6bA80Af0e7bD8c2135783368 \
+STAKE_TOKEN=0xb4B74C2BfeA877672B938E408Bae8894918fE41C \
+MIN_STAKE=50000 \
+MAX_TOTAL_STAKE=5000000 \
+DURATION=3600 \
+REWARD_RATE=12 \
+REQUIRED_HOLDING_TOKEN=50000 \
+npx hardhat deploy-zksync --script deploy_staking.dp.ts --network zkSyncSepoliaTestnet
+```
+- DEPLOYER_PRIVATE_KEY: Private key of the deploying account.
+- GOV_ADDR: Address of the governance contract (receives admin, rewards-manager, and emergency-manager roles).
+- STAKE_TOKEN: Address of the token to stake.
+- MIN_STAKE: Minimum amount of tokens a user can stake (whole tokens, scaled by 1e18 in the script).
+- MAX_TOTAL_STAKE: Maximum amount of tokens a single user can stake (whole tokens, scaled by 1e18).
+- DURATION: Duration of the staking period, in seconds.
+- REWARD_RATE: Reward rate as a whole-number percent of the staked amount, paid at the end of the period.
+- REQUIRED_HOLDING_TOKEN: Minimum token balance a user must hold to participate (whole tokens, scaled by 1e18).
+
+### Trust assumptions
+
+The admin account (GOV_ADDR) holds the default-admin, rewards-manager, and emergency-manager roles. It can pause the contract (which blocks `claim`/`unstake`), toggle `unstakeAllowed` (which defaults to false, so before the period ends users can only exit once the admin enables it), and — while paused — call `emergencyWithdraw` to sweep the entire contract balance, including staked principal. Deployments intended for untrusted users should split these roles and/or place them behind a timelock or multisig.
+
 ## Scripts
 
 ### Checking on bridging proposals
@@ -172,6 +212,43 @@ N_CONTENTSIGN=0x195e4E251c41e8Ae9E9E961366C73e2CFbfB115A \
 N_WHITELIST=0x732e40223f57d7a1dbf340f5c0cc5b363b60428b \
 forge script script/ContentSignWhitelist.s.sol -i 1 --zksync --rpc-url https://sepolia.era.zksync.dev --broadcast
 ```
+
+## Claiming vested grants manually
+
+Vested NODL is held by the [`Grants`](src/Grants.sol) contract. The Nodle client at
+[zkclient.nodle.com](https://zkclient.nodle.com) (the "Grants" tab) is the easiest way to claim, but
+claiming is fully self-service on-chain and needs no app and no off-chain signature — you only need
+the wallet that holds the grant and a small amount of ETH on ZKsync Era for gas. This section shows
+how to claim directly with [`cast`](https://book.getfoundry.sh/cast/).
+
+```shell
+export ETH_RPC_URL=https://mainnet.era.zksync.io
+# Grants contract — confirm the current address against the docs (see "Mainnet Deployments" above)
+export GRANTS=0x5855c486d2381ba41762876f18684951d5902829
+export ME=0xYourGranteeAddress
+
+# How many vesting schedules does your address have, and how many pages they span?
+cast call $GRANTS "getGrantsCount(address)(uint256)" $ME
+cast call $GRANTS "currentPage(address)(uint256)" $ME
+
+# Claim everything that has vested up to now, across all pages.
+# claim(uint256 start, uint256 end) iterates pages [start, end); passing 0, 0 means "all pages".
+cast send -i $GRANTS "claim(uint256,uint256)" 0 0
+```
+
+Notes:
+
+- `claim` transfers only what has vested up to the current block timestamp; you can call it again
+  later as more periods vest. On success it emits `Claimed(address who, uint256 amount, uint256 start, uint256 end)`.
+- If nothing is currently claimable the call reverts with `NoOpIsFailure()`.
+- For large numbers of schedules you can claim a single page range (e.g. `claim 0 1`) to bound gas
+  rather than sweeping every page at once.
+- Prefer a UI? The same `claim` call can be made from the **Write Contract** tab of the verified
+  `Grants` contract on [explorer.zksync.io](https://explorer.zksync.io).
+
+DePIN rewards are different: they are minted via `Rewards.mintReward` against an oracle-signed
+voucher (domain `rewards.depin.nodle`), which is normally submitted for you by the Nodle backend, so
+the self-service path above applies to vested grants rather than reward issuance.
 
 ## Contract verification
 
@@ -205,3 +282,17 @@ Use all these artifacts on the contract verification page on Etherscan for your 
 
 - [L1 contracts](https://docs.zksync.io/zksync-era/environment/l1-contracts)
 - [ZK stack addresses](https://docs.zksync.io/zk-stack/zk-chain-addresses)
+
+## ZkSync CLI useful commands
+
+# Approve
+
+```shell
+npx zksync-cli contract write --chain "zksync-sepolia" --contract "0xb4B74C2BfeA877672B938E408Bae8894918fE41C" --method "approve(address spender, uint256 amount)" --args "0x2D1941280530027B6bA80Af0e7bD8c2135783368" "1000000000000000000"
+```
+
+# Stake
+
+```shell
+npx zksync-cli contract write --chain "zksync-sepolia" --contract "0xb974a544128Bc7fAB3447D48cd6ad377D6F62EcF" --method "stake(uint256 amount)" --args "1000000000000000000"
+```

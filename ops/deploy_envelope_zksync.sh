@@ -5,9 +5,10 @@
 # Deploys EnvelopeLinks and EnvelopePaymaster to ZkSync Era via Hardhat.
 #
 # WHY HARDHAT (not Forge):
-#   The ZkSync source verifier requires compiling without viaIR. Hardhat with
-#   zksolc v1.5.1 produces verifiable artifacts. The Forge toolchain (zksolc
-#   v1.5.15) supports viaIR but the verifier crashes on complex viaIR contracts.
+#   The ZkSync source verifier requires compiling without viaIR. Hardhat
+#   (zksolc pinned in hardhat.config.ts, currently v1.5.15, no viaIR) produces
+#   verifiable artifacts. The Forge toolchain uses viaIR and the verifier
+#   crashes on complex viaIR contracts.
 #
 # USAGE:
 #   # Deploy to mainnet:
@@ -150,7 +151,7 @@ if [ "$VERIFY_ONLY" = true ]; then
     exit 1
   fi
 else
-  log_info "Compiling with Hardhat (zksolc v1.5.1, no viaIR)..."
+  log_info "Compiling with Hardhat (zksolc pinned in hardhat.config.ts, no viaIR)..."
   npx hardhat compile --force 2>&1 | grep -E "^(Successfully|Error)" || true
   echo ""
 

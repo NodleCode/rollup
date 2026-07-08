@@ -61,7 +61,10 @@ const config: HardhatUserConfig = {
     },
   },
   zksolc: {
-    version: "1.5.1",
+    // Aligned with foundry-zksync and the explorer verification settings
+    // (zksolc v1.5.15, optimizer mode 3) so hardhat-deployed contracts verify
+    // consistently — including the bare ERC1967Proxy via the standard-JSON path.
+    version: "1.5.15",
     settings: {
       // find all available options in the official documentation
       // https://era.zksync.io/docs/tools/hardhat/hardhat-zksync-solc.html#configuration
