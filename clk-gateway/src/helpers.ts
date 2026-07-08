@@ -193,9 +193,10 @@ export async function getBatchInfo(batchNumber: number): Promise<BatchInfo> {
 }
 
 export async function fetchZyfiSponsored(
-  request: ZyfiSponsoredRequest
+  request: ZyfiSponsoredRequest,
+  operation = "unknown",
 ): Promise<ZyfiSponsoredResponse> {
-  console.log(`zyfiSponsoredUrl: ${zyfiSponsoredUrl}`);
+  console.log(`ZyFi request [${operation}]: ${JSON.stringify(request)}`);
   const response = await fetch(zyfiSponsoredUrl!, {
     method: "POST",
     headers: {
@@ -208,14 +209,19 @@ export async function fetchZyfiSponsored(
   const responseBody = await response.json();
   if (!response.ok) {
     console.error(
-      `Failed to fetch zyfi sponsored: ${response.statusText}`,
+      `ZyFi error [${operation}] ${response.status} ${response.statusText}:`,
       responseBody,
     );
-    throw new Error(`Failed to fetch zyfi sponsored: ${responseBody.message}`);
+    const detail =
+      (responseBody as { message?: string }).message ??
+      JSON.stringify(responseBody);
+    throw new Error(`Failed to fetch zyfi sponsored [${operation}]: ${detail}`);
   }
-  const sponsoredResponse = responseBody as ZyfiSponsoredResponse;
 
-  return sponsoredResponse;
+  console.log(
+    `ZyFi response [${operation}]: ${JSON.stringify(responseBody)}`,
+  );
+  return responseBody as ZyfiSponsoredResponse;
 }
 
 function decodeCommitData(commitData: string) {
