@@ -166,6 +166,11 @@
     "girlnext",
     "Checksummed",
     "checksummed",
-    "BMNFT"
+    "BMNFT",
+    "unstake",
+    "unstakes",
+    "Unstaked",
+    "funder",
+    "Fundings"
   ]
 }

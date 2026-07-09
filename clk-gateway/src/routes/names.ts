@@ -126,8 +126,7 @@ router.post(
     let response;
     if (zyfiSponsoredUrl) {
       const zyfiRequest = buildZyfiRegisterRequest(owner, name, sub);
-      const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
-      console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
+      const zyfiResponse = await fetchZyfiSponsored(zyfiRequest, "register");
 
       // await admin.auth().revokeRefreshTokens(decodedToken.uid);
 
@@ -268,8 +267,10 @@ router.post(
         data.key,
         data.value,
       );
-      const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
-      console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
+      const zyfiResponse = await fetchZyfiSponsored(
+        zyfiRequest,
+        "set-text-record",
+      );
 
       response = await l2Wallet.sendTransaction(zyfiResponse.txData);
     } else {

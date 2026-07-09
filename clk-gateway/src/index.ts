@@ -481,8 +481,7 @@ app.post(
       let response;
       if (zyfiSponsoredUrl) {
         const zyfiRequest = buildZyfiRegisterRequest(owner, name, sub);
-        const zyfiResponse = await fetchZyfiSponsored(zyfiRequest);
-        console.log(`ZyFi response: ${JSON.stringify(zyfiResponse)}`);
+        const zyfiResponse = await fetchZyfiSponsored(zyfiRequest, "register");
 
         await admin.auth().revokeRefreshTokens(decodedToken.uid);
 
