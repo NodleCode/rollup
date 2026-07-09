@@ -32,6 +32,12 @@ import {IWithdrawalMessage} from "./interfaces/IWithdrawalMessage.sol";
  *  {l2TransactionBaseCost}), since the Mailbox equivalents are deprecated. The Mailbox (Diamond
  *  proxy) is still used for the L2→L1 proof paths ({proveL1ToL2TransactionStatus} /
  *  {proveL2MessageInclusion}), which are not deprecated.
+ *
+ *  Withdrawal messages carry no nonce — replay protection is this instance's
+ *  {isWithdrawalFinalized} map, which starts empty on a fresh deployment. Since inclusion proofs
+ *  for historical messages remain valid on the Diamond forever, a redeployment must be told about
+ *  its predecessor via {LEGACY_BRIDGE} so withdrawals the old instance already paid out cannot be
+ *  minted a second time here.
  */
 contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
     // =============================
@@ -52,6 +58,11 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
 
     /// @notice The counterpart bridge address deployed on L2.
     address public immutable L2_BRIDGE_ADDR;
+
+    /// @notice The previous L1 bridge deployment, if any (zero address when this is the first).
+    /// @dev Withdrawals already finalized by the legacy instance are rejected here, since both
+    ///      instances verify the same L2→L1 messages against the same Diamond.
+    IL1Bridge public immutable LEGACY_BRIDGE;
 
     /// @notice Per-account mapping of deposit L2 tx hash to deposited amount.
     mapping(address account => mapping(bytes32 depositL2TxHash => uint256 amount)) public depositAmount;
@@ -82,6 +93,8 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
     error InvalidSelector(bytes4 sel);
     /// @dev Withdrawal for the given (batch, index) has already been finalized.
     error WithdrawalAlreadyFinalized();
+    /// @dev Withdrawal for the given (batch, index) was already finalized by the legacy bridge.
+    error WithdrawalFinalizedOnLegacyBridge();
 
     // =============================
     // Constructor
@@ -95,6 +108,8 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
      * @param _l2ChainId The chain id of the target L2 as registered on the Bridgehub.
      * @param _l1Token The L1 NODL token address.
      * @param _l2Bridge The L2 bridge contract address.
+     * @param _legacyBridge The previous L1 bridge deployment whose finalized withdrawals must not
+     *        be replayed here. Zero address when deploying to a chain with no predecessor.
      */
     constructor(
         address _owner,
@@ -102,7 +117,8 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         address _bridgehub,
         uint256 _l2ChainId,
         address _l1Token,
-        address _l2Bridge
+        address _l2Bridge,
+        address _legacyBridge
     ) Ownable(_owner) {
         if (_l1Mailbox == address(0) || _bridgehub == address(0) || _l1Token == address(0) || _l2Bridge == address(0))
         {
@@ -116,6 +132,7 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         L2_CHAIN_ID = _l2ChainId;
         L1_NODL = L1Nodl(_l1Token);
         L2_BRIDGE_ADDR = _l2Bridge;
+        LEGACY_BRIDGE = IL1Bridge(_legacyBridge);
     }
 
     // =============================
@@ -285,6 +302,10 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
     ) external override whenNotPaused {
         if (isWithdrawalFinalized[_l2BatchNumber][_l2MessageIndex]) {
             revert WithdrawalAlreadyFinalized();
+        }
+        if (address(LEGACY_BRIDGE) != address(0) && LEGACY_BRIDGE.isWithdrawalFinalized(_l2BatchNumber, _l2MessageIndex))
+        {
+            revert WithdrawalFinalizedOnLegacyBridge();
         }
 
         (address l1Receiver, uint256 amount) = _parseL2WithdrawalMessage(_message);

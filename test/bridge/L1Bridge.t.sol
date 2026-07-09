@@ -131,6 +131,15 @@ contract MockBridgehub { /* not inheriting IBridgehub on purpose */
     }
 }
 
+/// @dev Minimal mock of a predecessor L1Bridge for the legacy-finalization guard.
+contract MockLegacyBridge { /* not inheriting IL1Bridge on purpose */
+    mapping(uint256 => mapping(uint256 => bool)) public isWithdrawalFinalized;
+
+    function setFinalized(uint256 batch, uint256 index, bool finalized) external {
+        isWithdrawalFinalized[batch][index] = finalized;
+    }
+}
+
 contract L1BridgeTest is Test {
     // Actors
     address internal ADMIN = address(0xA11CE);
@@ -151,7 +160,9 @@ contract L1BridgeTest is Test {
         mailbox = new MockMailbox();
         bridgehub = new MockBridgehub();
         token = new L1Nodl(ADMIN, ADMIN);
-        bridge = new L1Bridge(ADMIN, address(mailbox), address(bridgehub), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR);
+        bridge = new L1Bridge(
+            ADMIN, address(mailbox), address(bridgehub), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR, address(0)
+        );
 
         vm.startPrank(ADMIN);
         bytes32 minterRole = keccak256("MINTER_ROLE");
@@ -356,6 +367,44 @@ contract L1BridgeTest is Test {
         bridge.finalizeWithdrawal(batch, idx, txNum, msgBytes, new bytes32[](0));
     }
 
+    function test_FinalizeWithdrawal_Revert_FinalizedOnLegacyBridge() public {
+        MockLegacyBridge legacy = new MockLegacyBridge();
+        L1Bridge successor = new L1Bridge(
+            ADMIN, address(mailbox), address(bridgehub), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR, address(legacy)
+        );
+        vm.prank(ADMIN);
+        token.grantRole(keccak256("MINTER_ROLE"), address(successor));
+
+        uint256 batch = 10;
+        uint256 idx = 2;
+        mailbox.setInclusion(batch, idx, true);
+        legacy.setFinalized(batch, idx, true);
+        bytes memory msgBytes = abi.encodePacked(IWithdrawalMessage.finalizeWithdrawal.selector, OTHER, uint256(1 ether));
+
+        vm.expectRevert(abi.encodeWithSelector(L1Bridge.WithdrawalFinalizedOnLegacyBridge.selector));
+        successor.finalizeWithdrawal(batch, idx, 1, msgBytes, new bytes32[](0));
+        assertFalse(successor.isWithdrawalFinalized(batch, idx), "not marked finalized on successor");
+    }
+
+    function test_FinalizeWithdrawal_LegacyBridgeSet_AllowsUnfinalizedWithdrawal() public {
+        MockLegacyBridge legacy = new MockLegacyBridge();
+        L1Bridge successor = new L1Bridge(
+            ADMIN, address(mailbox), address(bridgehub), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR, address(legacy)
+        );
+        vm.prank(ADMIN);
+        token.grantRole(keccak256("MINTER_ROLE"), address(successor));
+
+        uint256 batch = 11;
+        uint256 idx = 4;
+        uint256 amount = 7 ether;
+        mailbox.setInclusion(batch, idx, true);
+        bytes memory msgBytes = abi.encodePacked(IWithdrawalMessage.finalizeWithdrawal.selector, OTHER, amount);
+
+        successor.finalizeWithdrawal(batch, idx, 1, msgBytes, new bytes32[](0));
+        assertEq(token.balanceOf(OTHER), amount, "minted for withdrawal the legacy bridge never paid");
+        assertTrue(successor.isWithdrawalFinalized(batch, idx), "finalized on successor");
+    }
+
     function test_FinalizeWithdrawal_RevertThenSuccess_DoesNotStickFlag() public {
         uint256 batch = 3;
         uint256 idx = 1;
@@ -463,17 +512,17 @@ contract L1BridgeTest is Test {
 
     function test_Constructor_Revert_ZeroAddress() public {
         vm.expectRevert(abi.encodeWithSelector(L1Bridge.ZeroAddress.selector));
-        new L1Bridge(ADMIN, address(0), address(bridgehub), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR);
+        new L1Bridge(ADMIN, address(0), address(bridgehub), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR, address(0));
     }
 
     function test_Constructor_Revert_ZeroBridgehub() public {
         vm.expectRevert(abi.encodeWithSelector(L1Bridge.ZeroAddress.selector));
-        new L1Bridge(ADMIN, address(mailbox), address(0), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR);
+        new L1Bridge(ADMIN, address(mailbox), address(0), L2_CHAIN_ID, address(token), L2_BRIDGE_ADDR, address(0));
     }
 
     function test_Constructor_Revert_ZeroChainId() public {
         vm.expectRevert(abi.encodeWithSelector(L1Bridge.ZeroChainId.selector));
-        new L1Bridge(ADMIN, address(mailbox), address(bridgehub), 0, address(token), L2_BRIDGE_ADDR);
+        new L1Bridge(ADMIN, address(mailbox), address(bridgehub), 0, address(token), L2_BRIDGE_ADDR, address(0));
     }
 
     function test_Deposit_PassesBridgehubRequestFields() public {

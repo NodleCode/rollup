@@ -286,6 +286,11 @@ main() {
         print_info "L2 Chain ID: $L2_CHAIN_ID"
         print_info "L1 Token: $L1_NODL_ADDR"
         print_info "L2 Bridge: $L2_BRIDGE_ADDR"
+        if [ -n "${LEGACY_BRIDGE:-}" ]; then
+            print_info "Legacy bridge (withdrawal replays rejected): $LEGACY_BRIDGE"
+        else
+            print_warning "LEGACY_BRIDGE not set — only correct for a first-ever deployment; see ops/bridgehub-migration-cutover.md"
+        fi
         
         if forge script script/DeployL1Bridge.s.sol -i 1 --broadcast --rpc-url "$L1_RPC" | tee "$LOG_FILE"; then
             L1_BRIDGE_ADDR=$(extract_address "$LOG_FILE" "L1Bridge")
