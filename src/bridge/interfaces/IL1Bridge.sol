@@ -9,8 +9,8 @@ pragma solidity ^0.8.26;
  */
 interface IL1Bridge {
     /**
-     * @notice Emitted when a deposit to L2 is initiated via the zkSync Mailbox.
-     * @param l2DepositTxHash The L2 transaction hash returned by the Mailbox for the enqueued L2 call.
+     * @notice Emitted when a deposit to L2 is initiated via the zkSync Bridgehub.
+     * @param l2DepositTxHash The canonical L2 transaction hash returned by the Bridgehub for the enqueued L2 call.
      * @param from The L1 sender who initiated the deposit.
      * @param to The L2 receiver that will receive/mint tokens on L2.
      * @param amount The token amount bridged.
@@ -49,14 +49,14 @@ interface IL1Bridge {
 
     /**
      * @notice Initiates a token deposit to L2 by enqueuing a call to the L2 bridge.
-     * @dev The caller must send sufficient ETH in msg.value to cover the Mailbox base cost.
-     *      Any excess will be refunded to `_refundRecipient`.
+     * @dev The caller must send sufficient ETH in msg.value to cover the L2 transaction base cost
+     *      (see {quoteL2BaseCost} on the implementation). Any excess is refunded on L2 to `_refundRecipient`.
      * @param _l2Receiver The L2 address that will receive the bridged tokens.
      * @param _amount The token amount to bridge.
      * @param _l2TxGasLimit The L2 gas limit for the enqueued transaction.
      * @param _l2TxGasPerPubdataByte The gas per pubdata byte parameter for the L2 tx.
-     * @param _refundRecipient The L1 address to receive any ETH refund from the Mailbox.
-     * @return txHash The L2 transaction hash returned by the Mailbox.
+     * @param _refundRecipient The address to receive any ETH refund on L2.
+     * @return txHash The canonical L2 transaction hash returned by the Bridgehub.
      */
     function deposit(
         address _l2Receiver,

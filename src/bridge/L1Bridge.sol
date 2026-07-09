@@ -5,6 +5,10 @@ pragma solidity ^0.8.26;
 import {L1Nodl} from "../L1Nodl.sol";
 // Use local submodule paths instead of unavailable @zksync package imports
 import {IMailbox} from "lib/era-contracts/l1-contracts/contracts/state-transition/chain-interfaces/IMailbox.sol";
+import {
+    IBridgehub,
+    L2TransactionRequestDirect
+} from "lib/era-contracts/l1-contracts/contracts/bridgehub/IBridgehub.sol";
 import {L2Message, TxStatus} from "lib/era-contracts/l1-contracts/contracts/common/Messaging.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
@@ -19,24 +23,46 @@ import {IWithdrawalMessage} from "./interfaces/IWithdrawalMessage.sol";
  * @title L1Bridge
  * @notice L1 endpoint of the NODL token bridge for zkSync Era.
  * @dev Responsibilities:
- *  - Initiate deposits by enqueuing an L2 call to the counterpart L2 bridge through the Mailbox.
+ *  - Initiate deposits by enqueuing an L2 call to the counterpart L2 bridge through the Bridgehub.
  *  - Track deposit tx hashes to enable refunds if an L2 transaction fails.
  *  - Finalize L2→L1 withdrawals by verifying message inclusion and minting on L1.
  *  - Secured with Ownable (admin), Pausable (circuit breaker).
+ *
+ *  Deposits and base-cost quotes go through the Bridgehub ({requestL2TransactionDirect} /
+ *  {l2TransactionBaseCost}), since the Mailbox equivalents are deprecated. The Mailbox (Diamond
+ *  proxy) is still used for the L2→L1 proof paths ({proveL1ToL2TransactionStatus} /
+ *  {proveL2MessageInclusion}), which are not deprecated.
+ *
+ *  Withdrawal messages carry no nonce — replay protection is this instance's
+ *  {isWithdrawalFinalized} map, which starts empty on a fresh deployment. Since inclusion proofs
+ *  for historical messages remain valid on the Diamond forever, a redeployment must be told about
+ *  its predecessor via {LEGACY_BRIDGE} so withdrawals the old instance already paid out cannot be
+ *  minted a second time here.
  */
 contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
     // =============================
     // State
     // =============================
 
-    /// @notice The zkSync Era Mailbox contract on L1 (Diamond proxy).
+    /// @notice The zkSync Era Mailbox contract on L1 (Diamond proxy). Used for L2→L1 proofs only.
     IMailbox public immutable L1_MAILBOX;
+
+    /// @notice The zkSync Bridgehub contract on L1. Entry point for deposits and base-cost quotes.
+    IBridgehub public immutable BRIDGEHUB;
+
+    /// @notice The chain id of the target L2, as registered on the Bridgehub.
+    uint256 public immutable L2_CHAIN_ID;
 
     /// @notice The L1 NODL token instance.
     L1Nodl public immutable L1_NODL;
 
     /// @notice The counterpart bridge address deployed on L2.
     address public immutable L2_BRIDGE_ADDR;
+
+    /// @notice The previous L1 bridge deployment, if any (zero address when this is the first).
+    /// @dev Withdrawals already finalized by the legacy instance are rejected here, since both
+    ///      instances verify the same L2→L1 messages against the same Diamond.
+    IL1Bridge public immutable LEGACY_BRIDGE;
 
     /// @notice Per-account mapping of deposit L2 tx hash to deposited amount.
     mapping(address account => mapping(bytes32 depositL2TxHash => uint256 amount)) public depositAmount;
@@ -51,6 +77,8 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
 
     /// @dev Zero address supplied where non-zero is required.
     error ZeroAddress();
+    /// @dev Zero chain id supplied where non-zero is required.
+    error ZeroChainId();
     /// @dev Amount must be greater than zero.
     error ZeroAmount();
     /// @dev Unknown deposit tx hash for the provided sender.
@@ -65,25 +93,46 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
     error InvalidSelector(bytes4 sel);
     /// @dev Withdrawal for the given (batch, index) has already been finalized.
     error WithdrawalAlreadyFinalized();
+    /// @dev Withdrawal for the given (batch, index) was already finalized by the legacy bridge.
+    error WithdrawalFinalizedOnLegacyBridge();
 
     // =============================
     // Constructor
     // =============================
 
     /**
-     * @notice Initializes the bridge with the system Mailbox, token, and L2 bridge addresses.
+     * @notice Initializes the bridge with the system Mailbox, Bridgehub, token, and L2 bridge addresses.
      * @param _owner The admin address for Ownable controls.
-     * @param _l1Mailbox The L1 Mailbox (zkSync Era) proxy address.
+     * @param _l1Mailbox The L1 Mailbox (zkSync Era Diamond) proxy address, used for L2→L1 proofs.
+     * @param _bridgehub The L1 Bridgehub address, used for deposits and base-cost quotes.
+     * @param _l2ChainId The chain id of the target L2 as registered on the Bridgehub.
      * @param _l1Token The L1 NODL token address.
      * @param _l2Bridge The L2 bridge contract address.
+     * @param _legacyBridge The previous L1 bridge deployment whose finalized withdrawals must not
+     *        be replayed here. Zero address when deploying to a chain with no predecessor.
      */
-    constructor(address _owner, address _l1Mailbox, address _l1Token, address _l2Bridge) Ownable(_owner) {
-        if (_l1Mailbox == address(0) || _l1Token == address(0) || _l2Bridge == address(0)) {
+    constructor(
+        address _owner,
+        address _l1Mailbox,
+        address _bridgehub,
+        uint256 _l2ChainId,
+        address _l1Token,
+        address _l2Bridge,
+        address _legacyBridge
+    ) Ownable(_owner) {
+        if (_l1Mailbox == address(0) || _bridgehub == address(0) || _l1Token == address(0) || _l2Bridge == address(0))
+        {
             revert ZeroAddress();
         }
+        if (_l2ChainId == 0) {
+            revert ZeroChainId();
+        }
         L1_MAILBOX = IMailbox(_l1Mailbox);
+        BRIDGEHUB = IBridgehub(_bridgehub);
+        L2_CHAIN_ID = _l2ChainId;
         L1_NODL = L1Nodl(_l1Token);
         L2_BRIDGE_ADDR = _l2Bridge;
+        LEGACY_BRIDGE = IL1Bridge(_legacyBridge);
     }
 
     // =============================
@@ -117,7 +166,7 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         view
         returns (uint256 baseCost)
     {
-        baseCost = L1_MAILBOX.l2TransactionBaseCost(tx.gasprice, _l2TxGasLimit, _l2TxGasPerPubdataByte);
+        baseCost = BRIDGEHUB.l2TransactionBaseCost(L2_CHAIN_ID, tx.gasprice, _l2TxGasLimit, _l2TxGasPerPubdataByte);
     }
 
     /**
@@ -132,7 +181,7 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         view
         returns (uint256 baseCost)
     {
-        baseCost = L1_MAILBOX.l2TransactionBaseCost(_l1GasPrice, _l2TxGasLimit, _l2TxGasPerPubdataByte);
+        baseCost = BRIDGEHUB.l2TransactionBaseCost(L2_CHAIN_ID, _l1GasPrice, _l2TxGasLimit, _l2TxGasPerPubdataByte);
     }
 
     // =============================
@@ -141,13 +190,16 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
 
     /**
      * @notice Initiates a deposit by burning on L1 and enqueuing an L2 finalizeDeposit call.
-     * @dev Caller must approve/burnable rights on the NODL token and provide msg.value to cover Mailbox costs.
+     * @dev Caller must approve/burnable rights on the NODL token and provide msg.value to cover the L2
+     *      transaction base cost. The full msg.value is passed to the Bridgehub as the request's mintValue
+     *      (the Bridgehub requires them to be equal for ETH-based chains); any excess over the actual cost
+     *      is refunded on L2 to the refund recipient.
      * @param _l2Receiver The L2 address to receive the bridged tokens.
      * @param _amount The amount of tokens to bridge.
      * @param _l2TxGasLimit Gas limit for the L2 call.
      * @param _l2TxGasPerPubdataByte Gas per pubdata byte for the L2 call.
-     * @param _refundRecipient Address receiving any ETH refund from the Mailbox.
-     * @return txHash The L2 transaction hash of the enqueued call.
+     * @param _refundRecipient Address receiving any ETH refund on L2.
+     * @return txHash The canonical L2 transaction hash of the enqueued call.
      */
     function deposit(
         address _l2Receiver,
@@ -168,8 +220,18 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
         bytes memory l2Calldata = abi.encodeCall(IL2Bridge.finalizeDeposit, (msg.sender, _l2Receiver, _amount));
         address refundRecipient = _refundRecipient != address(0) ? _refundRecipient : msg.sender;
 
-        txHash = L1_MAILBOX.requestL2Transaction{value: msg.value}(
-            L2_BRIDGE_ADDR, 0, l2Calldata, _l2TxGasLimit, _l2TxGasPerPubdataByte, new bytes[](0), refundRecipient
+        txHash = BRIDGEHUB.requestL2TransactionDirect{value: msg.value}(
+            L2TransactionRequestDirect({
+                chainId: L2_CHAIN_ID,
+                mintValue: msg.value,
+                l2Contract: L2_BRIDGE_ADDR,
+                l2Value: 0,
+                l2Calldata: l2Calldata,
+                l2GasLimit: _l2TxGasLimit,
+                l2GasPerPubdataByteLimit: _l2TxGasPerPubdataByte,
+                factoryDeps: new bytes[](0),
+                refundRecipient: refundRecipient
+            })
         );
 
         depositAmount[msg.sender][txHash] = _amount;
@@ -240,6 +302,10 @@ contract L1Bridge is Ownable2Step, Pausable, IL1Bridge {
     ) external override whenNotPaused {
         if (isWithdrawalFinalized[_l2BatchNumber][_l2MessageIndex]) {
             revert WithdrawalAlreadyFinalized();
+        }
+        if (address(LEGACY_BRIDGE) != address(0) && LEGACY_BRIDGE.isWithdrawalFinalized(_l2BatchNumber, _l2MessageIndex))
+        {
+            revert WithdrawalFinalizedOnLegacyBridge();
         }
 
         (address l1Receiver, uint256 amount) = _parseL2WithdrawalMessage(_message);
