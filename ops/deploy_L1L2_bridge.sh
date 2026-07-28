@@ -138,6 +138,25 @@ main() {
             exit 1
         fi
     done
+
+    # Cutover guards. Set REDEPLOY=1 when replacing a live bridge; see
+    # ops/bridgehub-migration-cutover.md.
+    if [ "${REDEPLOY:-0}" = "1" ]; then
+        # Without LEGACY_BRIDGE the new instance will happily re-finalize every withdrawal the old
+        # one already paid out. Refuse rather than warn.
+        if [ -z "${LEGACY_BRIDGE:-}" ]; then
+            print_error "REDEPLOY=1 requires LEGACY_BRIDGE (the current live L1 bridge address)."
+            print_error "Deploying without it disables the withdrawal replay guard."
+            exit 1
+        fi
+        # Steps 3 and 5 skip deployment when L2_BRIDGE / L1_BRIDGE are set. That is right for a
+        # resumed run, but silently does nothing on a cutover where both point at the LIVE bridges.
+        if [ -n "${L1_BRIDGE:-}" ] || [ -n "${L2_BRIDGE:-}" ]; then
+            print_error "REDEPLOY=1 but L1_BRIDGE/L2_BRIDGE are set - the deploy steps would be skipped."
+            print_error "Clear both in .env (keep LEGACY_BRIDGE pointing at the old L1 bridge)."
+            exit 1
+        fi
+    fi
     
     # Create logs directory
     mkdir -p logs
@@ -217,8 +236,9 @@ main() {
     # STEP 2: Verify L1 NODL Token
     # =================================================================
     print_step "2" "Verify L1 NODL Token"
-    
-    verify_l1_contract "$L1_NODL_ADDR" "src/L1NODL.sol" "L1NODL"
+
+    CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(address,address)" "$NODL_ADMIN" "$NODL_MINTER")
+    verify_l1_contract "$L1_NODL_ADDR" "src/L1NODL.sol" "L1NODL" "--constructor-args $CONSTRUCTOR_ARGS"
     
     # =================================================================
     # STEP 3: Deploy L2 Bridge
@@ -240,13 +260,7 @@ main() {
             if [ -n "$L2_BRIDGE_ADDR" ]; then
                 update_env "L2_BRIDGE" "$L2_BRIDGE_ADDR"
                 print_success "L2 Bridge deployed at: $L2_BRIDGE_ADDR"
-                
-                # Check if minting permission was granted during deployment
-                if grep -q "Granted MINTER_ROLE" "$LOG_FILE"; then
-                    print_success "MINTER_ROLE granted to L2 Bridge during deployment"
-                else
-                    print_warning "MINTER_ROLE granting may have failed, but continuing deployment"
-                fi
+                print_warning "MINTER_ROLE is NOT granted by this script - see the Safe calldata above"
             else
                 print_error "Failed to extract L2 Bridge address from deployment"
                 exit 1
@@ -311,19 +325,28 @@ main() {
     # STEP 6: Verify L1 Bridge
     # =================================================================
     print_step "6" "Verify L1 Bridge"
-    
-    verify_l1_contract "$L1_BRIDGE_ADDR" "src/bridge/L1Bridge.sol" "L1Bridge"
+
+    CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(address,address,address,uint256,address,address,address)" \
+        "$L1_BRIDGE_OWNER" "$L1_MAILBOX" "$BRIDGEHUB" "$L2_CHAIN_ID" "$L1_NODL_ADDR" "$L2_BRIDGE_ADDR" \
+        "${LEGACY_BRIDGE:-0x0000000000000000000000000000000000000000}")
+    verify_l1_contract "$L1_BRIDGE_ADDR" "src/bridge/L1Bridge.sol" "L1Bridge" "--constructor-args $CONSTRUCTOR_ARGS"
     
     # =================================================================
     # STEP 7: Initialize L2 Bridge
     # =================================================================
     print_step "7" "Initialize L2 Bridge"
     
-    print_info "Initializing L2 Bridge with L1 Bridge address..."
     print_info "L2 Bridge: $L2_BRIDGE_ADDR"
     print_info "L1 Bridge: $L1_BRIDGE_ADDR"
-    
-    if cast send -i "$L2_BRIDGE_ADDR" "initialize(address)" "$L1_BRIDGE_ADDR" --rpc-url "$L2_RPC"; then
+
+    # initialize() is onlyOwner and one-shot. When L2_BRIDGE_OWNER is a Safe (mainnet) the
+    # deployer key cannot make this call - emit the calldata for the Safe instead of reverting.
+    if [ "$(cast code "$L2_BRIDGE_OWNER" --rpc-url "$L2_RPC")" != "0x" ]; then
+        print_warning "L2_BRIDGE_OWNER $L2_BRIDGE_OWNER is a contract (Safe) - cannot initialize from the deployer key."
+        print_info "Execute this from the Safe, to $L2_BRIDGE_ADDR:"
+        cast calldata "initialize(address)" "$L1_BRIDGE_ADDR"
+        print_warning "The L2 bridge is INERT until the Safe executes it."
+    elif cast send -i "$L2_BRIDGE_ADDR" "initialize(address)" "$L1_BRIDGE_ADDR" --rpc-url "$L2_RPC"; then
         print_success "L2 Bridge initialized successfully"
     else
         print_error "L2 Bridge initialization failed"
@@ -339,13 +362,15 @@ main() {
     echo -e "${GREEN}✅ L2 Bridge:${NC}     $L2_BRIDGE_ADDR"
     echo -e "${GREEN}✅ L1 Bridge:${NC}     $L1_BRIDGE_ADDR"
     echo
-    print_info "All contracts deployed and initialized successfully!"
-    print_info "Updated .env file with new contract addresses."
+    print_info "Contracts deployed. Updated .env file with new contract addresses."
     echo
+    print_warning "The bridges are NOT live yet - they hold no MINTER_ROLE and may be uninitialized."
     print_info "Next steps:"
-    echo "  1. Fund the L1 NODL token contract if needed"
-    echo "  2. Test bridge functionality with small amounts"
-    echo "  3. Use the get_l2_to_l1_msg_proof.sh script to finalize withdrawals"
+    echo "  1. Execute the Safe transactions printed above (grant MINTER_ROLE on both tokens,"
+    echo "     initialize the L2 bridge) - see ops/bridgehub-migration-cutover.md"
+    echo "  2. Confirm both explorer verifications succeeded"
+    echo "  3. Test bridge functionality with small amounts"
+    echo "  4. Neutralize the old bridges per the cutover runbook"
     echo
 }
 

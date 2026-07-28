@@ -28,6 +28,9 @@ contract L1BridgeMainnetForkTest is Test {
     address internal constant NODL_L1 = 0x6dd0E17ec6fE56c5f58a0Fe2Bb813B9b5cc25990;
     address internal constant L2_BRIDGE = 0x2c1B65dA72d5Cf19b41dE6eDcCFB7DD83d1B529E;
     address internal constant OLD_BRIDGE = 0x2D02b651Ea9630351719c8c55210e042e940d69a;
+    /// @dev Stand-in for the L2Bridge redeployed at cutover. Only its *difference* from L2_BRIDGE
+    ///      matters: L2_BRIDGE_ADDR is the pinned message sender in finalizeWithdrawal.
+    address internal constant NEW_L2_BRIDGE = address(0xBEEF02);
     address internal constant NODL_ADMIN_SAFE = 0x55f5E48A1d30d67ac13751b523Ca1b3cB5838AD8;
     uint256 internal constant ERA_CHAIN_ID = 324;
 
@@ -156,6 +159,27 @@ contract L1BridgeMainnetForkTest is Test {
         unguarded.finalizeWithdrawal(W_BATCH, W_INDEX, W_TX_IN_BATCH, message, _proof());
 
         assertEq(nodl.balanceOf(W_RECEIVER), balBefore + W_AMOUNT, "proof verified; double mint without the guard");
+    }
+
+    /// @dev The mainnet cutover redeploys L2Bridge, so the new L1Bridge pins a DIFFERENT
+    ///      L2_BRIDGE_ADDR as the withdrawal message sender. A/B against the test above: same real
+    ///      proof, same unguarded (LEGACY_BRIDGE = 0) deployment, only L2_BRIDGE_ADDR differs.
+    ///      With the new L2 address the proof no longer verifies, so historical replay is blocked
+    ///      by the sender pin before the LEGACY_BRIDGE guard is ever consulted.
+    ///
+    ///      The corollary is the real cutover hazard: withdrawals initiated on the OLD L2 bridge
+    ///      can ONLY ever be finalized on the old L1 bridge. Drain them before pausing it.
+    function test_Fork_NewL2Wiring_BlocksOldL2WithdrawalEvenUnguarded() public {
+        vm.skip(skipAll);
+        L1Bridge newWiring = new L1Bridge(
+            NODL_ADMIN_SAFE, ERA_DIAMOND, BRIDGEHUB, ERA_CHAIN_ID, NODL_L1, NEW_L2_BRIDGE, address(0)
+        );
+        vm.prank(NODL_ADMIN_SAFE);
+        nodl.grantRole(keccak256("MINTER_ROLE"), address(newWiring));
+
+        bytes memory message = abi.encodePacked(IWithdrawalMessage.finalizeWithdrawal.selector, W_RECEIVER, W_AMOUNT);
+        vm.expectRevert(abi.encodeWithSelector(L1Bridge.InvalidProof.selector));
+        newWiring.finalizeWithdrawal(W_BATCH, W_INDEX, W_TX_IN_BATCH, message, _proof());
     }
 
     /// @dev Real proof from zks_getL2ToL1LogProof for L2 tx
