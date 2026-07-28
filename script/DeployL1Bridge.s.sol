@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 
 import {Script, console} from "forge-std/Script.sol";
 import {L1Bridge} from "../src/bridge/L1Bridge.sol";
-import {L1Nodl} from "../src/L1Nodl.sol";
 
 /// @notice Forge script to deploy L1Bridge on EVM networks (e.g., Sepolia)
 /// Env vars required:
@@ -17,7 +16,10 @@ import {L1Nodl} from "../src/L1Nodl.sol";
 /// - LEGACY_BRIDGE  (address, optional) — previous L1Bridge deployment whose finalized
 ///   withdrawals must not be replayed here. REQUIRED when redeploying over a live bridge,
 ///   omit only for a first-ever deployment on the chain.
-/// Deployer key must have DEFAULT_ADMIN_ROLE on L1Nodl to grant MINTER_ROLE.
+///
+/// @dev This script only deploys. `MINTER_ROLE` on L1Nodl is held by the NODL admin Safe on
+/// mainnet, so the grant is emitted below as calldata for the Safe to execute rather than
+/// broadcast from the deployer key. See ops/bridgehub-migration-cutover.md.
 contract DeployL1Bridge is Script {
     address internal ownerAddr;
     address internal l1Mailbox;
@@ -52,18 +54,19 @@ contract DeployL1Bridge is Script {
         L1Bridge bridge =
             new L1Bridge(ownerAddr, l1Mailbox, bridgehub, l2ChainId, l1Token, l2Bridge, legacyBridge);
 
-        L1Nodl nodl = L1Nodl(l1Token);
-        bytes32 minterRole = keccak256("MINTER_ROLE");
-        nodl.grantRole(minterRole, address(bridge));
-
         vm.stopBroadcast();
 
         console.log("Deployed L1Bridge at %s", address(bridge));
-        console.log("Granted MINTER_ROLE on NodlL1(%s) to bridge", l1Token);
         if (legacyBridge == address(0)) {
             console.log("WARNING: no LEGACY_BRIDGE set - only correct for a first-ever deployment");
         } else {
             console.log("Legacy bridge (withdrawal replays rejected): %s", legacyBridge);
         }
+
+        console.log("REQUIRED Safe tx - grant MINTER_ROLE, to %s", l1Token);
+        console.logBytes(
+            abi.encodeWithSignature("grantRole(bytes32,address)", keccak256("MINTER_ROLE"), address(bridge))
+        );
+        console.log("Bridge cannot mint until the Safe executes the call above.");
     }
 }
