@@ -171,6 +171,9 @@
     "unstakes",
     "Unstaked",
     "funder",
-    "Fundings"
+    "Fundings",
+    "publicnode",
+    "drpc",
+    "apikey"
   ]
 }

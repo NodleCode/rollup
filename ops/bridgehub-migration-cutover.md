@@ -142,7 +142,7 @@ the deployer EOA holds nothing. The scripts print the required calldata; execute
      bridge deployed at block 23579563, so any full-history scan is an archive request. Free
      public endpoints reject those — but not always as an error you will notice:
 
-     | Endpoint | Behaviour on an archive `eth_getLogs` |
+     | Endpoint | Behavior on an archive `eth_getLogs` |
      | --- | --- |
      | `ethereum-rpc.publicnode.com` | `-32602 Archive requests require a personal token`, which **`cast logs` reports as `[]` with exit 0** |
      | `eth.drpc.org` | serves single requests, then `403` on sustained scanning |
