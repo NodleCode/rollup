@@ -136,8 +136,35 @@ the deployer EOA holds nothing. The scripts print the required calldata; execute
    - Rerun the fork suite and the canary (above).
    - Enumerate old-bridge deposits (`DepositInitiated` events) and confirm every L2 tx executed
      successfully — any that failed should be `claimFailedDeposit`-ed on the old bridge *before*
-     cutover, while it still has `MINTER_ROLE`. This needs an indexed RPC (Etherscan/Alchemy);
-     a 2M-block `eth_getLogs` range will not complete on a public endpoint.
+     cutover, while it still has `MINTER_ROLE`.
+
+     **This requires an authenticated archive endpoint, and a free one will lie to you.** The
+     bridge deployed at block 23579563, so any full-history scan is an archive request. Free
+     public endpoints reject those — but not always as an error you will notice:
+
+     | Endpoint | Behavior on an archive `eth_getLogs` |
+     | --- | --- |
+     | `ethereum-rpc.publicnode.com` | `-32602 Archive requests require a personal token`, which **`cast logs` reports as `[]` with exit 0** |
+     | `eth.drpc.org` | serves single requests, then `403` on sustained scanning |
+     | `cloudflare-eth.com`, `rpc.ankr.com/eth`, `eth.merkle.io` | internal error / unauthorized / method not found |
+
+     An empty result here is indistinguishable from "no deposits", and concluding the latter would
+     silently skip refundable failed deposits. Sanity-check any scan against a known-present log
+     before trusting a zero: block 23579563 must return the constructor's `OwnershipTransferred`
+     (`0x8be0079c...`). If it returns nothing, your endpoint is not answering — stop.
+
+     With an Etherscan key:
+
+     ```bash
+     curl -s "https://api.etherscan.io/v2/api?chainid=1&module=logs&action=getLogs\
+&address=0x2D02b651Ea9630351719c8c55210e042e940d69a\
+&topic0=0x5c8b4b222ae9120808577bfefeb97f913b4a7160435dcf81eb32a273dd41ad05\
+&fromBlock=23579563&toBlock=latest&apikey=$ETHERSCAN_API_KEY" | jq '.result | length'
+     ```
+
+     Then for each `l2DepositTxHash` (topic 1), check the L2 status via
+     `zks_getTransactionReceipt` on `https://mainnet.era.zksync.io`; anything failed or missing
+     needs `claimFailedDeposit` on the old bridge before it loses `MINTER_ROLE`.
    - Confirm deployer funding: L1 deployment is ~1.4M gas, so budget **≥0.05 ETH** on L1 for
      headroom against a gas spike mid-cutover, plus ~0.02 ETH on zkSync.
    - Set `BRIDGEHUB`, `L2_CHAIN_ID=324`, `LEGACY_BRIDGE=0x2D02b651Ea9630351719c8c55210e042e940d69a`,
