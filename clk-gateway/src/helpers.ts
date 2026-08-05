@@ -197,16 +197,50 @@ export async function fetchZyfiSponsored(
   operation = "unknown",
 ): Promise<ZyfiSponsoredResponse> {
   console.log(`ZyFi request [${operation}]: ${JSON.stringify(request)}`);
-  const response = await fetch(zyfiSponsoredUrl!, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-KEY": process.env.ZYFI_API_KEY!,
-    },
-    body: JSON.stringify(request),
-  });
 
-  const responseBody = await response.json();
+  // NB: `Response` in this module resolves to Express's type, so infer from fetch.
+  let response: Awaited<ReturnType<typeof fetch>>;
+  try {
+    response = await fetch(zyfiSponsoredUrl!, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-KEY": process.env.ZYFI_API_KEY!,
+      },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    // Network-level failure (DNS, TLS, connection reset). The request never
+    // reached ZyFi, so there is no status or body to report.
+    const cause = error instanceof Error ? error.message : String(error);
+    console.error(`ZyFi network failure [${operation}]: ${cause}`);
+    throw new Error(`Failed to reach zyfi sponsored [${operation}]: ${cause}`);
+  }
+
+  // Read as text before parsing: an error emitted by a proxy or load balancer
+  // in front of ZyFi may be HTML or empty, and parsing that as JSON throws a
+  // SyntaxError that discards the status needed to diagnose the failure.
+  const rawBody = await response.text();
+  let responseBody: unknown;
+  try {
+    responseBody = JSON.parse(rawBody);
+  } catch {
+    if (!response.ok) {
+      console.error(
+        `ZyFi error [${operation}] ${response.status} ${response.statusText} (non-JSON body): ${rawBody}`,
+      );
+      throw new Error(
+        `Failed to fetch zyfi sponsored [${operation}]: ${response.status} ${response.statusText} — ${rawBody}`,
+      );
+    }
+    console.error(
+      `ZyFi returned a non-JSON success body [${operation}]: ${rawBody}`,
+    );
+    throw new Error(
+      `Failed to parse zyfi sponsored response [${operation}]: ${rawBody}`,
+    );
+  }
+
   if (!response.ok) {
     console.error(
       `ZyFi error [${operation}] ${response.status} ${response.statusText}:`,

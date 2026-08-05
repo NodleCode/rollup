@@ -518,11 +518,20 @@ app.use('/resolve', resolveRouter);
 
 app.use((err: Error, req: Request, res: Response, next: NextFunction): void => {
   if (err instanceof HttpError) {
+    console.warn(
+      `${req.method} ${req.originalUrl} -> ${err.statusCode}: ${err.message}`
+    );
     res.status(err.statusCode).json({ error: err.message });
     return;
   }
 
   const message = err instanceof Error ? err.message : String(err);
+  // Unexpected failures were previously returned to the client but never
+  // logged, leaving no server-side trace to debug from.
+  console.error(`${req.method} ${req.originalUrl} -> 500: ${message}`);
+  if (err instanceof Error && err.stack) {
+    console.error(err.stack);
+  }
   res.status(500).json({ error: message });
 });
 
