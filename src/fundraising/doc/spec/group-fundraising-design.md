@@ -43,6 +43,8 @@ On-chain scope is deliberately narrow:
 - The contract is an **escrow with a resolution rule**. It holds ERC-20 contributions, tracks who put in how much, and enforces exactly one of two terminal outcomes: pay the beneficiary, or refund the contributors.
 - The backend signs an EIP-712 authorization to say *"this address may create this objective"* and *"this address is a member and may deposit"*. This is the same backend-signed authorization pattern already used elsewhere in this repo.
 
+**Hard constraint: this feature deploys new contracts only.** It modifies no deployed contract, requires no token migration, and needs no change to any live paymaster. Nothing currently in production is touched. Any option that would require altering an existing deployment is out of scope by definition, not merely a low priority — that constraint is what makes this feature shippable independently of everything else, and §8 is written to respect it.
+
 Non-goals for V1: yield on idle funds, contributor voting, milestone payouts, NFT receipts, native ETH, cross-token objectives.
 
 ---
@@ -222,7 +224,7 @@ Three properties that matter to this design:
 
 - **Offer `depositWithPermit`** for tokens implementing EIP-2612: one transaction, no standing allowance left behind. Works for permit-capable stablecoins; **not** for L2 NODL, which is a plain `ERC20Burnable` with no permit.
 - **One-time approval otherwise** — first deposit two transactions, every later one a single transaction. Smart-account wallets can batch the pair.
-- **Adding `ERC20Permit` to L2 NODL** would remove this entirely and benefit every contract that pulls NODL — open decision §10 #2.
+- **Not an option: adding `ERC20Permit` to the deployed L2 NODL.** It would collapse every NODL deposit to a single transaction, but it means changing a token already in production, which §1 rules out. NODL deposits therefore use the two-step approve path, and the escrow gains the single-transaction path automatically for any permit-capable token it is given.
 
 ### 8.3 Rules this places on the escrow
 
@@ -253,14 +255,15 @@ Everything must run under `forge test`.
 
 ## 10. Open Decisions
 
+All of these concern the new contract only. None requires changing anything already deployed (§1).
+
 1. **Immutable or upgradeable?** Recommended immutable. This is survivable *only* because every objective has a signature-free, admin-free exit — that is the condition, and it holds. If upgradeability is chosen instead, the upgrade role must sit behind a timelock or multisig, and that belongs in this document.
-2. **`ERC20Permit` on L2 NODL?** Adding it collapses every NODL deposit to a single transaction and removes the need for standing approvals (§8.2). Token change, own migration question, benefits more than this feature.
-3. **Keep-what-you-raise — needed?** V1 is all-or-nothing only; the enum slot is reserved. If "whatever we collect is ours" is a real product case, decide before the interface freezes.
-4. **Protocol fee — on or off, and in which token?**
-5. **Does the `erc20-fee-signer` policy cover this escrow?** (§8.1) The paymaster needs no change; the off-chain signer simply has to agree to price transactions destined for it. Cross-team, but not a contract change.
-6. **Overshoot past the goal.** Permissionless finalize-on-goal means anyone can close the objective the instant the target is hit, so "raise at least X, more welcome" is not expressible in V1. A flag is the V2 answer if groups ask for it.
-7. **One objective per group at a time, or many?** The contract does not care; the backend can enforce either.
-8. **Backend policy items the contract deliberately does not enforce**: single-member objectives where organizer, beneficiary, and only contributor are the same address; sensible minimum contributions; and steering purchase-denominated goals toward stablecoins, since a "$500 trip" goal denominated in a volatile token can become trivially met or unreachable through no action by the group.
+2. **Keep-what-you-raise — needed?** V1 is all-or-nothing only; the enum slot is reserved. If "whatever we collect is ours" is a real product case, decide before the interface freezes.
+3. **Protocol fee — on or off, and in which token?**
+4. **Does the `erc20-fee-signer` policy cover this escrow?** (§8.1) Off-chain configuration only: the paymaster contract needs no change and neither does the escrow, so this stays inside the §1 constraint. Cross-team, not a contract change, and not a launch blocker — without it members simply pay their own gas in ETH.
+5. **Overshoot past the goal.** Permissionless finalize-on-goal means anyone can close the objective the instant the target is hit, so "raise at least X, more welcome" is not expressible in V1. A flag is the V2 answer if groups ask for it.
+6. **One objective per group at a time, or many?** The contract does not care; the backend can enforce either.
+7. **Backend policy items the contract deliberately does not enforce**: single-member objectives where organizer, beneficiary, and only contributor are the same address, and steering purchase-denominated goals toward stablecoins, since a "$500 trip" goal denominated in a volatile token can become trivially met or unreachable through no action by the group. Both belong in the authorization policy. Note the contrast with `minContribution` and `maxTotalContributions`, which **are** on-chain fields signed into the creation authorization and enforced by the contract — but only on `deposit`, never on `finalize` (§7 #2). The backend chooses their values; the contract enforces them.
 
 ---
 
