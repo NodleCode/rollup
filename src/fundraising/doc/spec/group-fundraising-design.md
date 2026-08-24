@@ -2,7 +2,7 @@
 title: "Group Fundraising — Design Document"
 subtitle: "A CrowdFund-shaped escrow for group objectives, built on OpenZeppelin"
 date: "August 2026"
-version: "0.3 — approach agreed"
+version: "1.0"
 status: "Design only. No contract, no tests, nothing deployed."
 ---
 
@@ -12,7 +12,7 @@ status: "Design only. No contract, no tests, nothing deployed."
 
 **A CrowdFund-shaped escrow for group objectives, built on OpenZeppelin**
 
-Version 0.3 — August 2026 — *approach agreed, not yet implemented*
+Version 1.0 — August 2026 — *specification; not yet implemented*
 
 ---
 
@@ -51,11 +51,11 @@ Non-goals for V1: yield on idle funds, contributor voting, milestone payouts, NF
 
 Three facts decided the design, and they are worth stating because they are not obvious:
 
-**There is nothing importable.** Every named onchain crowdfunding protocol has wound down or gone quiet — Juicebox, Party Protocol, Gitcoin Allo, Mirror. `RefundEscrow` was deleted from OpenZeppelin in 4.0, and no ERC standard for crowdfunding escrow was ever adopted. Writing our own is the normal choice here, not not-invented-here. It also means no upstream to inherit fixes from: the audit burden is entirely ours, which is why §7 and §8 carry the weight they do.
+**There is nothing importable.** OpenZeppelin removed `Escrow`, `ConditionalEscrow` and `RefundEscrow` in 5.0.0, so the version this repo vendors has no escrow primitive to inherit. Party Protocol, Gitcoin Allo and Mirror's crowdfunds have all wound down. Juicebox is still running, but its model is rejected on its own merits (§3.1) rather than for lack of a maintainer. And no ERC standard for crowdfunding escrow was ever adopted. Writing our own is therefore the normal choice, not not-invented-here.
 
-**One shape converged twice.** OpenZeppelin's `RefundEscrow` (`Active → Refunding | Closed`) and Solidity by Example's `CrowdFund` (`launch / pledge / unpledge / claim / refund`) are the same state machine, reached independently a decade apart, and `CrowdFund` is the most-copied crowdfunding contract in the community. That convergence is stronger evidence the model is right than any single audit.
+**One shape converged twice.** OpenZeppelin's `RefundEscrow` (`Active → Refunding | Closed`) and Solidity by Example's `CrowdFund` (`launch / pledge / unpledge / claim / refund`) are the same state machine, reached independently a decade apart, and `CrowdFund` is among the most widely copied crowdfunding contracts in the community. That convergence is stronger evidence the model is right than any single audit.
 
-**The best-reviewed implementation is not the most-used one.** Party Protocol has the only serious audit history in this space — 0xMacro plus two Code4rena contests — and is also the one that no longer runs. So it is an audit checklist, not a dependency (§3.2).
+**The best-reviewed implementation is not the most-used one.** Party Protocol has the deepest published review history for this contract shape — a 0xMacro audit plus several Code4rena engagements, all collected in `PartyDAO/party-protocol/audits/` — and is also the one that no longer runs. So it is an audit checklist, not a dependency (§3.2).
 
 One caveat carried forward: **most-used is not safest.** `CrowdFund` is a teaching reference — no reentrancy guard, no balance-delta accounting, no authorization, and `unpledge` open right to the deadline. §3 and §4 take the shape and add what a contract holding members' money needs.
 
@@ -63,7 +63,7 @@ One caveat carried forward: **most-used is not safest.** `CrowdFund` is a teachi
 
 ## 3. The Decision
 
-Two decisions, agreed: **which model**, and **whose code**.
+Two decisions: **which model**, and **whose code**.
 
 ### 3.1 The model — all-or-nothing, with an exit that closes at the goal
 
@@ -89,15 +89,15 @@ Rejected, with what each trades away:
 
 ### 3.2 The code lineage — blueprint, not dependency
 
-**There is nothing importable.** No maintained, audited crowdfunding contract exists to take as a dependency: Juicebox and Party Protocol are wound down, `RefundEscrow` was deleted from OpenZeppelin in 4.0, and no ERC standard for escrow was ever adopted (§2).
+**There is nothing importable.** No maintained, audited crowdfunding contract exists to take as a dependency: OpenZeppelin removed its escrow contracts in 5.0.0, Party Protocol has wound down, and no ERC standard for escrow was ever adopted (§2).
 
 So the decision is a three-part lineage:
 
-1. **Shape** — Solidity by Example's `CrowdFund`, the most-copied crowdfunding contract in the community, and the same state machine as OpenZeppelin's old `RefundEscrow`. Two independent arrivals at the same design, a decade apart, is the strongest signal available that the model is right.
+1. **Shape** — Solidity by Example's `CrowdFund` (MIT), among the most widely copied crowdfunding contracts in the community, and the same state machine as OpenZeppelin's old `RefundEscrow`. Two independent arrivals at the same design, a decade apart, is the strongest signal available that the model is right.
 2. **Substance** — OpenZeppelin primitives. This is what we actually import and the audited surface we inherit. Most of the contract by line count ends up being OZ code rather than ours.
-3. **Adversary** — Party Protocol, read-only. The only code in this space with a serious audit history (0xMacro plus two Code4rena contests). Its published findings become our test cases; its code becomes none of our dependencies.
+3. **Adversary** — Party Protocol, read-only. The deepest published review history for this shape: a 0xMacro audit and several Code4rena engagements. Its published findings become our test cases; its code becomes none of our dependencies.
 
-No forks, no upstream to track — and, honestly, no upstream to inherit fixes from either. The audit burden is entirely ours, which is why §7 and §8 carry the weight they do.
+No forks and no upstream to track — but equally no upstream to inherit fixes from. The audit burden is entirely ours, which is why §7 and §8 carry the weight they do.
 
 ---
 
@@ -123,7 +123,7 @@ No forks, no upstream to track — and, honestly, no upstream to inherit fixes f
 3. **`ReentrancyGuard` plus strict checks-effects-interactions** — zero the balance, then transfer, on every exit path.
 4. **Credit what actually arrived**, not what was requested — otherwise a fee-on-transfer token leaves the last member unable to get their money back.
 
-If anyone copies `CrowdFund` verbatim, check the site's licensing first. Re-implementing from the shape avoids the question.
+`CrowdFund` is MIT-licensed; re-implementing from the shape rather than copying keeps the provenance clean regardless.
 
 ### 4.3 What we import
 
@@ -181,12 +181,12 @@ Storage, events, token accounting, and fee mechanics: **Appendix A**.
 
 ## 7. Security Model
 
-The threat list, each item traceable to prior art or to review of an earlier draft of this document.
+The threat list, each item traceable to prior art or to a hazard this repo has already encountered.
 
 | # | Risk | Mitigation |
 |---|---|---|
 | 1 | **Funds frozen because nobody can resolve** — the failure mode that matters most, and the one Party Protocol's audits kept surfacing | `finalize` is permissionless once the goal is met *or* the deadline passes. No role, no signature, no organizer cooperation |
-| 2 | **Deposit-time rules blocking resolution** (Party C4 2023-10 #127 — a minimum-contribution check made a crowdfund impossible to finalize and froze the funds) | `finalize` checks only state, deadline, and `raised >= goal` |
+| 2 | **Deposit-time rules blocking resolution** (Party Protocol, Code4rena October 2023, finding M-06 — a minimum-contribution check made a crowdfund impossible to finalize, locking contributor funds until expiry) | `finalize` checks only state, deadline, and `raised >= goal` |
 | 3 | Refund griefing via push payments | Pull only, everywhere |
 | 4 | Reentrancy through token callbacks | `nonReentrant` + checks-effects-interactions. Both, not either |
 | 5 | Fee-on-transfer token insolvency | Credit the amount actually received; pay out credited units |
@@ -236,11 +236,11 @@ One member-facing consequence: paying gas in NODL means holding NODL. Natural fo
 
 ## 9. Test Harness Plan
 
-Not written yet — this is the design pass. What the harness should cover:
+What the harness must cover:
 
 - **Every edge in §5**, including the reverting ones: deposit after deadline, unpledge at or above goal, cancel at or above goal, refund while `Funding`, double `finalize`, withdraw by a non-beneficiary.
 - **The latch specifically**: deposit to `goal - 1` and unpledge (allowed); cross to `goal` and unpledge (must revert); cross to `goal`, then confirm `cancel` reverts and `finalize` succeeds for a random caller.
-- **Regression tests named after the prior art**: finalize an objective whose last contribution is below the minimum (Party C4 #127); finalize with an organizer who never calls anything.
+- **Regression tests named after the prior art**: finalize an objective whose last contribution is below the minimum (the Party M-06 case); finalize with an organizer who never calls anything.
 - **Fuzz**: amounts, contributor counts, deadlines, and the `goal - 1 / goal / goal + 1` boundary with interleaved unpledges.
 - **Invariants**: contributions sum to `raised`; contract balance always covers outstanding liabilities; `Refunding` never pays the beneficiary; `raised` never crosses back below `goal` once reached.
 - **Adversarial token mocks**: fee-on-transfer, reentrant, blocklisting.
@@ -252,8 +252,6 @@ Everything must run under `forge test`.
 ---
 
 ## 10. Open Decisions
-
-Settled: the model (§3.1), the code lineage (§3.2), locked-vs-unpledge (§3.1), who may finalize (§7 #1), that no feature-specific paymaster is introduced, and that gas in NODL is already served by the existing `ERC20FeePaymaster` (§8).
 
 1. **Immutable or upgradeable?** Recommended immutable. This is survivable *only* because every objective has a signature-free, admin-free exit — that is the condition, and it holds. If upgradeability is chosen instead, the upgrade role must sit behind a timelock or multisig, and that belongs in this document.
 2. **`ERC20Permit` on L2 NODL?** Adding it collapses every NODL deposit to a single transaction and removes the need for standing approvals (§8.2). Token change, own migration question, benefits more than this feature.
@@ -268,7 +266,7 @@ Settled: the model (§3.1), the code lineage (§3.2), locked-vs-unpledge (§3.1)
 
 ## Appendix A: Integration Notes
 
-Deferred detail — needed at implementation time, not for the approach decision.
+Detail needed at implementation time.
 
 ### A.1 Storage sketch
 
@@ -333,11 +331,10 @@ Two indexer traps: use the **credited** amount, not the call argument; and `rais
 ```
 src/fundraising/GroupFundraising.sol
 src/fundraising/interfaces/IGroupFundraising.sol
-src/fundraising/interfaces/IGroupFundraisingGaslessValidator.sol
 test/fundraising/{Lifecycle,GoalLatch,Authorization,Refunds,Invariants}.t.sol
 test/fundraising/mocks/{FeeOnTransferERC20,ReentrantERC20,BlocklistERC20}.sol
 script/DeployGroupFundraising.s.sol
-docs/2026-08-24-group-fundraising-design.md
+src/fundraising/doc/spec/group-fundraising-design.md
 ```
 
 License header `// SPDX-License-Identifier: BSD-3-Clause-Clear`, per repo convention.
@@ -347,9 +344,9 @@ License header `// SPDX-License-Identifier: BSD-3-Clause-Clear`, per repo conven
 ## Sources
 
 - Solidity by Example — `CrowdFund`, the shape this contract follows: https://solidity-by-example.org/app/crowd-fund/
-- OpenZeppelin Contracts CHANGELOG — removal of `Escrow` / `ConditionalEscrow` / `RefundEscrow` in 4.0: https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/CHANGELOG.md
-- OpenZeppelin Payment / escrow API (3.x — last version with these contracts): https://docs.openzeppelin.com/contracts/3.x/api/payment
+- OpenZeppelin Contracts CHANGELOG — removal of `Escrow` / `ConditionalEscrow` / `RefundEscrow` in 5.0.0 (2023-10-05): https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/CHANGELOG.md
+- OpenZeppelin escrow API reference (the contracts survived through 4.x): https://docs.openzeppelin.com/contracts/4.x/api/utils#Escrow
 - Party Protocol — Code4rena findings & analysis, October 2023: https://code4rena.com/reports/2023-10-party
-- Party Protocol — `ETHCrowdfundBase` finalization DoS via `minContribution` (issue #127), the source of §7 #2: https://github.com/code-423n4/2023-10-party-findings/issues/127
+- Party Protocol — `ETHCrowdfundBase` finalization DoS via `minContribution` (Code4rena Oct 2023, M-06), the source of §7 #2: https://github.com/code-423n4/2023-10-party-findings/issues/127
 - Party Protocol — 0xMacro audit: https://github.com/PartyDAO/party-protocol/blob/main/audits/Party-Protocol-Macro-Audit.pdf
 - ERC-2612 permit (`depositWithPermit`, §8.2): https://eips.ethereum.org/EIPS/eip-2612
