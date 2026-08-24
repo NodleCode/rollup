@@ -16,6 +16,15 @@
     "src/swarms/doc/iso3166-2"
   ],
   "ignoreWords": [
+    "unpledge",
+    "unpledges",
+    "blocklist",
+    "blocklisted",
+    "blocklisting",
+    "stablecoin",
+    "stablecoins",
+    "Juicebox",
+    "Allo",
     "AMPL",
     "NODL",
     "Nodle",
