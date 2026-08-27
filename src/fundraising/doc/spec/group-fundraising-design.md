@@ -410,7 +410,9 @@ Two indexer traps: use the **credited** amount, not the call argument; and `rais
 ```
 src/fundraising/FundraiserFactory.sol
 src/fundraising/Fundraiser.sol
+src/fundraising/interfaces/FundraisingTypes.sol      # shared enums + params struct
 src/fundraising/interfaces/IFundraiser.sol
+src/fundraising/interfaces/IFundraiserFactory.sol
 test/fundraising/{Lifecycle,GoalLatch,Permissionless,Refunds,Invariants}.t.sol
 test/fundraising/mocks/{FeeOnTransferERC20,ReentrantERC20,BlocklistERC20}.sol
 script/DeployFundraiserFactory.s.sol
