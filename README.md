@@ -215,6 +215,29 @@ forge script script/DeployFundraiserFactory.s.sol \
 
 Only the factory needs verifying; each fundraise is a full contract created from bytecode already published by the factory.
 
+Verification uses the ZKsync explorer's own verifier rather than the manual Etherscan flow described further down:
+
+```shell
+export ARGS=$(cast abi-encode "constructor(address,uint16,address,address[])" \
+    $N_FUNDRAISING_ADMIN 0 0x0000000000000000000000000000000000000000 "[$NODL]")
+
+forge verify-contract <FACTORY_ADDRESS> src/fundraising/FundraiserFactory.sol:FundraiserFactory \
+    --zksync --verifier zksync --verifier-url $L2_VERIFIER_URL \
+    --constructor-args $ARGS --watch
+```
+
+Individual fundraises can be verified the same way against `src/fundraising/Fundraiser.sol:Fundraiser`, passing the constructor tuple. Their parameters are all readable from the deployed contract, so they can be reconstructed after the fact:
+
+```shell
+cast abi-encode "constructor((string,address,uint128,uint40,uint8,address,uint128,uint128),address,uint16,address)" \
+    "(\"<name>\",<token>,<goal>,<deadline>,<onMissed>,<beneficiary>,<min>,<max>)" \
+    <organizer> <feeBps> <factory>
+```
+
+> [!NOTE]
+> `forge script --zksync` and `forge verify-contract --zksync` cannot currently run from this repo: zksolc rejects `src/swarms/SwarmRegistryL1Upgradeable.sol` (`EXTCODECOPY` is unsupported on EraVM). `--skip` works for `forge build` but breaks foundry-zksync's solc/zksolc artifact pairing in scripts, and `verify-contract` has no `--skip` at all. Until the L1-only contracts are excluded from the zkSync build, both must be run from a project that does not include them.
+
+
 Fees ship switched off. The capability exists — the rate is snapshotted into each fundraise at creation, so raising it later cannot reach anything already in flight — but turning it on is a product decision:
 
 ```shell
