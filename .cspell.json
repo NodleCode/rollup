@@ -17,6 +17,8 @@
   ],
   "ignoreWords": [
     "fundraise",
+    "Finalizable",
+    "tstore",
     "fundraises",
     "Fundraiser",
     "unpledge",

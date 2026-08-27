@@ -132,7 +132,7 @@ Note what is *not* on that list: an authorization layer. Like `CrowdFund`, this 
 
 ### 4.3 What we import
 
-OpenZeppelin 5.3 (already vendored in `lib/`): `SafeERC20`, `ReentrancyGuard`, `Clones`, and `AccessControl` on the factory for the token allow-list and fee parameters. Nothing else — with deposits permissionless, `EIP712` and `SignatureChecker` drop out of the design entirely. No escrow primitive exists in 5.x to inherit — that is the gap this contract fills.
+OpenZeppelin 5.3 (already vendored in `lib/`): `SafeERC20`, `ReentrancyGuard`, `Initializable`, `ERC1967Proxy`, and `AccessControl` on the factory for the token allow-list and fee parameters. Nothing else — with deposits permissionless, `EIP712` and `SignatureChecker` drop out of the design entirely. No escrow primitive exists in 5.x to inherit — that is the gap this contract fills.
 
 ---
 
@@ -171,7 +171,13 @@ Two contracts: a **factory** that deploys one **objective contract per fundraise
 
 `FundraiserFactory` is a singleton holding the token allow-list, fee parameters, and the objective implementation address. `Fundraiser` is deployed per objective and holds only that objective's money.
 
-Per-objective contracts cost more to create than rows in a shared mapping, so the factory deploys **minimal proxies** rather than full copies. What that buys is worth the cost:
+Each objective is a **per-objective `ERC1967Proxy`** pointing at one shared implementation, deployed with `new ERC1967Proxy(impl, initData)`.
+
+**Not `Clones` / EIP-1167.** Minimal proxies are the obvious choice on the EVM and they do not work on zkSync Era: `Clones.clone()` assembles the EIP-1167 runtime blob in memory at runtime, zksolc never sees it statically, the factory's `factoryDependencies` come up empty, and the EraVM `ContractDeployer` cannot resolve the deploy — it reverts `ERC1167: create failed`. This is not a prediction. The Collections feature in this repo shipped its first design on `Clones`, hit exactly this, and replaced it; the post-mortem is in [`src/collections/doc/spec/design-and-implementation.md`](../../../collections/doc/spec/design-and-implementation.md) §1.1. `CollectionFactory` deploying a full `ERC1967Proxy` per collection is the fix, not a stylistic preference, and this design copies it.
+
+The implementation deliberately does **not** inherit `UUPSUpgradeable`, so the proxy's implementation slot is constructor-fixed and cannot be written afterward. That is what makes each objective immutable while still letting the factory point at a new implementation for *future* objectives.
+
+A proxy per objective costs more than a row in a shared mapping, though far less than a full contract copy — the implementation bytecode is published once. What that buys:
 
 - **Fund isolation.** An accounting bug can only reach one objective's balance, never every group's money at once. For consumer funds that is the deciding argument.
 - **Simpler accounting.** Each contract holds exactly one token for exactly one objective, so "what do we owe?" is `token.balanceOf(this)` — no per-token liability accumulator, no cross-objective solvency invariant, and surplus rescue becomes trivially safe.
@@ -364,7 +370,7 @@ One ERC-20 per objective, fixed at creation, drawn from an **admin-managed allow
 
 Credit the balance delta on receipt, never the requested amount. Pay out credited units on every exit.
 
-Maintain a per-token `liabilities` accumulator so a bounded `rescueSurplus(token)` — moving only `balanceOf(this) - liabilities[token]` — can recover mis-sends and airdrops without ever being able to touch member money. Unclaimed refunds stay liabilities forever, and stay untouchable.
+A bounded `rescueSurplus(token)` recovers mis-sends and airdrops without ever being able to touch member money. No accumulator is needed for it — that was a singleton-era requirement. One contract holds one escrow token for one objective, so its outstanding liability is arithmetic over state that already exists (`raised` while `Funding` or `Succeeded`, `raised - refunded` while `Refunding`, zero once `Closed`), and any other token's balance is surplus in full. Unclaimed refunds stay liabilities forever, and stay untouchable.
 
 ### A.4 Fees
 
@@ -373,7 +379,7 @@ Optional, off by default. `feeBps` snapshotted into the objective at creation so
 ### A.5 Events
 
 ```
-ObjectiveCreated, ContributionMade, Unpledged, ObjectiveFinalized, ObjectiveCancelled,
+FundraiserCreated, ContributionMade, Unpledged, Finalized, Cancelled,
 Withdrawn, PayoutAddressChanged, Refunded, TokenAllowed,
 FeeParamsUpdated, SurplusRescued
 ```
