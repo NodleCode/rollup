@@ -173,7 +173,19 @@ Two contracts: a **factory** that deploys one **objective contract per fundraise
 
 Each objective is a **per-objective `ERC1967Proxy`** pointing at one shared implementation, deployed with `new ERC1967Proxy(impl, initData)`.
 
-**Not `Clones` / EIP-1167.** Minimal proxies are the obvious choice on the EVM and they do not work on zkSync Era: `Clones.clone()` assembles the EIP-1167 runtime blob in memory at runtime, zksolc never sees it statically, the factory's `factoryDependencies` come up empty, and the EraVM `ContractDeployer` cannot resolve the deploy — it reverts `ERC1167: create failed`. This is not a prediction. The Collections feature in this repo shipped its first design on `Clones`, hit exactly this, and replaced it; the post-mortem is in [`src/collections/doc/spec/design-and-implementation.md`](../../../collections/doc/spec/design-and-implementation.md) §1.1. `CollectionFactory` deploying a full `ERC1967Proxy` per collection is the fix, not a stylistic preference, and this design copies it.
+**Not `Clones` / EIP-1167.** Minimal proxies are the obvious choice on the EVM and they do not work on zkSync Era.
+
+The mechanism: on EraVM, `create` and `create2` are not opcodes — the compiler lowers them to calls into the `ContractDeployer` system contract, keyed on a bytecode hash the operator must already know. Deployable bytecode therefore has to be visible to zksolc at compile time and published in the transaction's `factory_deps`. `Clones.clone()` assembles the EIP-1167 blob in memory at runtime, so zksolc never sees it, `factoryDependencies` comes up empty, and the deploy cannot resolve.
+
+Three independent confirmations, so this does not need re-testing:
+
+1. **zkSync's own documentation** — deployment is by bytecode hash, and "the operator must be aware of the contract's code before deployment" ([contract deployment differences](https://docs.zksync.io/zksync-protocol/era-vm/differences/contract-deployment)).
+2. **Matter Labs, directly on the question** — "EIP 1167 is written directly in EVM bytecode, which is quite different from the bytecode that zkEVM operates on. As a result, it's currently not feasible to use EIP 1167 on zkSync's Era" ([zkSync Community Hub #91](https://github.com/zkSync-Community-Hub/zksync-developers/discussions/91), answering this exact OpenZeppelin `Clones` failure).
+3. **This repo.** Collections shipped its first design on `Clones`, hit exactly this, and replaced it — post-mortem in [`design-and-implementation.md`](../../../collections/doc/spec/design-and-implementation.md) §1.1.
+
+`CollectionFactory` deploying a full `ERC1967Proxy` per collection is the fix, not a stylistic preference, and this design copies it. `new ERC1967Proxy(...)` works precisely because zksolc *can* resolve it statically: it registers the bytecode hash as a factory dependency and lowers the `new` to `ContractDeployer.create2`.
+
+Era's EVM interpreter does not rescue the clone pattern here. It runs unmodified EVM bytecode, but this repo compiles native EraVM contracts, and EVM contracts cannot invoke the deployment system calls directly in any case.
 
 The implementation deliberately does **not** inherit `UUPSUpgradeable`, so the proxy's implementation slot is constructor-fixed and cannot be written afterward. That is what makes each objective immutable while still letting the factory point at a new implementation for *future* objectives.
 

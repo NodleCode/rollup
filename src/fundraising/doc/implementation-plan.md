@@ -8,9 +8,13 @@ Execution plan for [the specification](spec/group-fundraising-design.md). The sp
 
 The spec originally said the factory would deploy **minimal proxies (`Clones` / EIP-1167)**. That is wrong on zkSync Era, and the spec has been corrected.
 
-`Clones.clone()` assembles the EIP-1167 runtime blob in memory at runtime. zksolc never sees it statically, so the factory's `factoryDependencies` come up empty and the EraVM `ContractDeployer` cannot resolve the deploy — it reverts `ERC1167: create failed`.
+On EraVM, `create`/`create2` are not opcodes — the compiler lowers them into `ContractDeployer` system-contract calls keyed on a bytecode hash the operator must already know, with the bytecode itself published in `factory_deps`. `Clones.clone()` assembles the EIP-1167 blob in memory at runtime, so zksolc never sees it, `factoryDependencies` comes up empty, and the deploy cannot resolve. It reverts `ERC1167: create failed`.
 
-This is not a prediction. **Collections shipped its first design on `Clones`, hit exactly this, and replaced it.** The post-mortem is in [`src/collections/doc/spec/design-and-implementation.md`](../../collections/doc/spec/design-and-implementation.md) §1.1, with two independent confirmations recorded there including one from Matter Labs.
+Verified three ways, so do not re-litigate it:
+
+1. [zkSync docs](https://docs.zksync.io/zksync-protocol/era-vm/differences/contract-deployment) — deployment is by bytecode hash; the operator must know the code beforehand.
+2. [zkSync Community Hub #91](https://github.com/zkSync-Community-Hub/zksync-developers/discussions/91) — Matter Labs answering this precise OpenZeppelin `Clones` failure: EIP-1167 is EVM bytecode, EraVM's differs, "not feasible".
+3. **This repo.** Collections shipped on `Clones`, hit it, replaced it — [post-mortem](../../collections/doc/spec/design-and-implementation.md) §1.1.
 
 **Therefore:** one `ERC1967Proxy` per objective, via `new ERC1967Proxy(implementation, initData)`, with an implementation that deliberately does **not** inherit `UUPSUpgradeable`. That is exactly what `CollectionFactory` does, and it preserves every property the spec wanted from clones:
 
