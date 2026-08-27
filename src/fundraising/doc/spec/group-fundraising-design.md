@@ -39,9 +39,10 @@ The app has **groups**. A group creates an **objective** — a funding target wi
 
 On-chain scope is deliberately narrow:
 
-- Groups, membership, invitations, chat, and the objective's human metadata (title, image, description) stay **off-chain** in the app. The contract never learns what a group is.
+- Groups, membership, invitations and chat stay **off-chain** in the app. The contract never learns what a group is. The objective's `name` is stored on-chain so an objective is self-describing at its own address; richer metadata (image, description) stays in the app.
 - The contract is an **escrow with a resolution rule**. It holds ERC-20 contributions, tracks who put in how much, and enforces exactly one of two terminal outcomes: pay the beneficiary, or refund the contributors.
-- The backend signs an EIP-712 authorization to say *"this address may create this objective"* and *"this address is a member and may deposit"*. This is the same backend-signed authorization pattern already used elsewhere in this repo.
+- **The contract is group-agnostic and permissionless: anyone can create a fundraise, and anyone can contribute to one.** There is no membership check on-chain and no backend signature anywhere in the flow. "Groups" is a product layer deciding which fundraise to show to whom; the escrow underneath is general-purpose.
+- The app is therefore the only place the mapping from a group to its fundraise addresses lives, and it should trust its own records rather than anything a contract claims about itself.
 
 **Hard constraint: this feature deploys new contracts only.** It modifies no deployed contract, requires no token migration, and needs no change to any live paymaster. Nothing currently in production is touched. Any option that would require altering an existing deployment is out of scope by definition, not merely a low priority — that constraint is what makes this feature shippable independently of everything else, and §8 is written to respect it.
 
@@ -67,15 +68,15 @@ One caveat carried forward: **most-used is not safest.** `CrowdFund` is a teachi
 
 Two decisions: **which model**, and **whose code**.
 
-### 3.1 The model — all-or-nothing, with an exit that closes at the goal
+### 3.1 The model — a goal, and an exit that closes when it is reached
 
-A group sets an objective: a target amount and a deadline. Members deposit toward it. Exactly two outcomes are possible — the target is met and the group's beneficiary withdraws, or it isn't and every member takes their own money back. A member may withdraw their own deposit at any time **before** the target is reached; that door shuts permanently the moment it is.
+A group sets an objective: a name, a target amount, an asset to collect, and either a deadline or none at all. Members deposit toward it. If the target is reached, the group's beneficiary withdraws. If a deadline passes below target, the objective does whatever it committed to at creation — refund everyone (the default) or pay out what was raised. A member may withdraw their own deposit at any time **before** the target is reached; that door shuts permanently the moment it is.
 
 Why this one, on the three axes:
 
-- **Security.** It is the only candidate where the failure path is guaranteed and needs nobody's cooperation. Once the deadline passes or the goal is hit, *anyone* can trigger resolution, and every member pulls their own funds rather than waiting to be paid. No operator, no organizer, and no backend key can move a member's deposit anywhere except back to that member or to the declared beneficiary.
+- **Security.** It is the only candidate where the failure path is guaranteed and needs nobody's cooperation. Once the goal is hit, or a deadline passes, *anyone* can trigger resolution, and every member pulls their own funds rather than waiting to be paid. No operator, no organizer, and no backend key can move a member's deposit anywhere except back to that member or to the declared beneficiary.
 - **Functionality.** It is what "objective" means to a user. A goal that doesn't gate anything isn't a goal.
-- **Usability.** The failure mode explains itself in one sentence — *we didn't reach it, take your money back* — and the pre-goal exit removes the worst support ticket in the design: *I typed the wrong amount and now my money is stuck until September.*
+- **Usability.** The default failure mode explains itself in one sentence — *we didn't reach it, take your money back* — and the pre-goal exit removes the worst support ticket in the design: *I typed the wrong amount and now my money is stuck until September.*
 
 **The goal latch is what makes the last two compatible.** Free withdrawal all the way to the deadline lets a group that hit its target be unwound at the last second. Locking from day one commits a member's money for months with no individual undo. Cutting the exit at the goal gives members a real way out while the group is still deciding, and gives the group certainty the instant it succeeds. Below the goal, everyone withdrawing is not an attack — it is a group changing its mind, which is the correct outcome.
 
@@ -83,7 +84,7 @@ Rejected, with what each trades away:
 
 | Model | Why not |
 |---|---|
-| Keep-what-you-raise | Removes the refund guarantee that makes a backend-vouched escrow trustworthy. One address walks off with partial funds, no goal required. Reserved as a future *mode*, not the default |
+| Keep-what-you-raise **as the only mode** | Removes the refund guarantee that makes a backend-vouched escrow trustworthy. Adopted instead as a per-objective option chosen at creation and visible to members before they contribute (§6.1), never as the default |
 | Milestone / approved payouts | Every tranche gate is a freeze lever, and whoever signs the approvals becomes custodial |
 | Limited payout (Juicebox-style) | Periods and draw accounting solve a treasury problem that a group trip does not have |
 | ERC-4626 share vault | No goal, no deadline, no refund condition. Shares imply free exit — that is the open-unpledge model with extra steps and extra attack surface |
@@ -109,8 +110,8 @@ No forks and no upstream to track — but equally no upstream to inherit fixes f
 
 | `CrowdFund` | Groups | Change |
 |---|---|---|
-| `launch(goal, startAt, endAt)` | `createObjective` | Requires a backend signature; bounded duration |
-| `pledge(id, amount)` | `deposit` | Requires a backend signature proving membership; credits the amount actually received |
+| `launch(goal, startAt, endAt)` | `FundraiserFactory.createFundraiser` | Deploys a contract per objective; deadline optional |
+| `pledge(id, amount)` | `deposit` | Credits the amount actually received rather than the amount requested |
 | `unpledge(id, amount)` | `unpledge` | **Disabled once `raised >= goal`** — the latch |
 | `claim(id)` — creator, if pledged ≥ goal | `withdraw` | Beneficiary only; optional protocol fee |
 | `refund(id)` — each backer, if goal missed | `refund` | Unchanged in spirit; plus `refundFor` so a third party can push a member's refund *to that member* |
@@ -120,16 +121,18 @@ No forks and no upstream to track — but equally no upstream to inherit fixes f
 
 `CrowdFund` is a ~100-line teaching reference, not a library. Four additions turn it into something that can hold consumer money:
 
-1. **Backend-signed authorization** (EIP-712) — groups live off-chain, so membership is proven by a signature from a Nodle key, not by on-chain state.
-2. **`SafeERC20`** — `CrowdFund` assumes a well-behaved token that returns a bool.
-3. **`ReentrancyGuard` plus strict checks-effects-interactions** — zero the balance, then transfer, on every exit path.
-4. **Credit what actually arrived**, not what was requested — otherwise a fee-on-transfer token leaves the last member unable to get their money back.
+1. **`SafeERC20`** — `CrowdFund` assumes a well-behaved token that returns a bool.
+2. **`ReentrancyGuard` plus strict checks-effects-interactions** — zero the balance, then transfer, on every exit path.
+3. **Credit what actually arrived**, not what was requested — otherwise a fee-on-transfer token leaves the last member unable to get their money back.
+4. **The goal latch** — `CrowdFund` leaves `unpledge` open right up to the deadline; here it closes the moment the target is reached (§3.1).
+
+Note what is *not* on that list: an authorization layer. Like `CrowdFund`, this contract asks nobody for permission. That is the simpler design, and §7 #7 records what it moves rather than removes.
 
 `CrowdFund` is MIT-licensed; re-implementing from the shape rather than copying keeps the provenance clean regardless.
 
 ### 4.3 What we import
 
-OpenZeppelin 5.3 (already vendored in `lib/`): `SafeERC20`, `ReentrancyGuard`, `AccessControl`, `EIP712`, `SignatureChecker`. Nothing else. No escrow primitive exists in 5.x to inherit — that is the gap this contract fills.
+OpenZeppelin 5.3 (already vendored in `lib/`): `SafeERC20`, `ReentrancyGuard`, `Clones`, and `AccessControl` on the factory for the token allow-list and fee parameters. Nothing else — with deposits permissionless, `EIP712` and `SignatureChecker` drop out of the design entirely. No escrow primitive exists in 5.x to inherit — that is the gap this contract fills.
 
 ---
 
@@ -137,11 +140,12 @@ OpenZeppelin 5.3 (already vendored in `lib/`): `SafeERC20`, `ReentrancyGuard`, `
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Funding: createObjective(sig)
+    [*] --> Funding: factory.createFundraiser(sig)
     Funding --> Funding: deposit(sig)
     Funding --> Funding: unpledge() — only while raised < goal
     Funding --> Succeeded: finalize() — raised >= goal, ANYONE, any time
-    Funding --> Refunding: finalize() — deadline passed, raised < goal, ANYONE
+    Funding --> Refunding: finalize() — deadline passed, below goal, onMissed=Refund
+    Funding --> Succeeded: finalize() — deadline passed, below goal, onMissed=PayBeneficiary
     Funding --> Refunding: cancel() — organizer, only while raised < goal
     Succeeded --> Closed: withdraw() — beneficiary pulls (minus fee)
     Refunding --> Refunding: refund() — each contributor pulls
@@ -150,36 +154,78 @@ stateDiagram-v2
 
 Rules that hold everywhere:
 
-- Deposits are accepted **only** in `Funding`, only before `deadline`.
+- Deposits are accepted **only** in `Funding`, and only before `deadline` where one is set.
 - `unpledge` is available **only** in `Funding` and **only while `raised < goal`**.
 - Once `raised >= goal` the objective is latched: no `unpledge`, no `cancel`, and `finalize` is callable by anyone immediately.
+- An objective with **no deadline** stays in `Funding` until it reaches its goal or is cancelled, so `unpledge` stays available to every contributor indefinitely. In §6.2 this stops being a convenience and becomes the property that makes open-ended objectives safe at all.
 - `refund` is per-contributor and pull-only. No function anywhere loops over contributors.
 - `Refunding` is terminal. There is no path back to `Funding`, and no admin path that redirects member funds to the beneficiary.
+- `onMissed` is fixed at creation and read only on `finalize`. Nobody can change what a missed target means after members have contributed under it.
 - `raised` is **not** monotonic — `unpledge` decrements it. Anything indexing this contract must not assume otherwise.
 
 ---
 
 ## 6. Contract Surface
 
-`GroupFundraising` — one singleton holding all objectives, immutable, `AccessControl + EIP712 + ReentrancyGuard`, `SafeERC20` throughout.
+Two contracts: a **factory** that deploys one **objective contract per fundraise**.
+
+`FundraiserFactory` is a singleton holding the token allow-list, fee parameters, and the objective implementation address. `Fundraiser` is deployed per objective and holds only that objective's money.
+
+Per-objective contracts cost more to create than rows in a shared mapping, so the factory deploys **minimal proxies** rather than full copies. What that buys is worth the cost:
+
+- **Fund isolation.** An accounting bug can only reach one objective's balance, never every group's money at once. For consumer funds that is the deciding argument.
+- **Simpler accounting.** Each contract holds exactly one token for exactly one objective, so "what do we owe?" is `token.balanceOf(this)` — no per-token liability accumulator, no cross-objective solvency invariant, and surplus rescue becomes trivially safe.
+- **Its own address.** An objective is a thing a member can look up, watch, and verify independently of the app.
+
+### 6.1 Creation
+
+```solidity
+struct FundraiserParams {
+    string  name;           // shown in-app; the app remains source of truth for richer metadata
+    address token;          // must be allow-listed; USDC is the default offered by the app
+    uint128 goal;           // > 0, in the token's smallest unit
+    uint40  deadline;       // 0 = open-ended: runs until the goal is reached or it is cancelled
+    OnMissed onMissed;      // what happens if the deadline passes below goal
+    address beneficiary;    // fixed at creation; only the beneficiary can later repoint its own payout
+    uint128 minContribution;        // 0 = none
+    uint128 maxTotalContributions;  // 0 = uncapped
+}
+
+enum OnMissed { Refund, PayBeneficiary }
+```
+
+`createFundraiser(params)` is **callable by anyone**. It checks the token is allow-listed, validates the parameters, snapshots the current `feeBps`, deploys the proxy, and emits `FundraiserCreated` with the new address and an opaque `groupId` tag.
+
+That `groupId` is a **hint for indexing, not a claim**: nothing verifies it, so anyone can create a fundraise tagged with any group. The app must map a group to its fundraise addresses from its own records — the records it wrote when it created them — and never from an on-chain tag. Treating that tag as authoritative is how a stranger's contract ends up displayed inside somebody's group.
+
+**`Refund`** returns every contributor their money — all-or-nothing, the default. **`PayBeneficiary`** pays the beneficiary whatever was raised — keep-what-you-raise.
+
+The identifier is deliberately not `Distribute`. In product conversation "distribute" is the natural word, but as an on-chain enum it reads just as easily as *distribute back to the contributors*, which is the opposite behavior. The name that cannot be misread costs nothing here and prevents an implementer, an auditor, or an indexer from getting it backwards. The app can still say "pay out what we raised" or whatever tests best.
+
+The choice is per-objective, made at creation and immutable afterward, so a member can see which one they are contributing to before they contribute. That matters: under `PayBeneficiary` there is no guarantee of getting the money back, and the app must say so plainly rather than burying it.
+
+### 6.2 Open-ended objectives (`deadline == 0`)
+
+An objective with no deadline runs until it reaches its goal or the organizer cancels. This is safe, but only because of a property that now becomes load-bearing: **`unpledge` is available whenever `raised < goal`**, and an open-ended objective that never reaches its goal is below goal forever. So every contributor can always leave. Without the goal latch (§3.2), an open-ended objective would be a way to trap money permanently.
+
+**`PayBeneficiary` requires a deadline.** With no deadline there is no moment at which the target is "missed", so the policy would be unreachable. Creation therefore **rejects `deadline == 0` combined with `OnMissed.PayBeneficiary`** rather than silently accepting a setting that can never fire. The app should hide the choice entirely when a member picks "no end date".
+
+### 6.3 Functions on `Fundraiser`
 
 | Function | Caller | State | Notes |
 |---|---|---|---|
-| `createObjective(params, auth)` | organizer | — | Backend signature; `goal > 0`; `now < deadline <= now + MAX_DURATION` |
-| `deposit(id, amount, auth)` | member | `Funding` | Backend signature; credits the amount actually received |
-| `unpledge(id, amount)` | contributor | `Funding`, `raised < goal` | **No signature required** |
-| `finalize(id)` | **anyone**, once `raised >= goal` or after `deadline` | `Funding` | → `Succeeded` or `Refunding`. Deposit-time rules are never re-checked here |
-| `cancel(id)` | organizer | `Funding`, `raised < goal` | → `Refunding` |
-| `withdraw(id)` | beneficiary | `Succeeded` | Pays `raised - fee`, → `Closed` |
-| `setPayoutAddress(id, addr)` | **beneficiary only** | `Succeeded` | Escape hatch for a lost or blocklisted beneficiary key |
-| `refund(id)` | any contributor | `Refunding` | Zeroes the balance, then transfers |
-| `refundFor(id, contributor)` | anyone | `Refunding` | Funds always go to `contributor` |
+| `deposit(amount)` | **anyone** | `Funding` | Credits the amount actually received |
+| `unpledge(amount)` | contributor | `Funding`, `raised < goal` | Returns only what that caller put in |
+| `finalize()` | **anyone**, once `raised >= goal` or after a non-zero `deadline` | `Funding` | → `Succeeded`, or `Refunding` / `Succeeded` per `onMissed` |
+| `cancel()` | organizer | `Funding`, `raised < goal` | → `Refunding`. The only terminal exit for an open-ended objective that stalls |
+| `withdraw()` | beneficiary | `Succeeded` | Pays `raised - fee`, → `Closed` |
+| `setPayoutAddress(addr)` | **beneficiary only** | `Succeeded` | Escape hatch for a lost or blocklisted key |
+| `refund()` | any contributor | `Refunding` | Zeroes the balance, then transfers |
+| `refundFor(contributor)` | anyone | `Refunding` | Funds always go to `contributor`, so the backend can sweep on the group's behalf |
 
-Two roles beyond the participants: an **authorizer** key (the backend signer, rotatable, never zero) and an **admin** (rotates the authorizer, manages the token allow-list and fee params). Neither can touch escrowed funds, finalize, cancel, or redirect a beneficiary.
+Views for the app: `state()`, `contributionOf(account)`, `remainingToGoal()`, `canUnpledge()`.
 
-Storage, events, token accounting, and fee mechanics: **Appendix A**.
-
----
+One role lives on the factory and none on objectives: an **admin** managing the token allow-list and fee parameters. It cannot touch escrowed funds, finalize, cancel, or redirect a beneficiary on any objective — and with authorization gone there is no backend key in this design at all, so there is no signer to compromise, rotate, or wait on.
 
 ## 7. Security Model
 
@@ -193,12 +239,11 @@ The threat list, each item traceable to prior art or to a hazard this repo has a
 | 4 | Reentrancy through token callbacks | `nonReentrant` + checks-effects-interactions. Both, not either |
 | 5 | Fee-on-transfer token insolvency | Credit the amount actually received; pay out credited units |
 | 6 | Rebasing tokens | Excluded by the token allow-list |
-| 7 | Authorization replay | Single-use EIP-712 digests, each carrying an explicit backend-issued nonce |
-| 8 | **Compromised backend key** | Cannot move escrowed funds — it can only bless new objectives and deposits. If a pause is ever added it must gate creates and deposits only, **never exits** |
-| 9 | Unbounded lock-up | `deadline <= now + MAX_DURATION` |
-| 10 | Beneficiary key lost or blocklisted after success | `setPayoutAddress`, callable only by the beneficiary. No organizer or admin lever |
-| 11 | Smart-account members | Never assume EOA; never use `tx.origin` |
-| 12 | **Gap-funding force-close** (accepted) | Anyone can fund the remaining gap to latch the goal and strip members' exit. True of every all-or-nothing crowdfund; money still goes to the declared beneficiary. Controlled by backend policy, not by the contract |
+| 7 | Unbounded lock-up | `deadline <= now + MAX_DURATION` |
+| 8 | Beneficiary key lost or blocklisted after success | `setPayoutAddress`, callable only by the beneficiary. No organizer or admin lever |
+| 9 | Smart-account members | Never assume EOA; never use `tx.origin` |
+| 10 | **Gap-funding force-close** — the cost of permissionless deposits | Anyone can top up the remaining gap to latch the target, closing every member's exit. With deposits open to all, this needs no cooperation from anyone. Worse, it is close to **free for an organizer who is also the beneficiary**: they fund the gap, the latch closes, they finalize, and they collect the whole pot including their own top-up. What they cannot do is redirect the money — it still goes to the beneficiary the members saw and agreed to at creation, and the members' loss is the *option* to change their mind, not the funds. Accepted, but it must be stated in the product rather than discovered: the honest framing of the goal latch is "your contribution is committed once the target is reached, and anyone can make that happen" |
+| 11 | **Impersonated fundraises** — the cost of permissionless creation | Anyone can deploy a fundraise and tag it with any `groupId`. The contract cannot tell a group's real objective from a stranger's lookalike, so the app must resolve group to address from the records it wrote at creation, never from the on-chain tag (§6.1). Sharing a raw contract address as an invitation is a phishing vector; share app links instead |
 
 Because the contract is immutable, **`finalize` and `refund` are the two functions where a bug is unrecoverable.** Audit and testing effort should be concentrated there, deliberately and disproportionately.
 
@@ -246,7 +291,7 @@ What the harness must cover:
 - **Fuzz**: amounts, contributor counts, deadlines, and the `goal - 1 / goal / goal + 1` boundary with interleaved unpledges.
 - **Invariants**: contributions sum to `raised`; contract balance always covers outstanding liabilities; `Refunding` never pays the beneficiary; `raised` never crosses back below `goal` once reached.
 - **Adversarial token mocks**: fee-on-transfer, reentrant, blocklisting.
-- **Signature tests**: expired, replayed, reused nonce, wrong signer, bound to a different sender or objective, old-key signatures after rotation.
+- **Permissionless paths**: a non-member contributing succeeds and is refundable like any other contributor; `unpledge` returns only the caller's own contribution and never anyone else's; a stranger funding the gap latches the target exactly as a member would.
 - **Paymaster-independence** (§8.3): every state-changing function must succeed when called by an ordinary self-paying transaction, with no paymaster in the picture at all. `depositWithPermit` against a permit-capable mock; the two-step approve path against a mock without permit.
 
 Everything must run under `forge test`.
@@ -257,13 +302,14 @@ Everything must run under `forge test`.
 
 All of these concern the new contract only. None requires changing anything already deployed (§1).
 
-1. **Immutable or upgradeable?** Recommended immutable. This is survivable *only* because every objective has a signature-free, admin-free exit — that is the condition, and it holds. If upgradeability is chosen instead, the upgrade role must sit behind a timelock or multisig, and that belongs in this document.
-2. **Keep-what-you-raise — needed?** V1 is all-or-nothing only; the enum slot is reserved. If "whatever we collect is ours" is a real product case, decide before the interface freezes.
+1. **Immutable or upgradeable?** Recommended immutable, for both the factory and the objective implementation. This is survivable *only* because every objective has a signature-free, admin-free exit — that is the condition, and it holds. Per-objective deployment also gives a cheaper answer to the same problem: pointing the factory at a new implementation changes *future* objectives without touching a single live one, so upgradeability buys less here than it would for a singleton.
+2. **Should `PayBeneficiary` carry a higher bar?** It is a creation-time option (§6.1), but it removes the member's refund guarantee. Worth deciding whether the app restricts it — to certain group types, or behind an extra confirmation — rather than presenting it as an equal peer of `Refund`.
 3. **Protocol fee — on or off, and in which token?**
 4. **Does the `erc20-fee-signer` policy cover this escrow?** (§8.1) Off-chain configuration only: the paymaster contract needs no change and neither does the escrow, so this stays inside the §1 constraint. Cross-team, not a contract change, and not a launch blocker — without it members simply pay their own gas in ETH.
 5. **Overshoot past the goal.** Permissionless finalize-on-goal means anyone can close the objective the instant the target is hit, so "raise at least X, more welcome" is not expressible in V1. A flag is the V2 answer if groups ask for it.
 6. **One objective per group at a time, or many?** The contract does not care; the backend can enforce either.
-7. **Backend policy items the contract deliberately does not enforce**: single-member objectives where organizer, beneficiary, and only contributor are the same address, and steering purchase-denominated goals toward stablecoins, since a "$500 trip" goal denominated in a volatile token can become trivially met or unreachable through no action by the group. Both belong in the authorization policy. Note the contrast with `minContribution` and `maxTotalContributions`, which **are** on-chain fields signed into the creation authorization and enforced by the contract — but only on `deposit`, never on `finalize` (§7 #2). The backend chooses their values; the contract enforces them.
+7. **How the app frames "anyone can contribute."** The contract cannot restrict contributors, so this is a presentation decision: is a fundraise link shareable outside the group deliberately (a parent chips in) or is the group boundary something the app should try to preserve? Both are defensible; picking neither means it gets decided by whoever writes the share sheet.
+8. **What the app does about §7 #10.** The gap-funding force-close cannot be prevented on-chain. Whether that is disclosed plainly, mitigated in product terms, or simply accepted is a call to make deliberately.
 
 ---
 
@@ -273,39 +319,44 @@ Detail needed at implementation time.
 
 ### A.1 Storage sketch
 
+Per objective, so there are no ids and no cross-objective bookkeeping:
+
 ```solidity
-enum Status  { None, Funding, Succeeded, Refunding, Closed }
-enum GoalPolicy { AllOrNothing, KeepWhatYouRaise } // only AllOrNothing implemented
+enum Status   { Funding, Succeeded, Refunding, Closed }
+enum OnMissed { Refund, PayBeneficiary }
 
-struct Objective {
-    address token;  uint40 deadline;  uint16 feeBps;  Status status;  GoalPolicy policy;
-    address beneficiary;
-    address organizer;
-    uint128 goal;       uint128 raised;      // raised is decremented by unpledge
-    uint128 unpledged;  uint128 refunded;
-    uint128 minContribution;  uint128 maxTotalContributions;
-}
+// set once at clone initialization
+string   name;
+IERC20   token;
+address  organizer;
+address  beneficiary;      // the beneficiary itself may repoint this while Succeeded
+uint128  goal;
+uint40   deadline;         // 0 = open-ended
+OnMissed onMissed;
+uint16   feeBps;           // snapshotted from the factory at creation
+uint128  minContribution;
+uint128  maxTotalContributions;
 
-mapping(uint256 => Objective) objectives;
-mapping(uint256 => mapping(address => uint256)) contributions;
-mapping(address => uint256) liabilities;   // per-token escrowed total
+// mutable
+Status  status;
+uint128 raised;            // net credited contributions; decremented by unpledge
+uint128 unpledged;
+uint128 refunded;
+mapping(address => uint256) contributions;
 ```
 
-Objective ids are a monotonic counter, emitted at creation alongside an opaque `groupId` so the backend can reconcile against its own record.
+What the singleton design needed and this one does not: an objective id threaded through every call, a per-token liability accumulator, and a solvency invariant spanning every objective at once. Here one contract holds one token for one objective, so what it owes is the sum of `contributions`, and anything above that is surplus.
 
-### A.2 EIP-712 payloads
+### A.2 No authorization layer
 
-```
-CreateAuthorization(groupId, organizer, beneficiary, token, goal, deadline,
-                    minContribution, maxTotalContributions, nonce, authDeadline)
-DepositAuthorization(objectiveId, contributor, maxAmount, nonce, authDeadline)
-```
+There is none, deliberately. `createFundraiser` and `deposit` are callable by anyone, so there is no EIP-712 payload, no nonce, no replay map, no signer key, and no rotation procedure.
 
-Both single-use, digest recorded in a `usedAuthorizations` map. The `nonce` is not optional: without it, two authorizations issued to the same member for the same objective with the same amount and expiry collide, and the second deposit reverts for no client-visible reason.
+Two consequences worth writing down because they read as absences rather than decisions:
 
-Verified with `SignatureChecker`, not raw `ecrecover`, so the signer can be a multisig.
+- **No backend liveness risk.** Contributing does not require the app, or a signature from it, to be reachable. An outage cannot block deposits and cannot sink a fundraise close to its deadline.
+- **No key to compromise.** The earlier design's largest standing risk was a backend signer whose compromise would let an attacker bless arbitrary deposits and fundraises. That risk is not mitigated here, it is absent.
 
-**Backend liveness** is a deposit-side risk: an outage blocks new deposits and, close to a deadline, can sink an objective. It can never trap funds — `finalize`, `unpledge`, `refund`, and `refundFor` need no signature at all. Issue authorizations with generous expiry windows.
+What was bought with that key — knowing that a contributor is really a group member — is now the app's to enforce at the presentation layer, and cannot be enforced at all against someone interacting with the contract directly. §7 #10 and #11 are the price.
 
 ### A.3 Token handling
 
@@ -323,7 +374,7 @@ Optional, off by default. `feeBps` snapshotted into the objective at creation so
 
 ```
 ObjectiveCreated, ContributionMade, Unpledged, ObjectiveFinalized, ObjectiveCancelled,
-Withdrawn, PayoutAddressChanged, Refunded, AuthorizerRotated, TokenAllowed,
+Withdrawn, PayoutAddressChanged, Refunded, TokenAllowed,
 FeeParamsUpdated, SurplusRescued
 ```
 
@@ -332,11 +383,12 @@ Two indexer traps: use the **credited** amount, not the call argument; and `rais
 ### A.6 File layout
 
 ```
-src/fundraising/GroupFundraising.sol
-src/fundraising/interfaces/IGroupFundraising.sol
-test/fundraising/{Lifecycle,GoalLatch,Authorization,Refunds,Invariants}.t.sol
+src/fundraising/FundraiserFactory.sol
+src/fundraising/Fundraiser.sol
+src/fundraising/interfaces/IFundraiser.sol
+test/fundraising/{Lifecycle,GoalLatch,Permissionless,Refunds,Invariants}.t.sol
 test/fundraising/mocks/{FeeOnTransferERC20,ReentrantERC20,BlocklistERC20}.sol
-script/DeployGroupFundraising.s.sol
+script/DeployFundraiserFactory.s.sol
 src/fundraising/doc/spec/group-fundraising-design.md
 ```
 

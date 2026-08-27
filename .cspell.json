@@ -16,6 +16,9 @@
     "src/swarms/doc/iso3166-2"
   ],
   "ignoreWords": [
+    "fundraise",
+    "fundraises",
+    "Fundraiser",
     "unpledge",
     "unpledges",
     "blocklist",
