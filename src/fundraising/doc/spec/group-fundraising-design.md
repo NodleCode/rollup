@@ -132,7 +132,7 @@ Note what is *not* on that list: an authorization layer. Like `CrowdFund`, this 
 
 ### 4.3 What we import
 
-OpenZeppelin 5.3 (already vendored in `lib/`): `SafeERC20`, `ReentrancyGuard`, `Initializable`, `ERC1967Proxy`, and `AccessControl` on the factory for the token allow-list and fee parameters. Nothing else — with deposits permissionless, `EIP712` and `SignatureChecker` drop out of the design entirely. No escrow primitive exists in 5.x to inherit — that is the gap this contract fills.
+OpenZeppelin 5.3 (already vendored in `lib/`): `SafeERC20`, `ReentrancyGuard`, and `AccessControl` on the factory for the token allow-list and fee parameters. Nothing else — no proxy, no `Initializable`, and with deposits permissionless no `EIP712` or `SignatureChecker` either. Nothing else — with deposits permissionless, `EIP712` and `SignatureChecker` drop out of the design entirely. No escrow primitive exists in 5.x to inherit — that is the gap this contract fills.
 
 ---
 
@@ -167,32 +167,37 @@ Rules that hold everywhere:
 
 ## 6. Contract Surface
 
-Two contracts: a **factory** that deploys one **objective contract per fundraise**.
+Two contracts: a **factory** that deploys one **full `Fundraiser` contract per fundraise**.
 
-`FundraiserFactory` is a singleton holding the token allow-list, fee parameters, and the objective implementation address. `Fundraiser` is deployed per objective and holds only that objective's money.
+`FundraiserFactory` is a singleton holding the token allow-list and fee parameters. `Fundraiser` is deployed per objective, configured by its constructor, and holds only that objective's money. **No proxy, and therefore no initializer.**
 
-Each objective is a **per-objective `ERC1967Proxy`** pointing at one shared implementation, deployed with `new ERC1967Proxy(impl, initData)`.
+### The deployment mechanism, and why it is not what you would reach for on the EVM
 
-**Not `Clones` / EIP-1167.** Minimal proxies are the obvious choice on the EVM and they do not work on zkSync Era.
+On EraVM, `create` and `create2` are not opcodes — the compiler lowers them into calls to the `ContractDeployer` system contract, keyed on a bytecode hash the operator must already know, with the bytecode published in the transaction's `factory_deps`.
 
-The mechanism: on EraVM, `create` and `create2` are not opcodes — the compiler lowers them to calls into the `ContractDeployer` system contract, keyed on a bytecode hash the operator must already know. Deployable bytecode therefore has to be visible to zksolc at compile time and published in the transaction's `factory_deps`. `Clones.clone()` assembles the EIP-1167 blob in memory at runtime, so zksolc never sees it, `factoryDependencies` comes up empty, and the deploy cannot resolve.
+**Two consequences, and they point in opposite directions from EVM habit.**
 
-Three independent confirmations, so this does not need re-testing:
+**`Clones` / EIP-1167 does not work at all.** `Clones.clone()` assembles the EIP-1167 blob in memory at runtime, so zksolc never sees it, `factoryDependencies` comes up empty, and the deploy cannot resolve — it reverts `ERC1167: create failed`. Confirmed three ways, so it does not need re-testing: [zkSync's documentation](https://docs.zksync.io/zksync-protocol/era-vm/differences/contract-deployment) ("the operator must be aware of the contract's code before deployment"); [Matter Labs answering this exact OpenZeppelin failure](https://github.com/zkSync-Community-Hub/zksync-developers/discussions/91) ("EIP 1167 is written directly in EVM bytecode… not feasible to use on zkSync's Era"); and this repo, where Collections shipped on `Clones`, hit it, and replaced it ([post-mortem](../../../collections/doc/spec/design-and-implementation.md) §1.1). zksolc will also warn about it directly at compile time.
 
-1. **zkSync's own documentation** — deployment is by bytecode hash, and "the operator must be aware of the contract's code before deployment" ([contract deployment differences](https://docs.zksync.io/zksync-protocol/era-vm/differences/contract-deployment)).
-2. **Matter Labs, directly on the question** — "EIP 1167 is written directly in EVM bytecode, which is quite different from the bytecode that zkEVM operates on. As a result, it's currently not feasible to use EIP 1167 on zkSync's Era" ([zkSync Community Hub #91](https://github.com/zkSync-Community-Hub/zksync-developers/discussions/91), answering this exact OpenZeppelin `Clones` failure).
-3. **This repo.** Collections shipped its first design on `Clones`, hit exactly this, and replaced it — post-mortem in [`design-and-implementation.md`](../../../collections/doc/spec/design-and-implementation.md) §1.1.
+**And a proxy is not worth its cost here either.** Because bytecode is published once by hash and every later deployment merely references it, the saving that justifies proxies on the EVM does not exist on Era. Measured on `anvil-zksync` with a representative child contract:
 
-`CollectionFactory` deploying a full `ERC1967Proxy` per collection is the fix, not a stylistic preference, and this design copies it. `new ERC1967Proxy(...)` works precisely because zksolc *can* resolve it statically: it registers the bytecode hash as a factory dependency and lowers the `new` to `ContractDeployer.create2`.
+| Per-objective deployment | Era | EVM, for contrast |
+|---|---|---|
+| Full contract, constructor | **249,305** | 443,645 |
+| `ERC1967Proxy` + initializer | 276,855 | 269,470 |
 
-Era's EVM interpreter does not rescue the clone pattern here. It runs unmodified EVM bytecode, but this repo compiles native EraVM contracts, and EVM contracts cannot invoke the deployment system calls directly in any case.
+The proxy is ~40% cheaper on the EVM and ~11% *more expensive* on Era. It also costs about 3,000 gas more on every subsequent call for the `delegatecall` hop, and it publishes more bytecode one-time, not less — the proxy route publishes both an implementation and the proxy itself, where the direct route publishes only the contract.
 
-The implementation deliberately does **not** inherit `UUPSUpgradeable`, so the proxy's implementation slot is constructor-fixed and cannot be written afterward. That is what makes each objective immutable while still letting the factory point at a new implementation for *future* objectives.
+So: **`new Fundraiser(...)` with a compile-time-known type.** This is the pattern zkSync's own factory guidance teaches, and it is what the numbers favor.
 
-A proxy per objective costs more than a row in a shared mapping, though far less than a full contract copy — the implementation bytecode is published once. What that buys:
+A related Era-specific finding, recorded because it inverts standard practice: **`immutable` costs more here, not less.** EraVM routes immutables through the `ImmutableSimulator` system contract rather than baking them into code, so a constructor using `immutable` measured *more* expensive than plain storage both to deploy (+23,000) and to read (+4,000). Configuration fields are ordinary storage, set once in the constructor and never written again.
+
+### What a contract per objective buys
 
 - **Fund isolation.** An accounting bug can only reach one objective's balance, never every group's money at once. For consumer funds that is the deciding argument.
-- **Simpler accounting.** Each contract holds exactly one token for exactly one objective, so "what do we owe?" is `token.balanceOf(this)` — no per-token liability accumulator, no cross-objective solvency invariant, and surplus rescue becomes trivially safe.
+- **Simpler accounting.** Each contract holds exactly one token for exactly one objective, so what it owes is arithmetic over its own state — no per-token liability accumulator, no cross-objective solvency invariant, and surplus rescue becomes trivially safe.
+- **No initialization surface.** A constructor cannot be front-run, cannot be called twice, and leaves no bare implementation for someone to seize. The entire class of proxy-initializer hazards is absent rather than mitigated.
+- **Immutable by construction.** There is no implementation slot and no upgrade path. Changing the escrow's behavior means deploying a new factory, which cannot touch anything already live.
 - **Its own address.** An objective is a thing a member can look up, watch, and verify independently of the app.
 
 ### 6.1 Creation
@@ -212,7 +217,7 @@ struct FundraiserParams {
 enum OnMissed { Refund, PayBeneficiary }
 ```
 
-`createFundraiser(params)` is **callable by anyone**. It checks the token is allow-listed, validates the parameters, snapshots the current `feeBps`, deploys the proxy, and emits `FundraiserCreated` with the new address and an opaque `groupId` tag.
+`createFundraiser(params)` is **callable by anyone**. It checks the token is allow-listed, deploys `new Fundraiser(params, msg.sender, feeBps, address(this))` — snapshotting the fee by value — records the address in its registry, and emits `FundraiserCreated` with that address and an opaque `groupId` tag. All other parameter validation lives in the `Fundraiser` constructor, so the escrow enforces its own invariants regardless of who deploys it.
 
 That `groupId` is a **hint for indexing, not a claim**: nothing verifies it, so anyone can create a fundraise tagged with any group. The app must map a group to its fundraise addresses from its own records — the records it wrote when it created them — and never from an on-chain tag. Treating that tag as authoritative is how a stranger's contract ends up displayed inside somebody's group.
 
@@ -320,7 +325,7 @@ Everything must run under `forge test`.
 
 All of these concern the new contract only. None requires changing anything already deployed (§1).
 
-1. **Immutable or upgradeable?** Recommended immutable, for both the factory and the objective implementation. This is survivable *only* because every objective has a signature-free, admin-free exit — that is the condition, and it holds. Per-objective deployment also gives a cheaper answer to the same problem: pointing the factory at a new implementation changes *future* objectives without touching a single live one, so upgradeability buys less here than it would for a singleton.
+1. **Changing the escrow later.** Objectives are immutable by construction — no proxy, no implementation slot, no upgrade path — which is survivable only because every objective has a signature-free, admin-free exit. That condition holds. Changing behavior therefore means deploying a new factory, and live objectives are untouched by definition. What is open is only whether the *factory* should be replaceable in place or simply redeployed with the app pointed at the new address; redeployment is simpler and is the recommendation.
 2. **Should `PayBeneficiary` carry a higher bar?** It is a creation-time option (§6.1), but it removes the member's refund guarantee. Worth deciding whether the app restricts it — to certain group types, or behind an extra confirmation — rather than presenting it as an equal peer of `Refund`.
 3. **Protocol fee — on or off, and in which token?**
 4. **Does the `erc20-fee-signer` policy cover this escrow?** (§8.1) Off-chain configuration only: the paymaster contract needs no change and neither does the escrow, so this stays inside the §1 constraint. Cross-team, not a contract change, and not a launch blocker — without it members simply pay their own gas in ETH.
@@ -343,7 +348,9 @@ Per objective, so there are no ids and no cross-objective bookkeeping:
 enum Status   { Funding, Succeeded, Refunding, Closed }
 enum OnMissed { Refund, PayBeneficiary }
 
-// set once at clone initialization
+// set once by the constructor, never written again. Plain storage, not
+// `immutable`: on EraVM immutables measured more expensive both to write
+// and to read (see section 6).
 string   name;
 IERC20   token;
 address  organizer;
