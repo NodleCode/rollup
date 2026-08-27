@@ -2,12 +2,20 @@
 
 pragma solidity ^0.8.26;
 
-/**
- * @title FundraisingTypes
- * @notice Shared enums and structs for the group fundraising system.
- * @dev Solidity interfaces cannot define enums, so shared types live here.
- *      Import this file alongside the fundraising interfaces.
- */
+// FundraisingTypes
+//
+// Shared constants, enums and structs for the group fundraising system. Solidity
+// interfaces cannot declare enums, so these live at file level and are imported
+// alongside the fundraising interfaces.
+
+// Longest permitted time from a fundraise's creation to its deadline. Bounds how long a
+// contribution can be committed; defense in depth only, since the app offers far shorter
+// presets.
+uint40 constant MAX_FUNDRAISE_DURATION = 365 days;
+
+// Hard ceiling on the protocol fee, in basis points. A constant, so even a compromised
+// admin cannot configure a confiscatory fee.
+uint16 constant MAX_FEE_BPS_LIMIT = 500;
 
 /// @notice Lifecycle of a single fundraise.
 /// @dev `Refunding` and `Closed` are terminal. There is no path back to `Funding`,
