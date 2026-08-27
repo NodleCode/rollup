@@ -191,6 +191,45 @@ npx hardhat deploy-zksync --script deploy_staking.dp.ts --network zkSyncSepoliaT
 
 The admin account (GOV_ADDR) holds the default-admin, rewards-manager, and emergency-manager roles. It can pause the contract (which blocks `claim`/`unstake`), toggle `unstakeAllowed` (which defaults to false, so before the period ends users can only exit once the admin enables it), and — while paused — call `emergencyWithdraw` to sweep the entire contract balance, including staked principal. Deployments intended for untrusted users should split these roles and/or place them behind a timelock or multisig.
 
+### Deploying the group fundraising contracts
+
+Deploys `FundraiserFactory`, which creates one `Fundraiser` contract per fundraise. There is no implementation contract and no proxy to deploy — the factory creates each fundraise with `new`, and zksolc registers that bytecode as a factory dependency at compile time.
+
+Please define the following environment variables:
+
+- `N_FUNDRAISING_ADMIN`: multisig that will hold `DEFAULT_ADMIN_ROLE`.
+- `N_FUNDRAISING_TOKENS`: comma-separated ERC-20 addresses allowed at launch, e.g. USDC and NODL for the network.
+- `N_FUNDRAISING_FEE_BPS`: optional, defaults to `0`. Capped by `MAX_FEE_BPS` (500).
+- `N_FUNDRAISING_FEE_RECIPIENT`: optional, required only when the rate is non-zero.
+
+The allow-list is seeded in the constructor because the admin is expected to be a multisig the deploy script cannot act for. A fee rate set with no recipient is rejected rather than silently collecting nothing.
+
+```shell
+export DEPLOYER_PRIVATE_KEY=0x...
+export N_FUNDRAISING_ADMIN=0x...
+export N_FUNDRAISING_TOKENS=0xUSDC...,0xNODL...
+
+forge script script/DeployFundraiserFactory.s.sol \
+    --rpc-url https://sepolia.era.zksync.dev --broadcast --zksync
+```
+
+Only the factory needs verifying; each fundraise is a full contract created from bytecode already published by the factory.
+
+Fees ship switched off. The capability exists — the rate is snapshotted into each fundraise at creation, so raising it later cannot reach anything already in flight — but turning it on is a product decision:
+
+```shell
+export ETH_RPC_URL=https://sepolia.era.zksync.dev
+export FACTORY=0x...   # from the deploy output
+
+# 250 = 2.5%
+cast send -i $FACTORY "setFeeParams(uint16,address)" 250 0xFeeRecipient...
+
+# allowing another token for future fundraises
+cast send -i $FACTORY "setTokenAllowed(address,bool)" 0xToken... true
+```
+
+De-listing a token only stops new fundraises choosing it. Deposits, withdrawals and refunds on live fundraises are never affected, so de-listing cannot become a freeze switch.
+
 ## Scripts
 
 ### Checking on bridging proposals
