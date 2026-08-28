@@ -8,14 +8,13 @@ import {FundraiserParams} from "./FundraisingTypes.sol";
  * @title IFundraiserFactory
  * @notice Deploys one `IFundraiser` contract per fundraise and holds the settings shared
  *         across them: which tokens may be collected, and the protocol fee.
- * @dev Creation is **permissionless** — anyone may deploy a fundraise. The contract is
- *      group-agnostic; "groups" is a product layer that decides which fundraise to show
- *      to whom.
+ * @dev Creation is **permissionless** — anyone may deploy a fundraise, and anyone may
+ *      contribute to one. There is no membership or eligibility check on-chain.
  *
  *      Each fundraise is a full contract deployed with `new`, not a proxy or a clone.
  *      EIP-1167 clones do not work on zkSync Era at all, and a proxy measured more
  *      expensive than a direct deployment there — see
- *      `src/fundraising/doc/spec/group-fundraising-design.md` section 6.
+ *      `src/fundraising/doc/spec/fundraising-design.md` section 6.
  */
 interface IFundraiserFactory {
     // ──────────────────────────────────────────────
@@ -25,16 +24,16 @@ interface IFundraiserFactory {
     /// @notice Emitted when a new fundraise is deployed.
     /// @param fundraiser Address of the newly deployed escrow.
     /// @param organizer Whoever created it, and the only address that may cancel it.
-    /// @param groupId An opaque tag supplied by the caller for off-chain indexing.
-    /// @dev `groupId` is **a hint, not a claim**. Nothing verifies it, and anyone may tag a
-    ///      fundraise with any group. Resolve a group's fundraises from records written when
-    ///      they were created, never from this tag, or a stranger's contract can be rendered
-    ///      inside somebody's group.
+    /// @param externalId An opaque tag supplied by the caller for off-chain reconciliation.
+    /// @dev `externalId` is **a hint, not a claim**. Nothing verifies it, and anyone may tag a
+    ///      fundraise with any value, including one already in use. Resolve a fundraise from
+    ///      records written when it was created, never from this tag, or an unrelated
+    ///      contract can be mistaken for a known one.
     event FundraiserCreated(
         address indexed fundraiser,
         address indexed organizer,
         address indexed token,
-        bytes32 groupId,
+        bytes32 externalId,
         uint128 goal,
         uint40 deadline,
         address beneficiary
@@ -75,9 +74,11 @@ interface IFundraiserFactory {
     ///      rate into the new contract by value; all other validation happens in the
     ///      fundraise's own constructor, so it enforces its invariants regardless of who
     ///      deploys it.
-    /// @param groupId Opaque off-chain tag, emitted and never stored. See `FundraiserCreated`.
+    /// @param externalId Opaque off-chain tag, emitted and never stored. See `FundraiserCreated`.
     /// @return fundraiser Address of the newly deployed escrow.
-    function createFundraiser(FundraiserParams calldata params, bytes32 groupId) external returns (address fundraiser);
+    function createFundraiser(FundraiserParams calldata params, bytes32 externalId)
+        external
+        returns (address fundraiser);
 
     // ──────────────────────────────────────────────
     // Administration

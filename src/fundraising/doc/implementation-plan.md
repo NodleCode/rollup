@@ -1,12 +1,12 @@
-# Group Fundraising — Implementation Plan
+# Fundraising — Implementation Plan
 
-Execution plan for [the specification](spec/group-fundraising-design.md). The spec says *what*; this says *in what order, and where the traps are*.
+Execution plan for [the specification](spec/fundraising-design.md). The spec says *what*; this says *in what order, and where the traps are*.
 
 ---
 
 ## 1. The deployment mechanism — settled, and measured
 
-The spec first called for **minimal proxies (`Clones` / EIP-1167)**, then for an `ERC1967Proxy` per objective. Both are wrong for this contract on zkSync Era. It deploys **a full `Fundraiser` per objective, configured by its constructor**. No proxy, no initializer.
+The spec first called for **minimal proxies (`Clones` / EIP-1167)**, then for an `ERC1967Proxy` per fundraise. Both are wrong for this contract on zkSync Era. It deploys **a full `Fundraiser` per fundraise, configured by its constructor**. No proxy, no initializer.
 
 ### `Clones` is impossible
 
@@ -56,7 +56,7 @@ Types per spec §6.1 and A.1: `Status { Funding, Succeeded, Refunding, Closed }`
 
 `IFundraiser`: `deposit(amount)`, `depositWithPermit(...)`, `unpledge(amount)`, `finalize()`, `cancel()`, `withdraw()`, `setPayoutAddress(addr)`, `refund()`, `refundFor(contributor)`, `rescueSurplus(token, to)`, plus views `state()`, `contributionOf(addr)`, `remainingToGoal()`, `canUnpledge()`.
 
-`IFundraiserFactory`: `createFundraiser(params, groupId) returns (address)`, `setTokenAllowed`, `setFeeParams`, `setImplementation`, and views including `isFundraiser(addr)`.
+`IFundraiserFactory`: `createFundraiser(params, externalId) returns (address)`, `setTokenAllowed`, `setFeeParams`, `setImplementation`, and views including `isFundraiser(addr)`.
 
 Errors are custom and named for the condition, per repo convention — `PayBeneficiaryRequiresDeadline`, `GoalReached`, `RaisedOverflow`, `CapBelowGoal`, `NotFinalizable`, and the rest.
 
@@ -74,13 +74,13 @@ The constructor makes no external calls, so the factory's registry write after d
 
 Immutable, non-proxied, `AccessControl`. Holds the allow-list, fee parameters, the implementation pointer, and an `isFundraiser` registry so indexers and the refund sweeper can verify provenance on-chain rather than trusting an address they were handed.
 
-`createFundraiser` has **no role gate** — do not copy `onlyRole(OPERATOR_ROLE)` from the Collections precedent. It checks the allow-list, deploys `new Fundraiser(params, msg.sender, feeBps, address(this))` with the fee snapshotted by value, records the registry entry, and emits `FundraiserCreated` carrying `groupId`.
+`createFundraiser` has **no role gate** — do not copy `onlyRole(OPERATOR_ROLE)` from the Collections precedent. It checks the allow-list, deploys `new Fundraiser(params, msg.sender, feeBps, address(this))` with the fee snapshotted by value, records the registry entry, and emits `FundraiserCreated` carrying `externalId`.
 
 Note it holds no implementation address, because there is no implementation — one fewer admin lever, and one fewer thing to get wrong.
 
-`groupId` appears **only in the event**. Never stored, never verified — a hint, not a claim (spec §6.1).
+`externalId` appears **only in the event**. Never stored, never verified — a hint, not a claim (spec §6.1).
 
-Admin functions touch the allow-list, fee parameters, and the implementation pointer. None reaches a live objective.
+Admin functions touch the allow-list, fee parameters, and the implementation pointer. None reaches a live fundraise.
 
 ---
 
@@ -90,19 +90,19 @@ Admin functions touch the allow-list, fee parameters, and the implementation poi
 2. **Credit the balance delta, never the requested amount.** Measure `balanceOf` either side of `safeTransferFrom` and credit the difference; run every check and every accumulator on that number. `nonReentrant` is what makes the delta attributable to this transfer alone.
 3. **Both guards on every exit path.** `unpledge`, `withdraw`, `refund`/`refundFor`, `rescueSurplus`: storage writes complete before the first transfer, *and* the function is `nonReentrant`. Spec §7 #4 requires both, not either.
 4. **~~Initializer safety~~ — absent by construction.** The proxy design carried three hazards here: implementation takeover, initializer front-running, and re-initialization. A constructor has none of them. There is no bare implementation to seize, no window between deploy and configure, and no way to run it twice. This is the main reason the measured gas result was worth acting on: it removed a hazard class rather than shaving a cost.
-5. **`deadline == 0` has exactly four read sites.** `block.timestamp >= 0` is always true, so naive logic finalizes an open-ended objective as missed at birth. Guard the deposit cutoff, the finalize missed-branch, and creation validation on `deadline != 0`; the fourth site is presentational. Keep it to four.
-6. **`minContribution` must never stand between an objective and resolution.** A deposit that brings `raised` to at least `goal` is exempt from the minimum — a remaining gap smaller than the minimum must still be fillable. This is the direct generalization of the Party M-06 lesson, and `finalize` itself checks nothing about minimums, ever.
-7. **Fee: rate snapshotted, recipient live.** `feeBps` is passed by value into the constructor and never re-read, bounded by `MAX_FEE_BPS` at both `setFeeParams` and construction. The recipient is read from the factory at withdraw time so a lost collection key can be rotated without touching objectives — safe precisely because the rate is frozen. Applied only on `withdraw`, rounded down, remainder to the group.
-8. **`uint128` truncation.** The credited delta is a `uint256`; require it fits before casting, with a named error. Unreachable for capped objectives, a real branch for uncapped ones in an 18-decimal token.
+5. **`deadline == 0` has exactly four read sites.** `block.timestamp >= 0` is always true, so naive logic finalizes an open-ended fundraise as missed at birth. Guard the deposit cutoff, the finalize missed-branch, and creation validation on `deadline != 0`; the fourth site is presentational. Keep it to four.
+6. **`minContribution` must never stand between an fundraise and resolution.** A deposit that brings `raised` to at least `goal` is exempt from the minimum — a remaining gap smaller than the minimum must still be fillable. This is the direct generalization of the Party M-06 lesson, and `finalize` itself checks nothing about minimums, ever.
+7. **Fee: rate snapshotted, recipient live.** `feeBps` is passed by value into the constructor and never re-read, bounded by `MAX_FEE_BPS` at both `setFeeParams` and construction. The recipient is read from the factory at withdraw time so a lost collection key can be rotated without touching fundraises — safe precisely because the rate is frozen. Applied only on `withdraw`, rounded down, remainder to the beneficiary.
+8. **`uint128` truncation.** The credited delta is a `uint256`; require it fits before casting, with a named error. Unreachable for capped fundraises, a real branch for uncapped ones in an 18-decimal token.
 
 ---
 
 ## 5. Tests
 
-- **`Lifecycle.t.sol`** — every edge in spec §5, permitted and reverting. Both `OnMissed` outcomes at a passed deadline. The exact boundary timestamp `t == deadline`, where deposits are closed and finalize is open. An open-ended objective warped ten years that still will not resolve. The fee snapshot proven by raising the factory fee mid-flight. The constructor rejecting every invalid parameter combination. Two regressions named for the prior art: a last contribution below the minimum must still finalize, and an organizer who never calls anything must not be able to freeze the objective.
+- **`Lifecycle.t.sol`** — every edge in spec §5, permitted and reverting. Both `OnMissed` outcomes at a passed deadline. The exact boundary timestamp `t == deadline`, where deposits are closed and finalize is open. An open-ended fundraise warped ten years that still will not resolve. The fee snapshot proven by raising the factory fee mid-flight. The constructor rejecting every invalid parameter combination. Two regressions named for the prior art: a last contribution below the minimum must still finalize, and an organizer who never calls anything must not be able to freeze the fundraise.
 - **`GoalLatch.t.sol`** — the `goal - 1` / `goal` / `goal + 1` battery with interleaved unpledges, atomic latching within a crossing deposit, deposits still accepted post-latch, and a fuzz run asserting `canUnpledge() == (raised < goal)` after every operation.
 - **`Refunds.t.sol`** — the fee-on-transfer end-to-end case where all N contributors refund including the last (the insolvency that balance-delta crediting exists to prevent); reentrancy against each exit path; a blocklisted beneficiary recovering via `setPayoutAddress`; `rescueSurplus` moving only genuine surplus, with unclaimed refunds untouchable.
-- **`Permissionless.t.sol`** — a non-member depositing and refunding normally; `unpledge` returning only the caller's own money; a stranger funding the gap latching exactly as a member would, including the organizer-as-beneficiary self-funding case from spec §7 #10; two fundraisers sharing a `groupId` tag; a smart-account contributor.
+- **`Permissionless.t.sol`** — an arbitrary address depositing and refunding normally; `unpledge` returning only the caller's own money; a stranger funding the gap latching exactly as a member would, including the organizer-as-beneficiary self-funding case from spec §7 #10; two fundraisers sharing a `externalId` tag; a smart-account contributor.
 - **`Invariants.t.sol`** — contributions sum to `raised`; balance covers outstanding liability in every state; `Refunding` never pays the beneficiary; once `raised >= goal` is observed it holds forever; status transitions only along spec §5 edges.
 
 ---

@@ -55,7 +55,7 @@ abstract contract FundraisingTestBase is Test {
 
     function create(FundraiserParams memory p) internal returns (Fundraiser) {
         vm.prank(organizer);
-        return Fundraiser(factory.createFundraiser(p, bytes32("group-1")));
+        return Fundraiser(factory.createFundraiser(p, bytes32("external-1")));
     }
 
     function createDefault() internal returns (Fundraiser) {

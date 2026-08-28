@@ -138,7 +138,7 @@ contract LifecycleTest is FundraisingTestBase {
         assertEq(balanceOf(f, beneficiary), FUNDED + GOAL - 25e6);
     }
 
-    function test_feeRoundsDownInFavourOfTheGroup() public {
+    function test_feeRoundsDownInFavourOfContributors() public {
         vm.prank(admin);
         factory.setFeeParams(1, feeSink); // 0.01%
 

@@ -191,7 +191,7 @@ npx hardhat deploy-zksync --script deploy_staking.dp.ts --network zkSyncSepoliaT
 
 The admin account (GOV_ADDR) holds the default-admin, rewards-manager, and emergency-manager roles. It can pause the contract (which blocks `claim`/`unstake`), toggle `unstakeAllowed` (which defaults to false, so before the period ends users can only exit once the admin enables it), and — while paused — call `emergencyWithdraw` to sweep the entire contract balance, including staked principal. Deployments intended for untrusted users should split these roles and/or place them behind a timelock or multisig.
 
-### Deploying the group fundraising contracts
+### Deploying the fundraising contracts
 
 Deploys `FundraiserFactory`, which creates one `Fundraiser` contract per fundraise. There is no implementation contract and no proxy to deploy — the factory creates each fundraise with `new`, and zksolc registers that bytecode as a factory dependency at compile time.
 
@@ -235,7 +235,7 @@ cast abi-encode "constructor((string,address,uint128,uint40,uint8,address,uint12
 ```
 
 > [!NOTE]
-> `forge script --zksync` and `forge verify-contract --zksync` cannot currently run from this repo: zksolc rejects `src/swarms/SwarmRegistryL1Upgradeable.sol` (`EXTCODECOPY` is unsupported on EraVM). `--skip` works for `forge build` but breaks foundry-zksync's solc/zksolc artifact pairing in scripts, and `verify-contract` has no `--skip` at all. Until the L1-only contracts are excluded from the zkSync build, both must be run from a project that does not include them.
+> `forge script --zksync` and `forge verify-contract --zksync` cannot currently be run from the repository root: zksolc rejects an L1-only contract elsewhere in `src/` that uses `EXTCODECOPY`, which EraVM does not support. `--skip` works for `forge build` but breaks foundry-zksync's solc/zksolc artifact pairing in scripts, and `verify-contract` has no `--skip` at all. Both must be run from a project that excludes those contracts.
 
 
 Fees ship switched off. The capability exists — the rate is snapshotted into each fundraise at creation, so raising it later cannot reach anything already in flight — but turning it on is a product decision:

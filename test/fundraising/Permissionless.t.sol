@@ -38,16 +38,16 @@ contract PermissionlessTest is FundraisingTestBase {
         assertEq(balanceOf(f, stranger), FUNDED);
     }
 
-    /// @dev `groupId` is a hint, not a claim. Two unrelated fundraises may carry the same
-    ///      tag, which is why the app must resolve group to address from its own records.
-    function test_groupIdIsNotUnique_andNotVerified() public {
+    /// @dev `externalId` is a hint, not a claim. Two unrelated fundraises may carry the same
+    ///      tag, which is why callers must resolve a fundraise from their own records.
+    function test_externalIdIsNotUnique_andNotVerified() public {
         vm.prank(organizer);
-        address real = factory.createFundraiser(defaultParams(), bytes32("group-1"));
+        address real = factory.createFundraiser(defaultParams(), bytes32("external-1"));
 
         FundraiserParams memory impostorParams = defaultParams();
         impostorParams.beneficiary = stranger;
         vm.prank(stranger);
-        address impostor = factory.createFundraiser(impostorParams, bytes32("group-1"));
+        address impostor = factory.createFundraiser(impostorParams, bytes32("external-1"));
 
         assertTrue(real != impostor);
         assertTrue(factory.isFundraiser(real) && factory.isFundraiser(impostor));

@@ -8,8 +8,8 @@ import {FundraiserFactory} from "../src/fundraising/FundraiserFactory.sol";
 
 /**
  * @title DeployFundraiserFactory
- * @notice Deployment script for the group fundraising system on ZkSync Era.
- * @dev See `src/fundraising/doc/spec/group-fundraising-design.md`.
+ * @notice Deployment script for the fundraising system on ZkSync Era.
+ * @dev See `src/fundraising/doc/spec/fundraising-design.md`.
  *
  *      One deployment, and only one. There is no implementation contract and no proxy:
  *      each fundraise is a full `Fundraiser` deployed by the factory with `new`, whose
@@ -18,8 +18,8 @@ import {FundraiserFactory} from "../src/fundraising/FundraiserFactory.sol";
  *      `ContractDeployer` call keyed on a bytecode hash the operator must already know.
  *
  *      Fees ship switched off. The capability exists — the rate is snapshotted into each
- *      fundraise at creation and capped by a constant — but charging a group to pool its
- *      own money is a product decision, so `N_FUNDRAISING_FEE_BPS` defaults to zero.
+ *      fundraise at creation and capped by a constant — but whether to charge at all is a
+ *      product decision, so `N_FUNDRAISING_FEE_BPS` defaults to zero.
  *
  * Usage:
  *   forge script script/DeployFundraiserFactory.s.sol \
@@ -55,7 +55,7 @@ contract DeployFundraiserFactory is Script {
 
         uint16 feeBps = uint16(feeBpsRaw);
 
-        console.log("=== Deploying Group Fundraising on ZkSync ===");
+        console.log("=== Deploying Fundraising on ZkSync ===");
         console.log("Admin:", admin);
         console.log("Fee bps:", feeBps);
         console.log("Fee recipient:", feeRecipient);

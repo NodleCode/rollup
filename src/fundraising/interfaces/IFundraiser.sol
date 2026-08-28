@@ -6,12 +6,12 @@ import {FundraiserParams, OnMissed, Status} from "./FundraisingTypes.sol";
 
 /**
  * @title IFundraiser
- * @notice Public API for a single group fundraise: an escrow that collects one ERC-20
+ * @notice Public API for a single fundraise: an escrow that collects one ERC-20
  *         toward a target and resolves to exactly one of two outcomes — the beneficiary
  *         is paid, or every contributor takes their money back.
  * @dev One contract per fundraise, deployed by `IFundraiserFactory`. Configuration is set
  *      by the constructor and never changes. See
- *      `src/fundraising/doc/spec/group-fundraising-design.md` for the specification.
+ *      `src/fundraising/doc/spec/fundraising-design.md` for the specification.
  *
  *      Two properties the rest of this interface is built to protect:
  *
@@ -198,7 +198,7 @@ interface IFundraiser {
 
     /// @notice Reclaim on someone else's behalf; the funds go to `contributor` regardless
     ///         of who calls.
-    /// @dev Lets the app sweep refunds for a group so people are refunded rather than asked
+    /// @dev Lets a third party sweep refunds so contributors are refunded rather than asked
     ///      to claim. Carries no custody: the caller cannot redirect the payment.
     function refundFor(address contributor) external;
 

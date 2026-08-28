@@ -18,7 +18,7 @@ import {FundraiserParams, MAX_FUNDRAISE_DURATION, MAX_FEE_BPS_LIMIT} from "./int
  *      Each fundraise is a full contract deployed with `new`, not a proxy or a clone.
  *      EIP-1167 clones do not work on zkSync Era at all, and a proxy measured more
  *      expensive there than deploying directly. See
- *      `src/fundraising/doc/spec/group-fundraising-design.md` section 6.
+ *      `src/fundraising/doc/spec/fundraising-design.md` section 6.
  *
  *      The admin's entire reach is the token allow-list and the fee parameters, both of
  *      which affect only future fundraises, plus the fee recipient read at withdrawal
@@ -69,11 +69,10 @@ contract FundraiserFactory is IFundraiserFactory, AccessControl {
     // ──────────────────────────────────────────────
 
     /// @inheritdoc IFundraiserFactory
-    /// @dev **No role gate, deliberately.** Anyone may deploy a fundraise; the contract is
-    ///      group-agnostic and membership is a product-layer concern. The allow-list check
-    ///      is the only validation that belongs here rather than in the escrow's own
+    /// @dev **No role gate, deliberately.** Anyone may deploy a fundraise. The allow-list
+    ///      check is the only validation that belongs here rather than in the escrow's own
     ///      constructor, because it is the only rule the escrow cannot know for itself.
-    function createFundraiser(FundraiserParams calldata params, bytes32 groupId)
+    function createFundraiser(FundraiserParams calldata params, bytes32 externalId)
         external
         override
         returns (address fundraiser)
@@ -90,7 +89,7 @@ contract FundraiserFactory is IFundraiserFactory, AccessControl {
         isFundraiser[fundraiser] = true;
 
         emit FundraiserCreated(
-            fundraiser, msg.sender, params.token, groupId, params.goal, params.deadline, params.beneficiary
+            fundraiser, msg.sender, params.token, externalId, params.goal, params.deadline, params.beneficiary
         );
     }
 

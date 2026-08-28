@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 
 // FundraisingTypes
 //
-// Shared constants, enums and structs for the group fundraising system. Solidity
+// Shared constants, enums and structs for the fundraising system. Solidity
 // interfaces cannot declare enums, so these live at file level and are imported
 // alongside the fundraising interfaces.
 

@@ -19,7 +19,7 @@ import {
 
 /**
  * @title Fundraiser
- * @notice Escrow for a single group fundraise: collects one ERC-20 toward a target and
+ * @notice Escrow for a single fundraise: collects one ERC-20 toward a target and
  *         resolves to exactly one of two outcomes — the beneficiary is paid, or every
  *         contributor takes their money back.
  * @dev One contract per fundraise, deployed by `FundraiserFactory` with `new`. Not a proxy
@@ -27,7 +27,7 @@ import {
  *      expensive there than a direct deployment. Configuration is set by the constructor
  *      and never written again, so there is no initializer and nothing to seize or re-run.
  *
- *      See `src/fundraising/doc/spec/group-fundraising-design.md`.
+ *      See `src/fundraising/doc/spec/fundraising-design.md`.
  */
 contract Fundraiser is IFundraiser, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -254,7 +254,7 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
         uint256 amount = raised;
         address recipient = IFundraiserFactoryFees(factory).feeRecipient();
 
-        // Rounded down, so any remainder favours the group rather than the protocol.
+        // Rounded down, so any remainder favours the contributors rather than the protocol.
         uint256 fee = (recipient == address(0)) ? 0 : (amount * feeBps) / _BPS_DENOMINATOR;
         uint256 net = amount - fee;
         address payTo = beneficiary;
