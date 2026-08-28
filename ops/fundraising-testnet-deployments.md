@@ -36,4 +36,9 @@ Measured testnet gas: `createFundraiser` 216,226 · `deposit` 120,546.
 
 ## Redeploying
 
-See the README section on deploying the fundraising contracts. Note that `forge script --zksync` cannot be run from the repository root — an L1-only contract elsewhere in `src/` uses `EXTCODECOPY`, which EraVM rejects, and `--skip` breaks foundry-zksync's solc/zksolc artifact pairing in scripts.
+```shell
+./ops/deploy_fundraising_zksync.sh testnet              # dry run
+./ops/deploy_fundraising_zksync.sh testnet --broadcast
+```
+
+The script handles the whole path: it checks each allow-listed address is really an ERC-20 on the target network, warns when the admin is an EOA rather than a multisig, moves the L1-only contracts aside so zksolc can compile, gates on `factoryDependencies` being populated, deploys, re-reads the admin role and allow-list from chain, runs a `createFundraiser` smoke test, and verifies source on the explorer.

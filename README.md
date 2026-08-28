@@ -235,7 +235,7 @@ cast abi-encode "constructor((string,address,uint128,uint40,uint8,address,uint12
 ```
 
 > [!NOTE]
-> `forge script --zksync` and `forge verify-contract --zksync` cannot currently be run from the repository root: zksolc rejects an L1-only contract elsewhere in `src/` that uses `EXTCODECOPY`, which EraVM does not support. `--skip` works for `forge build` but breaks foundry-zksync's solc/zksolc artifact pairing in scripts, and `verify-contract` has no `--skip` at all. Both must be run from a project that excludes those contracts.
+> Run deployments through [`ops/deploy_fundraising_zksync.sh`](ops/deploy_fundraising_zksync.sh) rather than calling `forge script` directly. `forge build --zksync` compiles the whole tree, and zksolc rejects an L1-only contract elsewhere in `src/` that uses `EXTCODECOPY`; the ops script temporarily moves those files aside and restores them on exit, the same pattern the swarms and collections deploy scripts use. It also gates on `factoryDependencies` being populated — empty means `createFundraiser` would revert on EraVM while passing every EVM-profile test — and verifies source through `ops/verify_zksync_contracts.py`, which rewrites imports to project-rooted paths that the ZKsync verifier will accept.
 
 
 Fees ship switched off. The capability exists — the rate is snapshotted into each fundraise at creation, so raising it later cannot reach anything already in flight — but turning it on is a product decision:
