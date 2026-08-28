@@ -89,6 +89,8 @@ CONTRACT_SOURCE_MAP = {
     "CollectionFactory": "src/collections/CollectionFactory.sol:CollectionFactory",
     "UserCollection721": "src/collections/UserCollection721.sol:UserCollection721",
     "UserCollection1155": "src/collections/UserCollection1155.sol:UserCollection1155",
+    "FundraiserFactory": "src/fundraising/FundraiserFactory.sol:FundraiserFactory",
+    "Fundraiser": "src/fundraising/Fundraiser.sol:Fundraiser",
 }
 
 # Some zkSync forge broadcasts record deployments as calls to ContractDeployer
@@ -115,6 +117,12 @@ BROADCAST_CONTRACT_SEQUENCE = {
         "UserCollection1155",
         "CollectionFactory",
         "ERC1967Proxy",
+    ],
+    # A single deployment: the factory. Each Fundraiser is created later by the
+    # factory itself, so it never appears in this broadcast — verify instances
+    # separately with ops/verify_fundraiser.sh.
+    "DeployFundraiserFactory.s.sol": [
+        "FundraiserFactory",
     ],
 }
 

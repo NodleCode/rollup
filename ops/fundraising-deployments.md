@@ -1,8 +1,22 @@
-# Fundraising — ZKsync Sepolia deployments
+# Fundraising — deployments
 
-Testnet record for the contracts in [`src/fundraising`](../src/fundraising). Chain 300, `https://sepolia.era.zksync.dev`.
+Deployment record for the contracts in [`src/fundraising`](../src/fundraising).
 
-## Current
+## Mainnet (ZKsync Era, chain 324)
+
+| Contract | Address | Verified |
+|---|---|---|
+| `FundraiserFactory` | [`0xCFaF15E15696b2e8D19C5B3bFc4Bf091422Dda5e`](https://explorer.zksync.io/address/0xCFaF15E15696b2e8D19C5B3bFc4Bf091422Dda5e#contract) | yes |
+
+- Admin (`DEFAULT_ADMIN_ROLE`): `0x5e097ac1bcf81e7ff2657045f72caa6cf06486c9` — the Gnosis Safe v1.3.0 2-of-4 that administers the other production contracts. The deployer holds no role.
+- Allow-listed at creation, in this order: native USDC `0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4`, then bridged USDC.e `0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4`. Both are 6 decimals and both display as "USDC" in most wallets, so whatever creates a fundraise must choose deliberately.
+- `feeBps` 0 with a zero recipient — fees ship switched off. `MAX_FEE_BPS` 500 and `MAX_DURATION` 31536000 are constants and can never change.
+
+Each fundraise is created later by the factory as its own contract, so instances never appear in the deploy broadcast. Verify one with `ops/verify_fundraiser.sh` if the explorer has not matched it automatically.
+
+## Testnet (ZKsync Era Sepolia, chain 300)
+
+### Current
 
 | Contract | Address | Verified |
 |---|---|---|
@@ -13,7 +27,7 @@ Testnet record for the contracts in [`src/fundraising`](../src/fundraising). Cha
 - Allow-listed token: NODL `0x37EDFB6d82c3194e0024c9340aa0993eb42Ec14c`
 - `feeBps` 0, `MAX_FEE_BPS` 500, `MAX_DURATION` 31536000
 
-## Superseded
+### Superseded
 
 | Contract | Address | Note |
 |---|---|---|
@@ -25,7 +39,7 @@ These are verified and remain on-chain — nothing on ZKsync can be withdrawn on
 
 De-listing deliberately does not reach the two fundraises already created by it. That is the designed behavior — an allow-list change must never become a freeze switch over funds already escrowed — and it is worth noting that superseding a factory therefore cannot strand anyone's money.
 
-## What was exercised on-chain
+### What was exercised on-chain
 
 Both outcomes, against the superseded factory and re-confirmed against the current one:
 
