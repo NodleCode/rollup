@@ -8,23 +8,21 @@ Deployment record for the contracts in [`src/fundraising`](../src/fundraising).
 
 | Contract | Address | Verified |
 |---|---|---|
-| `FundraiserFactory` | [`0x408A7A05Ee9e27Af05D9Ba4dc34647f323100841`](https://explorer.zksync.io/address/0x408A7A05Ee9e27Af05D9Ba4dc34647f323100841#contract) | yes |
+| `FundraiserFactory` | [`0x4Ac9b7bE25c701F0a412ADd0500D79d88D005302`](https://explorer.zksync.io/address/0x4Ac9b7bE25c701F0a412ADd0500D79d88D005302#contract) | yes |
 
-- Admin (`DEFAULT_ADMIN_ROLE`): `0x5e097ac1bcf81e7ff2657045f72caa6cf06486c9` — the Gnosis Safe v1.3.0 2-of-4 that administers the other production contracts. The deployer holds no role.
-- Allow-listed in this order: native USDC `0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4`, then bridged USDC.e `0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4`. Both 6 decimals, and both display as "USDC" in most wallets, so whatever creates a fundraise must choose deliberately.
-- **Fee: 100 bps (1%) to the Safe.** Taken only on `withdraw`, never on refunds or unpledges, and snapshotted into each fundraise at creation so a later change cannot reach anything in flight. The recipient is read live, so the Safe can repoint it without touching live fundraises.
-- `MAX_FEE_BPS` 500 and `MAX_DURATION` 31536000 are constants and can never change.
-
-Smoke fundraise from the deploy: [`0xec6603f9f188d7b552444377e300c75905f97b3e`](https://explorer.zksync.io/address/0xec6603f9f188d7b552444377e300c75905f97b3e). Created with a supplied organizer different from the sender, confirming creation-on-behalf-of works on EraVM.
+- Admin: `0x5e097ac1bcf81e7ff2657045f72caa6cf06486c9`, the 2-of-4 Safe. The deployer holds no role.
+- Allow-listed: native USDC `0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4`, then bridged USDC.e `0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4`. Both 6 decimals.
+- Fee: 100 bps (1%) to the Safe, **accrued by `withdraw` and pulled with `collectFee`** so the recipient never sits on the beneficiary's critical path.
+- `MAX_FEE_BPS` 500, `MAX_DURATION` 31536000. Constants; they can never change.
 
 ### Superseded
 
-| Contract | Address | Note |
-|---|---|---|
-| `FundraiserFactory` | [`0xCFaF15E15696b2e8D19C5B3bFc4Bf091422Dda5e`](https://explorer.zksync.io/address/0xCFaF15E15696b2e8D19C5B3bFc4Bf091422Dda5e#contract) | Takes the organizer from `msg.sender` and carries a zero fee. Verified, and still functional |
+| Address | Why |
+|---|---|
+| [`0x408A7A05Ee9e27Af05D9Ba4dc34647f323100841`](https://explorer.zksync.io/address/0x408A7A05Ee9e27Af05D9Ba4dc34647f323100841#contract) | Paid the fee inline inside `withdraw`, reading the recipient live. A recipient unable to receive the token — a blocklisting stablecoin, and USDC is the default — reverted the whole call and stranded the pot until an admin rotated the recipient, putting resolution behind admin cooperation |
+| [`0xCFaF15E15696b2e8D19C5B3bFc4Bf091422Dda5e`](https://explorer.zksync.io/address/0xCFaF15E15696b2e8D19C5B3bFc4Bf091422Dda5e#contract) | Took the organizer from `msg.sender`, and carries a zero fee |
 
-> [!IMPORTANT]
-> The superseded factory has **not** been disabled — that needs a Safe transaction, `setTokenAllowed(token, false)` for both USDC addresses, which stops new fundraises being created through it. Until then it will happily create fee-free fundraises whose organizer is whoever sent the transaction. Existing fundraises are unaffected either way; de-listing never reaches money already escrowed.
+Both remain verified and functional; nothing on ZKsync can be withdrawn once deployed. No fundraise created through either is at risk, and none needs migrating — each fundraise is its own contract. De-listing their tokens would stop new ones being created through them, and needs a Safe transaction. Low priority: the API points at the current factory, and `isFundraiser` on it correctly returns false for anything the older ones made.
 
 ## Testnet (ZKsync Era Sepolia, chain 300)
 
