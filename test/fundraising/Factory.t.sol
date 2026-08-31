@@ -70,6 +70,7 @@ contract FactoryTest is FundraisingTestBase {
         f.finalize();
         vm.prank(beneficiary);
         f.withdraw();
+        f.collectFee();
 
         assertEq(balanceOf(f, feeSink), 10e6); // 1%, not 5%
     }
@@ -90,6 +91,10 @@ contract FactoryTest is FundraisingTestBase {
 
         vm.prank(beneficiary);
         f.withdraw();
+        f.collectFee();
+
+        // Collection reads the recipient live, so a rotation still redirects the fee —
+        // without the recipient ever sitting on the beneficiary's critical path.
         assertEq(balanceOf(f, newSink), 10e6);
         assertEq(balanceOf(f, feeSink), 0);
     }

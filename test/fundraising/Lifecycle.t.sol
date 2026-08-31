@@ -134,6 +134,11 @@ contract LifecycleTest is FundraisingTestBase {
         vm.prank(beneficiary);
         f.withdraw();
 
+        // The fee is accrued, not paid inline — so a recipient that cannot receive the
+        // token can never block the beneficiary. Anyone may push it to the recipient.
+        assertEq(f.feeOwed(), 25e6);
+        f.collectFee();
+
         assertEq(balanceOf(f, feeSink), 25e6);
         assertEq(balanceOf(f, beneficiary), FUNDED + GOAL - 25e6);
     }

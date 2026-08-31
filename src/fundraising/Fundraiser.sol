@@ -81,6 +81,9 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
     uint128 public override refunded;
 
     /// @inheritdoc IFundraiser
+    uint128 public override feeOwed;
+
+    /// @inheritdoc IFundraiser
     mapping(address => uint256) public override contributions;
 
     /// @param p Fundraise configuration, fixed for the life of the contract.
@@ -253,14 +256,20 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
         uint256 amount = raised;
         address recipient = IFundraiserFactoryFees(factory).feeRecipient();
 
-        // Rounded down, so any remainder favours the contributors rather than the protocol.
+        // Rounded down, so any remainder favours the beneficiary rather than the protocol.
         uint256 fee = (recipient == address(0)) ? 0 : (amount * feeBps) / _BPS_DENOMINATOR;
         uint256 net = amount - fee;
         address payTo = beneficiary;
 
         status = Status.Closed;
 
-        if (fee != 0) IERC20(token).safeTransfer(recipient, fee);
+        // The fee is ACCRUED here, not transferred. Paying it inline would put the fee
+        // recipient on the beneficiary's critical path: a recipient that cannot receive
+        // the token — a blocklisting stablecoin, say — would revert the whole call and
+        // strand the pot until an admin rotated the recipient. Resolution must never
+        // depend on admin cooperation. The recipient pulls separately via `collectFee`.
+        feeOwed = uint128(fee);
+
         if (net != 0) IERC20(token).safeTransfer(payTo, net);
 
         emit Withdrawn(payTo, net, fee);
@@ -274,6 +283,23 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
 
         emit PayoutAddressChanged(beneficiary, newBeneficiary);
         beneficiary = newBeneficiary;
+    }
+
+    /// @inheritdoc IFundraiser
+    /// @dev Callable by anyone; the funds always go to the factory's current recipient,
+    ///      so a blocked or lost recipient costs the protocol its fee and nobody else
+    ///      anything. The beneficiary has already been paid by this point.
+    function collectFee() external override nonReentrant {
+        uint256 amount = feeOwed;
+        if (amount == 0) revert NoFeeOwed();
+
+        address recipient = IFundraiserFactoryFees(factory).feeRecipient();
+        if (recipient == address(0)) revert ZeroAddress();
+
+        feeOwed = 0;
+        IERC20(token).safeTransfer(recipient, amount);
+
+        emit FeeCollected(recipient, amount);
     }
 
     /// @inheritdoc IFundraiser
@@ -346,7 +372,9 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
     /// @inheritdoc IFundraiser
     function outstandingLiability() public view override returns (uint256) {
         if (status == Status.Refunding) return raised - refunded;
-        if (status == Status.Closed) return 0;
+        // Once closed the only thing still owed is an uncollected fee. Counting it keeps
+        // `rescueSurplus` unable to sweep money that belongs to the fee recipient.
+        if (status == Status.Closed) return feeOwed;
         return raised;
     }
 }

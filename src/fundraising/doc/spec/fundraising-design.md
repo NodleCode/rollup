@@ -398,6 +398,8 @@ A bounded `rescueSurplus(token)` recovers mis-sends and airdrops without ever be
 
 Optional, off by default. `feeBps` snapshotted into the fundraise at creation so a later increase cannot skim an in-flight fundraise; hard-capped by a constant; charged **only on withdraw**, never on refunds or unpledges; rounded down, remainder to the beneficiary.
 
+**The fee is accrued, not paid inline.** `withdraw` pays the beneficiary and records `feeOwed`; the recipient pulls separately with `collectFee`, which anyone may call and which always pays the factory's current recipient. This matters more than it looks: paying the fee inside `withdraw` puts the fee recipient on the beneficiary's critical path, so a recipient that cannot receive the token — a blocklisting stablecoin, and USDC is the default — reverts the whole call and strands the pot until an admin rotates the recipient. That makes resolution depend on admin cooperation, which §7 #1 says it never does. Accruing instead means a blocked recipient costs the protocol its fee and nobody else anything. An uncollected fee counts toward `outstandingLiability`, so surplus rescue cannot sweep it.
+
 ### A.5 Events
 
 ```

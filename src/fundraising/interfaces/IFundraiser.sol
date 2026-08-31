@@ -58,6 +58,9 @@ interface IFundraiser {
     /// @notice Emitted when the beneficiary repoints its own payout address.
     event PayoutAddressChanged(address indexed previous, address indexed current);
 
+    /// @notice Emitted when an accrued fee is collected by the factory's fee recipient.
+    event FeeCollected(address indexed recipient, uint256 amount);
+
     /// @notice Emitted when a contributor's money is returned.
     /// @dev Also emitted for `refundFor`, where a third party pays the gas but the funds
     ///      still go to `contributor`.
@@ -143,6 +146,9 @@ interface IFundraiser {
     /// @notice Thrown when a rescue would reach into escrowed funds.
     error NoSurplus();
 
+    /// @notice Thrown when there is no accrued fee to collect.
+    error NoFeeOwed();
+
     // ──────────────────────────────────────────────
     // Contributing
     // ──────────────────────────────────────────────
@@ -193,6 +199,12 @@ interface IFundraiser {
     ///      organizer nor any admin can call it.
     function setPayoutAddress(address newBeneficiary) external;
 
+    /// @notice Send the accrued protocol fee to the factory's current fee recipient.
+    /// @dev Callable by anyone; the funds always go to the recipient, never to the caller.
+    ///      The fee is accrued by `withdraw` rather than paid inline, so a recipient that
+    ///      cannot receive the token can never block a beneficiary being paid.
+    function collectFee() external;
+
     /// @notice Reclaim your own contribution after the fundraise entered `Refunding`.
     function refund() external;
 
@@ -232,6 +244,9 @@ interface IFundraiser {
     function unpledged() external view returns (uint128);
     /// @notice Running total returned to contributors after entering `Refunding`.
     function refunded() external view returns (uint128);
+
+    /// @notice Protocol fee accrued by `withdraw` and not yet collected.
+    function feeOwed() external view returns (uint128);
     function contributions(address contributor) external view returns (uint256);
 
     /// @notice Amount still needed to reach the goal, or zero once reached.
