@@ -48,6 +48,7 @@ abstract contract FundraisingTestBase is Test {
             deadline: uint40(block.timestamp + 30 days),
             onMissed: OnMissed.Refund,
             beneficiary: beneficiary,
+            organizer: organizer,
             minContribution: 0,
             maxTotalContributions: 0
         });

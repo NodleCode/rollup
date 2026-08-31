@@ -23,7 +23,10 @@ interface IFundraiserFactory {
 
     /// @notice Emitted when a new fundraise is deployed.
     /// @param fundraiser Address of the newly deployed escrow.
-    /// @param organizer Whoever created it, and the only address that may cancel it.
+    /// @param organizer The only address that may cancel it. Supplied at creation, so it
+    ///        need not be whoever sent the transaction.
+    /// @param creator Whoever actually sent the transaction and paid the gas. Kept
+    ///        separate from `organizer` so provenance survives creation-on-behalf-of.
     /// @param externalId An opaque tag supplied by the caller for off-chain reconciliation.
     /// @dev `externalId` is **a hint, not a claim**. Nothing verifies it, and anyone may tag a
     ///      fundraise with any value, including one already in use. Resolve a fundraise from
@@ -33,6 +36,7 @@ interface IFundraiserFactory {
         address indexed fundraiser,
         address indexed organizer,
         address indexed token,
+        address creator,
         bytes32 externalId,
         uint128 goal,
         uint40 deadline,

@@ -62,6 +62,13 @@ struct FundraiserParams {
     /// @notice Receives the funds if the target is reached. Fixed at creation; only the
     ///         beneficiary itself may later repoint its own payout address.
     address beneficiary;
+    /// @notice The only address that may cancel while the fundraise is below target.
+    /// @dev Supplied rather than taken from `msg.sender`, so a fundraise can be created
+    ///      on someone's behalf — by a service paying the gas, for instance — without
+    ///      taking their ability to cancel away from them. It is not a claim about who
+    ///      sent the transaction: anyone may name anyone. The only power it carries is
+    ///      cancellation, which can move money back to contributors and nowhere else.
+    address organizer;
     /// @notice Smallest accepted contribution, or `0` for none.
     /// @dev Enforced on deposit only, and never on the path that resolves the fundraise.
     ///      A contribution that reaches `goal` is exempt, so a remaining gap smaller than

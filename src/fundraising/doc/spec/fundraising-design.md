@@ -209,12 +209,17 @@ struct FundraiserParams {
     uint40  deadline;       // 0 = open-ended: runs until the goal is reached or it is cancelled
     OnMissed onMissed;      // what happens if the deadline passes below goal
     address beneficiary;    // fixed at creation; only the beneficiary can later repoint its own payout
+    address organizer;      // the only address that may cancel; supplied, not taken from msg.sender
     uint128 minContribution;        // 0 = none
     uint128 maxTotalContributions;  // 0 = uncapped
 }
 
 enum OnMissed { Refund, PayBeneficiary }
 ```
+
+**`organizer` is supplied, not inferred from `msg.sender`.** A fundraise can therefore be created *on someone's behalf* — by a service paying the gas, for instance — without taking from them the one thing an organizer controls, which is cancelling while below target. Whoever actually sent the transaction is emitted separately as `creator`, so paying the gas confers no authority and provenance is not lost.
+
+Anyone may name anyone as organizer, and that is not a hazard worth preventing: the only power it carries is cancellation, and cancelling can move money back to contributors and nowhere else. It is not a claim about who created the fundraise, any more than `externalId` is a claim about which fundraise this is — both are resolved from records, not from the chain.
 
 `createFundraiser(params)` is **callable by anyone**. It checks the token is allow-listed, deploys `new Fundraiser(params, msg.sender, feeBps, address(this))` — snapshotting the fee by value — records the address in its registry, and emits `FundraiserCreated` with that address and an opaque `externalId` tag. All other parameter validation lives in the `Fundraiser` constructor, so the escrow enforces its own invariants regardless of who deploys it.
 

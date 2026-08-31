@@ -84,12 +84,19 @@ contract FundraiserFactory is IFundraiserFactory, AccessControl {
         // calls — it validates arguments and writes its own storage, nothing more. If that
         // ever changes, either reorder so the registry write precedes the deploy, or add a
         // reentrancy guard here.
-        fundraiser = address(new Fundraiser(params, msg.sender, feeBps, address(this)));
+        fundraiser = address(new Fundraiser(params, feeBps, address(this)));
 
         isFundraiser[fundraiser] = true;
 
         emit FundraiserCreated(
-            fundraiser, msg.sender, params.token, externalId, params.goal, params.deadline, params.beneficiary
+            fundraiser,
+            params.organizer,
+            params.token,
+            msg.sender,
+            externalId,
+            params.goal,
+            params.deadline,
+            params.beneficiary
         );
     }
 

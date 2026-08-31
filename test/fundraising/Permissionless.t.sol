@@ -16,12 +16,46 @@ contract SmartWallet {
 /// @notice The escrow asks nobody for permission. These are the consequences, including
 ///         the ones we accepted rather than prevented.
 contract PermissionlessTest is FundraisingTestBase {
-    function test_anyoneCanCreate_organizerIsWhoeverCalled() public {
-        vm.prank(stranger);
-        address f = factory.createFundraiser(defaultParams(), bytes32("whatever"));
+    function test_anyoneCanCreate_andNamesTheOrganizer() public {
+        FundraiserParams memory p = defaultParams();
+        p.organizer = alice;
 
-        assertEq(Fundraiser(f).organizer(), stranger);
+        vm.prank(stranger);
+        address f = factory.createFundraiser(p, bytes32("whatever"));
+
+        // The organizer is the address named in the params, not whoever sent it.
+        assertEq(Fundraiser(f).organizer(), alice);
         assertTrue(factory.isFundraiser(f));
+    }
+
+    /// @dev The point of a supplied organizer: a service can pay the gas to create a
+    ///      fundraise without taking the ability to cancel it away from the person it
+    ///      belongs to.
+    function test_createdOnBehalf_namedOrganizerKeepsControl() public {
+        FundraiserParams memory p = defaultParams();
+        p.organizer = alice;
+
+        vm.prank(stranger); // a relayer paying the gas
+        Fundraiser f = Fundraiser(factory.createFundraiser(p, bytes32("on-behalf")));
+
+        deposit(f, bob, 100e6);
+
+        // The relayer got no authority from paying.
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(IFundraiser.NotOrganizer.selector, stranger));
+        f.cancel();
+
+        // The named organizer keeps it.
+        vm.prank(alice);
+        f.cancel();
+        assertEq(uint8(f.status()), uint8(Status.Refunding));
+    }
+
+    function test_rejectsZeroOrganizer() public {
+        FundraiserParams memory p = defaultParams();
+        p.organizer = address(0);
+        vm.expectRevert(IFundraiser.ZeroAddress.selector);
+        factory.createFundraiser(p, bytes32("zero"));
     }
 
     function test_nonMemberContributesAndRefundsLikeAnyoneElse() public {

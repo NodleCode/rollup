@@ -84,7 +84,6 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
     mapping(address => uint256) public override contributions;
 
     /// @param p Fundraise configuration, fixed for the life of the contract.
-    /// @param organizer_ Creator, and the only address that may cancel while below goal.
     /// @param feeBps_ Protocol fee rate, snapshotted by value so a later change to the
     ///        factory's rate cannot skim a fundraise already in flight.
     /// @param factory_ Deploying factory, consulted for the live fee recipient and for the
@@ -92,9 +91,9 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
     /// @dev Validates everything except the token allow-list, which only the factory knows.
     ///      Makes no external calls, so the factory's bookkeeping after deployment cannot be
     ///      re-entered.
-    constructor(FundraiserParams memory p, address organizer_, uint16 feeBps_, address factory_) {
+    constructor(FundraiserParams memory p, uint16 feeBps_, address factory_) {
         if (p.token == address(0) || p.beneficiary == address(0)) revert ZeroAddress();
-        if (organizer_ == address(0) || factory_ == address(0)) revert ZeroAddress();
+        if (p.organizer == address(0) || factory_ == address(0)) revert ZeroAddress();
         if (p.goal == 0) revert ZeroGoal();
         if (feeBps_ > MAX_FEE_BPS) revert FeeTooHigh(feeBps_, MAX_FEE_BPS);
 
@@ -115,7 +114,7 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
 
         name = p.name;
         token = p.token;
-        organizer = organizer_;
+        organizer = p.organizer;
         beneficiary = p.beneficiary;
         factory = factory_;
 
