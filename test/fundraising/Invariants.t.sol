@@ -21,6 +21,7 @@ contract FundraiserHandler is Test {
     // ghosts
     bool public goalWasReached;
     uint256 public beneficiaryReceived;
+    uint256 public feeCollected;
     Status public lastStatus;
     bool public sawIllegalTransition;
 
@@ -87,6 +88,16 @@ contract FundraiserHandler is Test {
         _sync();
     }
 
+    /// @dev The fee leaves separately from the payout, so the fuzzer has to be able to
+    ///      sweep it independently — including before the beneficiary has withdrawn.
+    function collectFee() external {
+        address recipient = FundraiserFactory(f.factory()).feeRecipient();
+        uint256 before = token.balanceOf(recipient);
+        try f.collectFee() {} catch {}
+        feeCollected += token.balanceOf(recipient) - before;
+        _sync();
+    }
+
     function refund(uint256 actorSeed) external {
         vm.prank(_actor(actorSeed));
         try f.refund() {} catch {}
@@ -118,14 +129,21 @@ contract InvariantsTest is Test {
     address admin = makeAddr("admin");
     address organizer = makeAddr("organizer");
     address beneficiary = makeAddr("beneficiary");
+    address feeRecipient = makeAddr("feeRecipient");
 
     uint128 constant GOAL = 1_000e6;
+    uint128 constant MIN_CONTRIBUTION = 10e6;
+    uint128 constant CAP = 5_000e6;
+    uint16 constant FEE_BPS = 100;
 
     function setUp() public {
         token = new ERC20Mock();
         address[] memory allowed = new address[](1);
         allowed[0] = address(token);
-        factory = new FundraiserFactory(admin, 0, address(0), allowed);
+        // Production shape, not a convenient one: the fee is live and has a real
+        // recipient. Fuzzing at fee 0 leaves every branch of the fee accounting
+        // unexercised, which is how a fee-path defect reached mainnet once already.
+        factory = new FundraiserFactory(admin, FEE_BPS, feeRecipient, allowed);
 
         address[] memory actors = new address[](4);
         actors[0] = makeAddr("a1");
@@ -147,8 +165,8 @@ contract InvariantsTest is Test {
                     onMissed: OnMissed.Refund,
                     beneficiary: beneficiary,
                     organizer: organizer,
-                    minContribution: 0,
-                    maxTotalContributions: 0
+                    minContribution: MIN_CONTRIBUTION,
+                    maxTotalContributions: CAP
                 }),
                 bytes32("inv")
             )
@@ -192,6 +210,23 @@ contract InvariantsTest is Test {
             assertTrue(fundraiser.status() == Status.Closed);
             assertFalse(handler.sawIllegalTransition());
         }
+    }
+
+    /// @dev The fee can never exceed its own rate. A drift here means the fee is being
+    ///      computed against something other than what was raised.
+    function invariant_feeNeverExceedsItsRate() public view {
+        assertLe(uint256(fundraiser.feeOwed()), (uint256(fundraiser.raised()) * FEE_BPS) / 10_000);
+    }
+
+    /// @dev Conservation across a closed fundraise: everything raised went to the beneficiary,
+    ///      to the fee recipient, or is still held as an accrued fee. No third destination, and
+    ///      nothing evaporates. This is the property that a fee paid down the wrong path breaks.
+    function invariant_closedFundraiseConservesWhatItRaised() public view {
+        if (fundraiser.status() != Status.Closed) return;
+        assertEq(
+            handler.beneficiaryReceived() + handler.feeCollected() + uint256(fundraiser.feeOwed()),
+            uint256(fundraiser.raised())
+        );
     }
 
     function invariant_refundedNeverExceedsRaised() public view {
