@@ -188,6 +188,7 @@
     "Fundings",
     "publicnode",
     "drpc",
-    "apikey"
+    "apikey",
+    "Firestore"
   ]
 }

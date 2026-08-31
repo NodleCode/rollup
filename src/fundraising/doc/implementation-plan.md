@@ -72,7 +72,7 @@ The constructor makes no external calls, so the factory's registry write after d
 
 ### `FundraiserFactory.sol`
 
-Immutable, non-proxied, `AccessControl`. Holds the allow-list, fee parameters, the implementation pointer, and an `isFundraiser` registry so indexers and the refund sweeper can verify provenance on-chain rather than trusting an address they were handed.
+Immutable, non-proxied, `AccessControl`. Holds the allow-list, fee parameters (`feeBps`, `feeRecipient`), and an `isFundraiser` registry so indexers can verify provenance on-chain rather than trusting an address they were handed. There is no implementation pointer: each fundraise is a full contract, because minimal proxies do not work on ZKsync Era and a proxy there costs more than a deployment.
 
 `createFundraiser` has **no role gate** — do not copy `onlyRole(OPERATOR_ROLE)` from the Collections precedent. It checks the allow-list, deploys `new Fundraiser(params, msg.sender, feeBps, address(this))` with the fee snapshotted by value, records the registry entry, and emits `FundraiserCreated` carrying `externalId`.
 

@@ -31,29 +31,33 @@ Four things the chain cannot do, and one that needs a signer.
 ```
 fundraising/
   fundraising.module.ts
-  fundraising.controller.ts        # read-only endpoints
+  fundraising.controller.ts        # three reads + creation
   fundraising.service.ts           # chain reads, address resolution
+  fundraising-chain.service.ts     # read-only provider and factory binding
+  fundraising-creator.service.ts   # holds the creator wallet, signs factory calls
   fundraising-registry.service.ts  # externalId <-> address records (the source of truth)
-  fundraising-index.service.ts     # event indexing, progress cache
-  fundraising-sweeper.service.ts   # scheduled refundFor + finalize
-  fundraising-paymaster.service.ts # optional, only if gasless is wanted
+  fundraising.constants.ts         # ABIs, Firestore root
   fundraising-dto.ts
 ```
 
-**Endpoints** — all reads. No endpoint should accept a signed transaction or hold a key that can move escrowed funds.
+There is no index service, no sweeper and no paymaster service. Each was sketched here before implementation; none was built.
 
-| Method | Path | Returns |
-|---|---|---|
-| `GET` | `/fundraising/:address` | Status, target, raised, deadline, `onMissed`, token, beneficiary |
-| `GET` | `/fundraising/:address/contributions/:account` | One contributor's credited balance and whether they can still withdraw |
-| `GET` | `/fundraising?externalId=…` | Addresses resolved from **our records**, never from the on-chain tag |
-| `POST` | `/fundraising/records` | Records an `externalId` → address association after a client creates a fundraise |
+**Endpoints** — three reads and creation. No endpoint accepts a signed transaction, and none holds a key that can move escrowed funds: the creator wallet can deploy a fundraise and nothing else.
 
-**Scheduled work**
+| Method | Path | Auth | Returns |
+|---|---|---|---|
+| `POST` | `/fundraising` | none, 3/min | Deploys via the factory, paying the gas, and records the result |
+| `GET` | `/fundraising/:address` | none | Status, target, raised, deadline, `onMissed`, token, beneficiary |
+| `GET` | `/fundraising/:address/contributions/:account` | none | One contributor's credited balance and whether they can still withdraw |
+| `GET` | `/fundraising?externalId=…` | none | Addresses resolved from **our records**, never from the on-chain tag |
 
-- Finalize anything past its deadline, or at or above its target.
-- Sweep refunds for everything in `Refunding` with a non-zero balance.
-- Reconcile the index against `FundraiserCreated` logs, so a fundraise created outside our flow is still visible rather than invisible.
+`POST /fundraising` takes `{name, token, goal, deadline, onMissed, beneficiary, organizer, externalId}` plus optional `minContribution` and `maxTotalContributions`, and returns `{address, externalId, transactionHash, organizer, beneficiary, feeBps}`. `feeBps` is read back off the deployed contract, so a client can confirm what was snapshotted rather than trusting the response.
+
+Creation is unauthenticated by product decision. Its rate limit keys by client IP, not by caller, so it bounds one source rather than one account — the creator wallet's balance is the effective spend cap.
+
+A fundraise deployed outside this flow cannot be registered, so every record is one the API created.
+
+**No scheduled work.** Nothing finalizes a fundraise or sweeps refunds automatically. Both calls are permissionless on-chain and clients drive them — which means a fundraise past its deadline stays in `Funding` until someone calls `finalize`, and a refund is not paid until its contributor claims it. That is a client responsibility, not a background job.
 
 ## 4. What to index
 
