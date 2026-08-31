@@ -367,8 +367,8 @@ smoke_test_createFundraiser() {
   ext=$(cast keccak "smoke-$(date +%s)")
 
   cast send "$FUNDRAISER_FACTORY" \
-    "createFundraiser((string,address,uint128,uint40,uint8,address,uint128,uint128),bytes32)" \
-    "(Smoke,$token,1000,$deadline,0,$deployer_addr,0,0)" "$ext" \
+    "createFundraiser((string,address,uint128,uint40,uint8,address,address,uint128,uint128),bytes32)" \
+    "(Smoke,$token,1000,$deadline,0,$deployer_addr,$deployer_addr,0,0)" "$ext" \
     --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PRIVATE_KEY" --zksync \
     || { log_error "createFundraiser reverted on-chain"; exit 1; }
 

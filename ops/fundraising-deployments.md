@@ -4,15 +4,27 @@ Deployment record for the contracts in [`src/fundraising`](../src/fundraising).
 
 ## Mainnet (ZKsync Era, chain 324)
 
+### Current
+
 | Contract | Address | Verified |
 |---|---|---|
-| `FundraiserFactory` | [`0xCFaF15E15696b2e8D19C5B3bFc4Bf091422Dda5e`](https://explorer.zksync.io/address/0xCFaF15E15696b2e8D19C5B3bFc4Bf091422Dda5e#contract) | yes |
+| `FundraiserFactory` | [`0x408A7A05Ee9e27Af05D9Ba4dc34647f323100841`](https://explorer.zksync.io/address/0x408A7A05Ee9e27Af05D9Ba4dc34647f323100841#contract) | yes |
 
 - Admin (`DEFAULT_ADMIN_ROLE`): `0x5e097ac1bcf81e7ff2657045f72caa6cf06486c9` — the Gnosis Safe v1.3.0 2-of-4 that administers the other production contracts. The deployer holds no role.
-- Allow-listed at creation, in this order: native USDC `0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4`, then bridged USDC.e `0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4`. Both are 6 decimals and both display as "USDC" in most wallets, so whatever creates a fundraise must choose deliberately.
-- `feeBps` 0 with a zero recipient — fees ship switched off. `MAX_FEE_BPS` 500 and `MAX_DURATION` 31536000 are constants and can never change.
+- Allow-listed in this order: native USDC `0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4`, then bridged USDC.e `0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4`. Both 6 decimals, and both display as "USDC" in most wallets, so whatever creates a fundraise must choose deliberately.
+- **Fee: 100 bps (1%) to the Safe.** Taken only on `withdraw`, never on refunds or unpledges, and snapshotted into each fundraise at creation so a later change cannot reach anything in flight. The recipient is read live, so the Safe can repoint it without touching live fundraises.
+- `MAX_FEE_BPS` 500 and `MAX_DURATION` 31536000 are constants and can never change.
 
-Each fundraise is created later by the factory as its own contract, so instances never appear in the deploy broadcast. Verify one with `ops/verify_fundraiser.sh` if the explorer has not matched it automatically.
+Smoke fundraise from the deploy: [`0xec6603f9f188d7b552444377e300c75905f97b3e`](https://explorer.zksync.io/address/0xec6603f9f188d7b552444377e300c75905f97b3e). Created with a supplied organizer different from the sender, confirming creation-on-behalf-of works on EraVM.
+
+### Superseded
+
+| Contract | Address | Note |
+|---|---|---|
+| `FundraiserFactory` | [`0xCFaF15E15696b2e8D19C5B3bFc4Bf091422Dda5e`](https://explorer.zksync.io/address/0xCFaF15E15696b2e8D19C5B3bFc4Bf091422Dda5e#contract) | Takes the organizer from `msg.sender` and carries a zero fee. Verified, and still functional |
+
+> [!IMPORTANT]
+> The superseded factory has **not** been disabled — that needs a Safe transaction, `setTokenAllowed(token, false)` for both USDC addresses, which stops new fundraises being created through it. Until then it will happily create fee-free fundraises whose organizer is whoever sent the transaction. Existing fundraises are unaffected either way; de-listing never reaches money already escrowed.
 
 ## Testnet (ZKsync Era Sepolia, chain 300)
 
