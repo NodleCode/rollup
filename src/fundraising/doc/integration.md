@@ -51,7 +51,7 @@ There is no index service, no sweeper and no paymaster service. Each was sketche
 | `GET` | `/fundraising/:address/contributions/:account` | none | One contributor's credited balance and whether they can still withdraw |
 | `GET` | `/fundraising?externalId=…` | none | Addresses resolved from **our records**, never from the on-chain tag |
 
-`POST /fundraising` takes `{name, token, goal, deadline, onMissed, beneficiary, organizer, externalId}` plus optional `minContribution` and `maxTotalContributions`, and returns `{address, externalId, transactionHash, organizer, beneficiary, feeBps}`. `feeBps` is read back off the deployed contract, so a client can confirm what was snapshotted rather than trusting the response.
+`POST /fundraising` takes `{name, token, goal, deadline, onMissed, beneficiary, organizer, externalId}` plus optional `minContribution` and `maxTotalContributions`, and returns `{address, external_id, transaction_hash, organizer, beneficiary, fee_bps}`. Responses are snake_case; request bodies accept either casing. `fee_bps` is read back off the deployed contract, so a client can confirm what was snapshotted rather than trusting the response.
 
 Creation is unauthenticated by product decision. Its rate limit keys by client IP, not by caller, so it bounds one source rather than one account — the creator wallet's balance is the effective spend cap.
 
