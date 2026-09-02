@@ -131,7 +131,7 @@ Note what is *not* on that list: an authorization layer. Like `CrowdFund`, this 
 
 ### 4.3 What we import
 
-OpenZeppelin 5.3 (already vendored in `lib/`): `SafeERC20`, `ReentrancyGuard`, and `AccessControl` on the factory for the token allow-list and fee parameters. Nothing else — no proxy, no `Initializable`, and with deposits permissionless no `EIP712` or `SignatureChecker` either. Nothing else — with deposits permissionless, `EIP712` and `SignatureChecker` drop out of the design entirely. No escrow primitive exists in 5.x to inherit — that is the gap this contract fills.
+OpenZeppelin 5.3 (already vendored in `lib/`): `SafeERC20`, `ReentrancyGuard`, and `AccessControl` on the factory for the token allow-list and fee parameters. Nothing else — no proxy, no `Initializable`, and with deposits permissionless neither `EIP712` nor `SignatureChecker`. No escrow primitive exists in 5.x to inherit — that is the gap this contract fills.
 
 ---
 
@@ -221,7 +221,7 @@ enum OnMissed { Refund, PayBeneficiary }
 
 Anyone may name anyone as organizer, and that is not a hazard worth preventing: the only power it carries is cancellation, and cancelling can move money back to contributors and nowhere else. It is not a claim about who created the fundraise, any more than `externalId` is a claim about which fundraise this is — both are resolved from records, not from the chain.
 
-`createFundraiser(params)` is **callable by anyone**. It checks the token is allow-listed, deploys `new Fundraiser(params, msg.sender, feeBps, address(this))` — snapshotting the fee by value — records the address in its registry, and emits `FundraiserCreated` with that address and an opaque `externalId` tag. All other parameter validation lives in the `Fundraiser` constructor, so the escrow enforces its own invariants regardless of who deploys it.
+`createFundraiser(params)` is **callable by anyone**. It checks the token is allow-listed, deploys `new Fundraiser(params, feeBps, address(this))` — snapshotting the fee by value — records the address in its registry, and emits `FundraiserCreated` with that address and an opaque `externalId` tag. All other parameter validation lives in the `Fundraiser` constructor, so the escrow enforces its own invariants regardless of who deploys it.
 
 That `externalId` is a **hint for reconciliation, not a claim**: nothing verifies it, so anyone can create a fundraise carrying any tag, including one already in use. Resolve a fundraise from the records written when it was created, never from the on-chain tag. Treating the tag as authoritative is how an unrelated contract ends up mistaken for a known one.
 

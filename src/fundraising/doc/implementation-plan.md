@@ -56,7 +56,7 @@ Types per spec §6.1 and A.1: `Status { Funding, Succeeded, Refunding, Closed }`
 
 `IFundraiser`: `deposit(amount)`, `depositWithPermit(...)`, `unpledge(amount)`, `finalize()`, `cancel()`, `withdraw()`, `setPayoutAddress(addr)`, `refund()`, `refundFor(contributor)`, `rescueSurplus(token, to)`, plus views `state()`, `contributionOf(addr)`, `remainingToGoal()`, `canUnpledge()`.
 
-`IFundraiserFactory`: `createFundraiser(params, externalId) returns (address)`, `setTokenAllowed`, `setFeeParams`, `setImplementation`, and views including `isFundraiser(addr)`.
+`IFundraiserFactory`: `createFundraiser(params, externalId) returns (address)`, `setTokenAllowed`, `setFeeParams`, and the views `isFundraiser(addr)`, `isTokenAllowed`, `feeBps`, `feeRecipient`, `MAX_FEE_BPS` and `MAX_DURATION`. There is no `setImplementation` — nothing is proxied.
 
 Errors are custom and named for the condition, per repo convention — `PayBeneficiaryRequiresDeadline`, `GoalReached`, `RaisedOverflow`, `CapBelowGoal`, `NotFinalizable`, and the rest.
 
@@ -74,7 +74,7 @@ The constructor makes no external calls, so the factory's registry write after d
 
 Immutable, non-proxied, `AccessControl`. Holds the allow-list, fee parameters (`feeBps`, `feeRecipient`), and an `isFundraiser` registry so indexers can verify provenance on-chain rather than trusting an address they were handed. There is no implementation pointer: each fundraise is a full contract, because minimal proxies do not work on ZKsync Era and a proxy there costs more than a deployment.
 
-`createFundraiser` has **no role gate** — do not copy `onlyRole(OPERATOR_ROLE)` from the Collections precedent. It checks the allow-list, deploys `new Fundraiser(params, msg.sender, feeBps, address(this))` with the fee snapshotted by value, records the registry entry, and emits `FundraiserCreated` carrying `externalId`.
+`createFundraiser` has **no role gate** — do not copy `onlyRole(OPERATOR_ROLE)` from the Collections precedent. It checks the allow-list, deploys `new Fundraiser(params, feeBps, address(this))` with the fee snapshotted by value — the organizer travels inside `params`, not as `msg.sender`, records the registry entry, and emits `FundraiserCreated` carrying `externalId`.
 
 Note it holds no implementation address, because there is no implementation — one fewer admin lever, and one fewer thing to get wrong.
 
