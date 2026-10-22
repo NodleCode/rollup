@@ -14,6 +14,11 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 import {ITipping} from "./ITipping.sol";
 
+/// @dev The subset of ERC1155Supply the resolver reads.
+interface IERC1155Supply {
+    function totalSupply(uint256 id) external view returns (uint256);
+}
+
 /**
  * @title Tipping
  * @notice Immutable NODL tipping for Nodle NFTs (nft-feed-indexer design §6.2). No proxy and
@@ -39,7 +44,8 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable {
     bytes32 public constant COLLECTION_OWNER_ROLE = keccak256("OWNER_ROLE");
     uint16 public constant MAX_FEE_BPS = 1000;
     uint256 public constant BPS = 10_000;
-    /// @dev Gas cap for every static lookup into a collection.
+    /// @dev Gas cap for every static lookup into a collection. Sized for the EVM; confirm on
+    ///      EraVM through the real ContentSign/UserCollection proxies before deploy (slice 6).
     uint256 public constant LOOKUP_GAS = 100_000;
 
     IERC20 private immutable _nodl;
@@ -66,7 +72,8 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable {
 
     /// @inheritdoc ITipping
     function tip(address collection, uint256 tokenId, uint256 amount) external whenNotPaused nonReentrant {
-        if (amount < minTipAmount) revert BelowMinimum(amount, minTipAmount);
+        // Zero tips are never meaningful, even when the admin sets the minimum to zero.
+        if (amount == 0 || amount < minTipAmount) revert BelowMinimum(amount, minTipAmount);
         address recipient = _resolve(collection, tokenId);
         if (recipient == msg.sender) revert SelfTip();
 
@@ -99,7 +106,7 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable {
 
         if (_supports(collection, type(IERC1155).interfaceId)) {
             (bool ok, bytes memory data) = collection.staticcall{gas: LOOKUP_GAS}(
-                abi.encodeWithSignature("totalSupply(uint256)", tokenId)
+                abi.encodeCall(IERC1155Supply.totalSupply, (tokenId))
             );
             if (!ok || data.length < 32 || abi.decode(data, (uint256)) == 0) revert UnknownToken(collection, tokenId);
         }
@@ -124,9 +131,13 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable {
     // ───────── Registry ─────────
 
     /// @inheritdoc ITipping
-    /// @dev Permissionless: succeeds only for an account holding the collection's OWNER_ROLE.
+    /// @dev Permissionless: succeeds only for an account holding the collection's OWNER_ROLE,
+    ///      and only once. An entry set by REGISTRY_ROLE wins; changes go through the operator.
+    ///      Any contract that attests OWNER_ROLE for the caller can be registered, not only
+    ///      factory collections; the indexer records such collections as UNKNOWN.
     function registerCollection(address collection) external {
         if (collection == address(0)) revert ZeroAddress();
+        if (creatorOf[collection] != address(0)) revert AlreadyRegistered(collection);
         (bool ok, bytes memory data) = collection.staticcall{gas: LOOKUP_GAS}(
             abi.encodeCall(IAccessControl.hasRole, (COLLECTION_OWNER_ROLE, msg.sender))
         );
@@ -162,6 +173,8 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable {
 
     function setFeeRecipient(address recipient) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (recipient == address(0)) revert ZeroAddress();
+        // No rescue path exists in an immutable contract: fees sent here or to the token are lost.
+        if (recipient == address(this) || recipient == address(_nodl)) revert InvalidFeeRecipient(recipient);
         feeRecipient = recipient;
         emit FeeRecipientUpdated(recipient);
     }

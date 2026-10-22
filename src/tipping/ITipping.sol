@@ -23,6 +23,8 @@ interface ITipping {
     event MinTipUpdated(uint256 minTipAmount);
     event FeeUpdated(uint16 feeBps);
     event FeeRecipientUpdated(address indexed feeRecipient);
+    // `Paused(address)` / `Unpaused(address)` come from OpenZeppelin Pausable and are part of
+    // the indexed surface too; do not strip them from the generated ABI.
 
     error ZeroAddress();
     error BelowMinimum(uint256 amount, uint256 minTipAmount);
@@ -32,6 +34,8 @@ interface ITipping {
     error NoRecipient(address collection, uint256 tokenId);
     error NotCollectionOwner(address collection, address account);
     error FeeTooHigh(uint16 feeBps);
+    error AlreadyRegistered(address collection);
+    error InvalidFeeRecipient(address recipient);
 
     function tip(address collection, uint256 tokenId, uint256 amount) external;
     function registerCollection(address collection) external;

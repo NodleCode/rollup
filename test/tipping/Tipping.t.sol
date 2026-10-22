@@ -8,6 +8,8 @@ import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {ERC1155Supply} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import {Tipping} from "../../src/tipping/Tipping.sol";
 import {ITipping} from "../../src/tipping/ITipping.sol";
@@ -94,6 +96,27 @@ contract TippingTest is Test {
         vm.prank(CREATOR);
         tipping.registerCollection(address(c721));
         assertEq(tipping.creatorOf(address(c721)), CREATOR);
+        vm.prank(CREATOR);
+        vm.expectRevert(abi.encodeWithSelector(ITipping.AlreadyRegistered.selector, address(c721)));
+        tipping.registerCollection(address(c721));
+    }
+
+    function test_zeroAmountRevertsEvenWithZeroMinimum() public {
+        vm.prank(ADMIN);
+        tipping.setMinTipAmount(0);
+        cs.mint(BOB, 1);
+        vm.prank(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(ITipping.BelowMinimum.selector, 0, 0));
+        tipping.tip(address(cs), 1, 0);
+    }
+
+    function test_feeRecipientCannotBeSelfOrToken() public {
+        vm.startPrank(ADMIN);
+        vm.expectRevert(abi.encodeWithSelector(ITipping.InvalidFeeRecipient.selector, address(tipping)));
+        tipping.setFeeRecipient(address(tipping));
+        vm.expectRevert(abi.encodeWithSelector(ITipping.InvalidFeeRecipient.selector, address(nodl)));
+        tipping.setFeeRecipient(address(nodl));
+        vm.stopPrank();
     }
 
     function test_factory721_royaltyReceiverElseCreator() public {
@@ -155,16 +178,17 @@ contract TippingTest is Test {
         tipping.pause();
         cs.mint(BOB, 1);
         vm.prank(ALICE);
-        vm.expectRevert();
+        vm.expectRevert(Pausable.EnforcedPause.selector);
         tipping.tip(address(cs), 1, 2e18);
     }
 
     function test_rolesSeparated() public {
+        bytes32 registryRole = tipping.REGISTRY_ROLE();
         vm.prank(ADMIN);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, ADMIN, registryRole));
         tipping.setCollectionAllowed(address(cs), false);
         vm.prank(REGISTRY);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, REGISTRY, bytes32(0)));
         tipping.setFee(1);
     }
 }
