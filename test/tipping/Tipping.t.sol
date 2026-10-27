@@ -13,7 +13,7 @@ import {ITipping} from "../../src/tipping/ITipping.sol";
 
 /// @dev Records every `transferFrom` so tests can prove the contract only ever pulls from the caller.
 contract TokenMock is ERC20 {
-    address[] public froms;
+    address[] public senders;
     uint256[] public amounts;
 
     constructor(string memory sym) ERC20(sym, sym) {}
@@ -23,13 +23,13 @@ contract TokenMock is ERC20 {
     }
 
     function transferFrom(address from, address to, uint256 value) public override returns (bool) {
-        froms.push(from);
+        senders.push(from);
         amounts.push(value);
         return super.transferFrom(from, to, value);
     }
 
     function transfers() external view returns (uint256) {
-        return froms.length;
+        return senders.length;
     }
 }
 
@@ -474,7 +474,7 @@ contract TippingTest is Test {
         uint256 n = nodl.transfers();
         uint256 moved;
         for (uint256 i; i < n; i++) {
-            assertEq(nodl.froms(i), tipper);
+            assertEq(nodl.senders(i), tipper);
             moved += nodl.amounts(i);
         }
         assertEq(moved, amount);
