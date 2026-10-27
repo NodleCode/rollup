@@ -493,14 +493,19 @@ contract TippingTest is Test {
     function test_rolesSeparated() public {
         bytes32 registryRole = tipping.REGISTRY_ROLE();
         vm.startPrank(ADMIN);
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, ADMIN, registryRole));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, ADMIN, registryRole)
+        );
         tipping.setCollectionAllowed(address(cs), false);
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, ADMIN, registryRole));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, ADMIN, registryRole)
+        );
         tipping.setCreator(address(c721), CREATOR);
         vm.stopPrank();
 
         vm.startPrank(REGISTRY);
-        bytes memory denied = abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, REGISTRY, bytes32(0));
+        bytes memory denied =
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, REGISTRY, bytes32(0));
         vm.expectRevert(denied);
         tipping.setFee(1);
         vm.expectRevert(denied);
@@ -518,7 +523,10 @@ contract TippingTest is Test {
 
     /// @dev The immutability argument: NODL only ever leaves the caller's own balance.
     function testFuzz_transferFromOnlyFromCaller(address tipper, uint256 amount, uint16 bps) public {
-        vm.assume(tipper != address(0) && tipper != BOB && tipper != ADMIN && tipper != address(nodl) && tipper != address(tipping));
+        vm.assume(
+            tipper != address(0) && tipper != BOB && tipper != ADMIN && tipper != address(nodl)
+                && tipper != address(tipping)
+        );
         amount = bound(amount, MIN, 1e30);
         bps = uint16(bound(bps, 0, 1000));
         vm.prank(ADMIN);

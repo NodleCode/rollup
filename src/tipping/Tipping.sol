@@ -44,8 +44,11 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable {
     bytes32 public constant COLLECTION_OWNER_ROLE = keccak256("OWNER_ROLE");
     uint16 public constant MAX_FEE_BPS = 1000;
     uint256 public constant BPS = 10_000;
-    /// @dev Gas cap for every static lookup into a collection. Sized for the EVM; confirm on
-    ///      EraVM through the real ContentSign/UserCollection proxies before deploy (slice 6).
+    /// @dev Gas cap for every static lookup into a collection. Checked on EraVM (zkSync Era
+    ///      mainnet, 2026-10-27) through the real contracts with `eth_call` gas limits: a trivial
+    ///      call needs ~59k including the node's call overhead, and the heaviest lookup
+    ///      (`royaltyInfo` through The Turtle's ERC1967 proxy) ~70k, so each lookup itself is
+    ///      well under 12k. See test/tipping/TippingZkSyncFork.t.sol.
     uint256 public constant LOOKUP_GAS = 100_000;
 
     IERC20 private immutable _nodl;
@@ -92,9 +95,8 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable {
 
     function _resolve(address collection, uint256 tokenId) internal view returns (address recipient) {
         if (contentSignAllowed[collection]) {
-            (bool ok, bytes memory data) = collection.staticcall{gas: LOOKUP_GAS}(
-                abi.encodeCall(IERC721.ownerOf, (tokenId))
-            );
+            (bool ok, bytes memory data) =
+                collection.staticcall{gas: LOOKUP_GAS}(abi.encodeCall(IERC721.ownerOf, (tokenId)));
             if (!ok || data.length < 32) revert UnknownToken(collection, tokenId);
             recipient = abi.decode(data, (address));
             if (recipient == address(0)) revert NoRecipient(collection, tokenId);
@@ -105,15 +107,13 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable {
         if (creator == address(0)) revert UnknownCollection(collection);
 
         if (_supports(collection, type(IERC1155).interfaceId)) {
-            (bool ok, bytes memory data) = collection.staticcall{gas: LOOKUP_GAS}(
-                abi.encodeCall(IERC1155Supply.totalSupply, (tokenId))
-            );
+            (bool ok, bytes memory data) =
+                collection.staticcall{gas: LOOKUP_GAS}(abi.encodeCall(IERC1155Supply.totalSupply, (tokenId)));
             if (!ok || data.length < 32 || abi.decode(data, (uint256)) == 0) revert UnknownToken(collection, tokenId);
         }
 
-        (bool rOk, bytes memory rData) = collection.staticcall{gas: LOOKUP_GAS}(
-            abi.encodeCall(IERC2981.royaltyInfo, (tokenId, 1e18))
-        );
+        (bool rOk, bytes memory rData) =
+            collection.staticcall{gas: LOOKUP_GAS}(abi.encodeCall(IERC2981.royaltyInfo, (tokenId, 1e18)));
         if (rOk && rData.length >= 64) {
             (address receiver,) = abi.decode(rData, (address, uint256));
             if (receiver != address(0)) return receiver;
@@ -122,9 +122,8 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable {
     }
 
     function _supports(address target, bytes4 interfaceId) internal view returns (bool) {
-        (bool ok, bytes memory data) = target.staticcall{gas: LOOKUP_GAS}(
-            abi.encodeCall(IERC165.supportsInterface, (interfaceId))
-        );
+        (bool ok, bytes memory data) =
+            target.staticcall{gas: LOOKUP_GAS}(abi.encodeCall(IERC165.supportsInterface, (interfaceId)));
         return ok && data.length >= 32 && abi.decode(data, (bool));
     }
 
