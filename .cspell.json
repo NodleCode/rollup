@@ -16,6 +16,20 @@
     "src/swarms/doc/iso3166-2"
   ],
   "ignoreWords": [
+    "fundraise",
+    "Finalizable",
+    "tstore",
+    "fundraises",
+    "Fundraiser",
+    "unpledge",
+    "unpledges",
+    "blocklist",
+    "blocklisted",
+    "blocklisting",
+    "stablecoin",
+    "stablecoins",
+    "Juicebox",
+    "Allo",
     "AMPL",
     "NODL",
     "Nodle",
@@ -174,6 +188,7 @@
     "Fundings",
     "publicnode",
     "drpc",
-    "apikey"
+    "apikey",
+    "Firestore"
   ]
 }
