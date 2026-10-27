@@ -5,10 +5,16 @@
 # Verify a single Fundraiser on the ZKsync block explorer.
 #
 # Fundraises are created by the factory, not by the deploy script, so they never
-# appear in a broadcast file and ops/verify_zksync_contracts.py cannot pick them
-# up. Every constructor argument is readable from the contract itself, so this
-# reconstructs them from chain — no deployment record needed, and anyone can run
-# it against a fundraise they did not create.
+# appear in a broadcast file and the batch mode of ops/verify_zksync_contracts.py
+# cannot pick them up. Every constructor argument is readable from the contract
+# itself, so this reconstructs them from chain and hands them to that helper's
+# single-contract mode — no deployment record needed, and anyone can run it
+# against a fundraise they did not create.
+#
+# The helper, not `forge verify-contract`, does the submission: direct forge
+# submission keeps OpenZeppelin's "../" traversal imports in the standard JSON
+# and the ZKsync verifier rejects them. The helper rewrites those to
+# project-rooted paths before submitting.
 #
 # USAGE:
 #   ./ops/verify_fundraiser.sh <address> [testnet|mainnet]
@@ -34,8 +40,8 @@ esac
 
 cd "$PROJECT_ROOT"
 
-# `forge verify-contract` recompiles and has no --skip, so the L1-only contracts
-# zksolc rejects must be moved aside exactly as the deploy scripts do.
+# The helper builds its standard JSON from the whole tree, so the L1-only contracts
+# zksolc rejects are moved aside exactly as the deploy scripts do.
 BK="/tmp/rollup-l1-verify-fundraiser"
 restore() {
   [ -d "$BK" ] || return 0
@@ -78,10 +84,12 @@ fi
 echo "  name=$NAME token=$TOKEN goal=$GOAL deadline=$DEADLINE onMissed=$ON_MISSED"
 echo "  beneficiary=$BENEFICIARY organizer=$ORGANIZER feeBps=$FEE_BPS factory=$FACTORY"
 
+# Must match `Fundraiser(FundraiserParams p, uint16 feeBps_, address factory_)`, with
+# the organizer inside the params tuple, in struct field order.
 ARGS=$(cast abi-encode \
-  "constructor((string,address,uint128,uint40,uint8,address,uint128,uint128),address,uint16,address)" \
-  "($NAME,$TOKEN,$GOAL,$DEADLINE,$ON_MISSED,$BENEFICIARY,$MIN,$MAX)" \
-  "$ORGANIZER" "$FEE_BPS" "$FACTORY")
+  "constructor((string,address,uint128,uint40,uint8,address,address,uint128,uint128),uint16,address)" \
+  "($NAME,$TOKEN,$GOAL,$DEADLINE,$ON_MISSED,$BENEFICIARY,$ORGANIZER,$MIN,$MAX)" \
+  "$FEE_BPS" "$FACTORY")
 
 mkdir -p "$BK"
 mv src/swarms/SwarmRegistryL1Upgradeable.sol "$BK/" 2>/dev/null || true
@@ -90,7 +98,11 @@ mv test/upgrade-demo "$BK/" 2>/dev/null || true
 mv script/DeploySwarmUpgradeable.s.sol "$BK/" 2>/dev/null || true
 mv script/UpgradeSwarm.s.sol "$BK/" 2>/dev/null || true
 
-FOUNDRY_PROFILE=zksync forge verify-contract "$ADDRESS" \
-  src/fundraising/Fundraiser.sol:Fundraiser \
-  --zksync --verifier zksync --verifier-url "$VERIFIER" \
-  --constructor-args "$ARGS" --watch
+python3 "$SCRIPT_DIR/verify_zksync_contracts.py" \
+  --address "$ADDRESS" \
+  --contract src/fundraising/Fundraiser.sol:Fundraiser \
+  --constructor-args "$ARGS" \
+  --verifier-url "$VERIFIER" \
+  --compiler-version "${COMPILER_VERSION:-0.8.26}" \
+  --zksolc-version "${ZKSOLC_VERSION:-v1.5.15}" \
+  --project-root "$PROJECT_ROOT"

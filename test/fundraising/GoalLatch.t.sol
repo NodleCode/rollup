@@ -187,4 +187,29 @@ contract GoalLatchTest is FundraisingTestBase {
             f.unpledge(1);
         }
     }
+
+    /// @dev `unpledged` is a lifetime total: repeated deposit/unpledge cycles grow it without
+    ///      bound while `raised` stays below goal. A counter narrower than the sum of those
+    ///      cycles overflowed here and bricked every later unpledge, stranding contributors
+    ///      who were still below target.
+    function test_repeatedDepositUnpledge_lifetimeTotalExceedsUint128() public {
+        uint128 half = uint128(1) << 127;
+        FundraiserParams memory p = defaultParams();
+        p.goal = half + 1;
+        Fundraiser f = create(p);
+        token.mint(alice, uint256(half) * 2);
+
+        for (uint256 i = 0; i < 2; ++i) {
+            deposit(f, alice, half);
+            assertTrue(f.canUnpledge());
+            vm.prank(alice);
+            f.unpledge(half);
+        }
+
+        assertGt(f.unpledged(), type(uint128).max);
+        assertEq(f.unpledged(), uint256(half) * 2);
+        assertEq(f.raised(), 0);
+        assertEq(f.contributions(alice), 0);
+        assertTrue(f.canUnpledge());
+    }
 }

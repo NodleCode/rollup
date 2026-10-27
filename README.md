@@ -226,12 +226,10 @@ forge verify-contract <FACTORY_ADDRESS> src/fundraising/FundraiserFactory.sol:Fu
     --constructor-args $ARGS --watch
 ```
 
-Individual fundraises can be verified the same way against `src/fundraising/Fundraiser.sol:Fundraiser`, passing the constructor tuple. Their parameters are all readable from the deployed contract, so they can be reconstructed after the fact:
+Individual fundraises are created by the factory, so they never appear in a broadcast file. Their constructor parameters are all readable from the deployed contract, and [`ops/verify_fundraiser.sh`](ops/verify_fundraiser.sh) reconstructs them from chain and submits through the same Python helper:
 
 ```shell
-cast abi-encode "constructor((string,address,uint128,uint40,uint8,address,uint128,uint128),address,uint16,address)" \
-    "(\"<name>\",<token>,<goal>,<deadline>,<onMissed>,<beneficiary>,<min>,<max>)" \
-    <organizer> <feeBps> <factory>
+./ops/verify_fundraiser.sh <FUNDRAISER_ADDRESS> testnet   # or mainnet
 ```
 
 > [!NOTE]

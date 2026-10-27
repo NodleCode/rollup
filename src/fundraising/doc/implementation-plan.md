@@ -58,7 +58,7 @@ Types per spec §6.1 and A.1: `Status { Funding, Succeeded, Refunding, Closed }`
 
 `IFundraiserFactory`: `createFundraiser(params, externalId) returns (address)`, `setTokenAllowed`, `setFeeParams`, and the views `isFundraiser(addr)`, `isTokenAllowed`, `feeBps`, `feeRecipient`, `MAX_FEE_BPS` and `MAX_DURATION`. There is no `setImplementation` — nothing is proxied.
 
-Errors are custom and named for the condition, per repo convention — `PayBeneficiaryRequiresDeadline`, `GoalReached`, `RaisedOverflow`, `CapBelowGoal`, `NotFinalizable`, and the rest.
+Errors are custom and named for the condition, per repo convention — `PayBeneficiaryRequiresDeadline`, `GoalReached`, `CapBelowGoal`, `NotFinalizable`, and the rest.
 
 Events carry what indexers need: `ContributionMade(contributor, credited, raised)` reports the **credited** amount, and both it and `Unpledged` carry the running `raised` so no indexer assumes monotonic growth.
 
@@ -93,7 +93,7 @@ Admin functions touch the allow-list, fee parameters, and the implementation poi
 5. **`deadline == 0` has exactly four read sites.** `block.timestamp >= 0` is always true, so naive logic finalizes an open-ended fundraise as missed at birth. Guard the deposit cutoff, the finalize missed-branch, and creation validation on `deadline != 0`; the fourth site is presentational. Keep it to four.
 6. **`minContribution` must never stand between an fundraise and resolution.** A deposit that brings `raised` to at least `goal` is exempt from the minimum — a remaining gap smaller than the minimum must still be fillable. This is the direct generalization of the Party M-06 lesson, and `finalize` itself checks nothing about minimums, ever.
 7. **Fee: rate snapshotted, recipient live.** `feeBps` is passed by value into the constructor and never re-read, bounded by `MAX_FEE_BPS` at both `setFeeParams` and construction. The recipient is read from the factory at withdraw time so a lost collection key can be rotated without touching fundraises — safe precisely because the rate is frozen. Applied only on `withdraw`, rounded down, remainder to the beneficiary.
-8. **`uint128` truncation.** The credited delta is a `uint256`; require it fits before casting, with a named error. Unreachable for capped fundraises, a real branch for uncapped ones in an 18-decimal token.
+8. **Counters are `uint256`.** `raised`, `unpledged`, `refunded` and `feeOwed` are full-width and credited straight from the `uint256` delta, so there is no cast and no overflow branch. `unpledged` in particular is a lifetime total that repeated deposit/unpledge cycles grow without bound while `raised` stays below goal; a `uint128` there could overflow and brick every later unpledge.
 
 ---
 

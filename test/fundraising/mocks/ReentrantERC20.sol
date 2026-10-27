@@ -11,9 +11,12 @@ contract ReentrantERC20 is ERC20 {
     bytes public payload;
     bool public armed;
 
-    /// @notice Set when a reentrant call was attempted, and whether it succeeded.
+    /// @notice Set when a reentrant call was attempted, whether it succeeded, and the
+    ///         revert data it came back with. Tests assert on the revert data: a refused
+    ///         reentry proves nothing unless it was the guard that refused it.
     bool public attempted;
     bool public succeeded;
+    bytes public revertData;
 
     constructor() ERC20("Reentrant", "REE") {}
 
@@ -27,6 +30,7 @@ contract ReentrantERC20 is ERC20 {
         armed = true;
         attempted = false;
         succeeded = false;
+        delete revertData;
     }
 
     function _update(address from, address to, uint256 value) internal override {
@@ -34,8 +38,9 @@ contract ReentrantERC20 is ERC20 {
         if (armed && target != address(0)) {
             armed = false; // one shot
             attempted = true;
-            (bool ok,) = target.call(payload);
+            (bool ok, bytes memory data) = target.call(payload);
             succeeded = ok;
+            revertData = data;
         }
     }
 }

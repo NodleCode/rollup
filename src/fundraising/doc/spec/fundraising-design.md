@@ -367,9 +367,9 @@ uint128  maxTotalContributions;
 
 // mutable
 Status  status;
-uint128 raised;            // net credited contributions; decremented by unpledge
-uint128 unpledged;
-uint128 refunded;
+uint256 raised;            // net credited contributions; decremented by unpledge
+uint256 unpledged;         // lifetime total, so wider than any single balance
+uint256 refunded;
 mapping(address => uint256) contributions;
 ```
 

@@ -5,6 +5,7 @@ import "./FundraisingTestBase.sol";
 import {FeeOnTransferERC20} from "./mocks/FeeOnTransferERC20.sol";
 import {ReentrantERC20} from "./mocks/ReentrantERC20.sol";
 import {BlocklistERC20} from "./mocks/BlocklistERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @notice Getting money back out, including against tokens that misbehave.
 contract RefundsTest is FundraisingTestBase {
@@ -142,6 +143,7 @@ contract RefundsTest is FundraisingTestBase {
 
         assertTrue(ree.attempted(), "the mock should have tried to reenter");
         assertFalse(ree.succeeded(), "reentrancy must be refused");
+        _assertRefusedByGuard(ree);
         assertEq(ree.balanceOf(address(f)), 0);
     }
 
@@ -159,6 +161,7 @@ contract RefundsTest is FundraisingTestBase {
 
         assertTrue(ree.attempted());
         assertFalse(ree.succeeded());
+        _assertRefusedByGuard(ree);
         assertEq(f.contributions(alice), 200e6);
     }
 
@@ -177,7 +180,19 @@ contract RefundsTest is FundraisingTestBase {
 
         assertTrue(ree.attempted());
         assertFalse(ree.succeeded());
+        _assertRefusedByGuard(ree);
         assertEq(ree.balanceOf(beneficiary), GOAL);
+    }
+
+    /// @dev The reentrant call comes from the token address, which would fail ordinary
+    ///      validation anyway (no contribution, wrong caller, already `Closed`). Only the
+    ///      guard's own error proves `nonReentrant` is what stopped it.
+    function _assertRefusedByGuard(ReentrantERC20 ree) internal view {
+        assertEq(
+            ree.revertData(),
+            abi.encodeWithSelector(ReentrancyGuard.ReentrancyGuardReentrantCall.selector),
+            "reentry must be refused by the guard, not by later validation"
+        );
     }
 
     // ──────────────────────────────────────────────

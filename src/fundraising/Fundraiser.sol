@@ -72,16 +72,16 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
 
     /// @inheritdoc IFundraiser
     /// @dev Not monotonic: `unpledge` decrements it.
-    uint128 public override raised;
+    uint256 public override raised;
 
     /// @inheritdoc IFundraiser
-    uint128 public override unpledged;
+    uint256 public override unpledged;
 
     /// @inheritdoc IFundraiser
-    uint128 public override refunded;
+    uint256 public override refunded;
 
     /// @inheritdoc IFundraiser
-    uint128 public override feeOwed;
+    uint256 public override feeOwed;
 
     /// @inheritdoc IFundraiser
     mapping(address => uint256) public override contributions;
@@ -168,8 +168,7 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
         uint256 credited = t.balanceOf(address(this)) - balanceBefore;
         if (credited == 0) revert ZeroAmount();
 
-        uint256 newRaised = uint256(raised) + credited;
-        if (newRaised > type(uint128).max) revert RaisedOverflow(raised, credited);
+        uint256 newRaised = raised + credited;
 
         if (maxTotalContributions != 0 && newRaised > maxTotalContributions) {
             revert CapExceeded(credited, maxTotalContributions - raised);
@@ -183,7 +182,7 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
         }
 
         contributions[msg.sender] += credited;
-        raised = uint128(newRaised);
+        raised = newRaised;
 
         emit ContributionMade(msg.sender, credited, newRaised);
     }
@@ -201,8 +200,8 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
         if (amount > contributed) revert InsufficientContribution(amount, contributed);
 
         contributions[msg.sender] = contributed - amount;
-        raised -= uint128(amount);
-        unpledged += uint128(amount);
+        raised -= amount;
+        unpledged += amount;
 
         IERC20(token).safeTransfer(msg.sender, amount);
 
@@ -268,7 +267,7 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
         // the token — a blocklisting stablecoin, say — would revert the whole call and
         // strand the pot until an admin rotated the recipient. Resolution must never
         // depend on admin cooperation. The recipient pulls separately via `collectFee`.
-        feeOwed = uint128(fee);
+        feeOwed = fee;
 
         if (net != 0) IERC20(token).safeTransfer(payTo, net);
 
@@ -321,7 +320,7 @@ contract Fundraiser is IFundraiser, ReentrancyGuard {
         if (amount == 0) revert NothingToRefund(contributor);
 
         contributions[contributor] = 0;
-        refunded += uint128(amount);
+        refunded += amount;
 
         IERC20(token).safeTransfer(contributor, amount);
 

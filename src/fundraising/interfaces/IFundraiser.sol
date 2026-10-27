@@ -110,9 +110,6 @@ interface IFundraiser {
     /// @notice Thrown when a deposit would push total contributions past the cap.
     error CapExceeded(uint256 credited, uint256 remaining);
 
-    /// @notice Thrown when credited contributions would exceed `type(uint128).max`.
-    error RaisedOverflow(uint256 raised, uint256 credited);
-
     /// @notice Thrown when an amount argument is zero.
     /// @dev Zero-value calls are rejected rather than accepted as no-ops: they emit
     ///      misleading events and, where gas is sponsored, invite dust griefing.
@@ -239,14 +236,14 @@ interface IFundraiser {
 
     function status() external view returns (Status);
     /// @notice Total credited contributions. Decreases when a contributor unpledges.
-    function raised() external view returns (uint128);
+    function raised() external view returns (uint256);
     /// @notice Running total withdrawn by contributors before the goal was reached.
-    function unpledged() external view returns (uint128);
+    function unpledged() external view returns (uint256);
     /// @notice Running total returned to contributors after entering `Refunding`.
-    function refunded() external view returns (uint128);
+    function refunded() external view returns (uint256);
 
     /// @notice Protocol fee accrued by `withdraw` and not yet collected.
-    function feeOwed() external view returns (uint128);
+    function feeOwed() external view returns (uint256);
     function contributions(address contributor) external view returns (uint256);
 
     /// @notice Amount still needed to reach the goal, or zero once reached.
