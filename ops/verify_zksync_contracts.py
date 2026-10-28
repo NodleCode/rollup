@@ -166,6 +166,44 @@ def fix_traversal_imports(std_json: dict) -> int:
     return changed
 
 
+def apply_remappings(std_json: dict) -> int:
+    """Inline Foundry remappings into import statements and drop `settings.remappings`.
+
+    Since 2026-10 the explorer verifier rejects `settings.remappings` ("imports must match
+    `sources` keys exactly"). Source keys are already project-relative (e.g.
+    lib/openzeppelin-contracts/contracts/...), so rewriting `@openzeppelin/contracts/X` to
+    its remapped path makes every import match a key. Longest remapping prefix wins.
+    Returns the number of import lines rewritten.
+    """
+    remappings = std_json.get("settings", {}).pop("remappings", None) or []
+    pairs = []
+    for r in remappings:
+        if "=" in r:
+            prefix, target = r.split("=", 1)
+            pairs.append((prefix, target))
+    pairs.sort(key=lambda x: -len(x[0]))
+    source_keys = set(std_json["sources"].keys())
+    pattern = re.compile(r'(import\s+.*?["\'])([^"\'.][^"\']*)(["\'].*)')
+    changed = 0
+    for src_key in list(std_json["sources"].keys()):
+        lines = std_json["sources"][src_key]["content"].split("\n")
+        out = []
+        for line in lines:
+            m = pattern.match(line)
+            if m:
+                prefix, path, suffix = m.groups()
+                for rp, target in pairs:
+                    if path.startswith(rp):
+                        new_path = target + path[len(rp):]
+                        if new_path in source_keys:
+                            line = prefix + new_path + suffix
+                            changed += 1
+                        break
+            out.append(line)
+        std_json["sources"][src_key]["content"] = "\n".join(out)
+    return changed
+
+
 def generate_standard_json(
     address: str,
     contract: str,
@@ -258,7 +296,7 @@ def verify_one(
     std_json = generate_standard_json(
         address, contract, constructor_args, solc_version, project_root
     )
-    fixes = fix_traversal_imports(std_json)
+    fixes = apply_remappings(std_json) + fix_traversal_imports(std_json)
     print(f"done (rewrote {fixes} imports)")
 
     # Step 2: Submit
