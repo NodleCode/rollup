@@ -88,13 +88,13 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
         if (!isValidTipRecipient(collection, standard, tokenId, recipient)) {
             revert NotRecipient(collection, tokenId, recipient);
         }
-        uint256 fee = _pay(token, recipient, amount);
+        uint256 fee = _transferTipWithFee(token, recipient, amount);
         emit Tipped(msg.sender, collection, tokenId, token, recipient, amount, fee);
     }
 
     /// @inheritdoc ITipping
     function tipAccount(address token, address to, uint256 amount) external nonReentrant {
-        uint256 fee = _pay(token, to, amount);
+        uint256 fee = _transferTipWithFee(token, to, amount);
         emit AccountTipped(msg.sender, to, token, amount, fee);
     }
 
@@ -136,7 +136,7 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
 
     /// @dev Shared guards and transfers. Only ever pulls from msg.sender: the property the
     ///      immutability argument rests on. Returns the fee taken.
-    function _pay(address token, address to, uint256 amount) internal returns (uint256 fee) {
+    function _transferTipWithFee(address token, address to, uint256 amount) internal returns (uint256 fee) {
         if (token == address(0) || to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
         if (to == msg.sender) revert SelfTip();

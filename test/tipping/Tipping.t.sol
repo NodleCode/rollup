@@ -509,6 +509,7 @@ contract TippingTest is Test {
         vm.prank(ADMIN);
         tipping.setFee(bps);
         nodl.mint(tipper, amount);
+        uint256 before = nodl.balanceOf(tipper); // ALICE already holds a balance from setUp
         vm.prank(tipper);
         nodl.approve(address(tipping), amount);
 
@@ -529,6 +530,6 @@ contract TippingTest is Test {
             total += nodl.amounts(i);
         }
         assertEq(total, amount);
-        assertEq(nodl.balanceOf(tipper), 0);
+        assertEq(nodl.balanceOf(tipper), before - amount);
     }
 }
