@@ -91,6 +91,7 @@ CONTRACT_SOURCE_MAP = {
     "UserCollection1155": "src/collections/UserCollection1155.sol:UserCollection1155",
     "FundraiserFactory": "src/fundraising/FundraiserFactory.sol:FundraiserFactory",
     "Fundraiser": "src/fundraising/Fundraiser.sol:Fundraiser",
+    "ArcadeEscrow": "src/arcade/ArcadeEscrow.sol:ArcadeEscrow",
 }
 
 # Some zkSync forge broadcasts record deployments as calls to ContractDeployer
@@ -123,6 +124,9 @@ BROADCAST_CONTRACT_SEQUENCE = {
     # separately with ops/verify_fundraiser.sh.
     "DeployFundraiserFactory.s.sol": [
         "FundraiserFactory",
+    ],
+    "DeployArcadeEscrow.s.sol": [
+        "ArcadeEscrow",
     ],
 }
 

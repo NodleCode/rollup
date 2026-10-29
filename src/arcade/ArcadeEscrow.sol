@@ -19,11 +19,13 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  *      - A wallet leaves with `requestWithdraw` → `withdraw` after `withdrawDelay`. The delay covers
  *        builds already running; arcade-forge never starts a build while a request is pending.
  *
- *      Safety properties:
- *      - The admin withdraws `feesAccrued` only, never users' balances, so
+ *      Trust model: the admin (a multisig) is trusted. It grants `ORACLE_ROLE` and sets
+ *      `maxCharge` and the quota, so it could charge balances through an oracle it controls. What
+ *      the contract guarantees is narrower, and holds even with a compromised oracle key:
+ *      - `withdrawFees` reaches `feesAccrued` only, never a user's balance, so
  *        `token.balanceOf(this) >= Σ balanceOf + feesAccrued` always holds.
  *      - `maxCharge` per call and `QuotaControl` per period bound a leaked oracle key, which can
- *        only move NODL into `feesAccrued`.
+ *        only move NODL into `feesAccrued`, which it cannot withdraw.
  *      - Pausing blocks `deposit` and `charge`, never a withdrawal.
  *      - `withdrawDelay` is capped by `MAX_WITHDRAW_DELAY`, so the admin cannot lock balances.
  *      - Not upgradeable. `token` must be a plain ERC-20 (no fee on transfer, no rebasing): NODL.
@@ -52,8 +54,8 @@ contract ArcadeEscrow is QuotaControl, Pausable, ReentrancyGuard {
     /// @dev At most one pending withdrawal per wallet.
     mapping(address => Withdrawal) public withdrawals;
 
-    /// @dev Refs already charged, for idempotent settlement.
-    mapping(bytes32 => bool) public charged;
+    /// @dev Per charged ref, `keccak256(account, amount)`, for idempotent settlement.
+    mapping(bytes32 => bytes32) public chargeOf;
 
     /// @dev Charged NODL the admin may withdraw.
     uint256 public feesAccrued;
@@ -86,6 +88,7 @@ contract ArcadeEscrow is QuotaControl, Pausable, ReentrancyGuard {
     error WithdrawalNotReady(uint64 readyAt);
     error AboveMaxCharge(uint256 amount, uint256 maxCharge);
     error AlreadyCharged(bytes32 ref);
+    error ChargeConflict(bytes32 ref);
     error InsufficientFees(uint256 feesAccrued, uint256 needed);
     error WithdrawDelayTooLong(uint64 withdrawDelay);
 
@@ -179,12 +182,18 @@ contract ArcadeEscrow is QuotaControl, Pausable, ReentrancyGuard {
 
     /**
      * @notice Charges `amount` from `account`'s balance into `feesAccrued`, once per `ref`.
-     * @dev A repeated `ref` reverts with `AlreadyCharged`, which the settlement worker reads
-     *      as "already settled". Counted against the per-period quota.
+     * @dev A retry with the same `ref`, account and amount reverts with `AlreadyCharged`, which the
+     *      settlement worker reads as "already settled". The same `ref` with a different account or
+     *      amount reverts with `ChargeConflict`. Counted against the per-period quota.
      */
     function charge(address account, uint256 amount, bytes32 ref) external whenNotPaused onlyRole(ORACLE_ROLE) {
         if (amount == 0) revert ZeroAmount();
-        if (charged[ref]) revert AlreadyCharged(ref);
+        bytes32 payload = keccak256(abi.encode(account, amount));
+        bytes32 previous = chargeOf[ref];
+        if (previous != 0) {
+            if (previous == payload) revert AlreadyCharged(ref);
+            revert ChargeConflict(ref);
+        }
         if (amount > maxCharge) revert AboveMaxCharge(amount, maxCharge);
         uint256 balance = balanceOf[account];
         if (amount > balance) revert InsufficientBalance(balance, amount);
@@ -192,10 +201,15 @@ contract ArcadeEscrow is QuotaControl, Pausable, ReentrancyGuard {
         _checkedResetClaimed();
         _checkedUpdateClaimed(amount);
 
-        charged[ref] = true;
+        chargeOf[ref] = payload;
         balanceOf[account] = balance - amount;
         feesAccrued += amount;
         emit Charged(account, amount, ref);
+    }
+
+    /// @notice Whether `ref` has been charged.
+    function charged(bytes32 ref) external view returns (bool) {
+        return chargeOf[ref] != 0;
     }
 
     // ── Admin ─────────────────────────────────────────────

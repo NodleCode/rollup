@@ -282,6 +282,23 @@ contract ArcadeEscrowTest is Test {
         assertEq(escrow.balanceOf(alice), 9 ether);
     }
 
+    function test_chargeRefReusedWithDifferentPayloadConflicts() public {
+        _deposit(alice, 10 ether);
+        _deposit(bob, 10 ether);
+        bytes32 ref = keccak256("nonce");
+        _charge(alice, 1 ether, ref);
+
+        vm.startPrank(oracle);
+        vm.expectRevert(abi.encodeWithSelector(ArcadeEscrow.ChargeConflict.selector, ref));
+        escrow.charge(bob, 1 ether, ref);
+        vm.expectRevert(abi.encodeWithSelector(ArcadeEscrow.ChargeConflict.selector, ref));
+        escrow.charge(alice, 2 ether, ref);
+        vm.stopPrank();
+
+        assertEq(escrow.balanceOf(alice), 9 ether);
+        assertEq(escrow.balanceOf(bob), 10 ether);
+    }
+
     function test_chargeValidates() public {
         _deposit(alice, 10 ether);
         vm.startPrank(oracle);
