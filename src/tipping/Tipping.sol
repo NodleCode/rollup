@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
@@ -24,10 +23,12 @@ import {ITipping} from "./ITipping.sol";
  * deadline and a single-use nonce, so a signature cannot be replayed or redirected.
  * Account tips name their recipient directly and need no signature.
  *
- * Roles: DEFAULT_ADMIN_ROLE (fee, fee recipient, signer, pause). `signer` is a single address,
+ * Roles: DEFAULT_ADMIN_ROLE (fee, fee recipient, signer). There is no pause: the contract holds
+ * no funds and only moves the caller's own tokens, so nobody needs the power to stop people
+ * from tipping each other (review decision 2026-10-28). `signer` is a single address,
  * rotated in one call so a leaked key stops working immediately; it may be a contract (ERC-1271).
  */
-contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable, EIP712 {
+contract Tipping is ITipping, AccessControl, ReentrancyGuard, EIP712 {
     using SafeERC20 for IERC20;
 
     uint16 public constant MAX_FEE_BPS = 1000;
@@ -54,7 +55,7 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable, EIP712 {
     // ───────── Tipping ─────────
 
     /// @inheritdoc ITipping
-    function tip(TipAuthorization calldata auth, bytes calldata signature) external whenNotPaused nonReentrant {
+    function tip(TipAuthorization calldata auth, bytes calldata signature) external nonReentrant {
         if (
             auth.tipper != msg.sender
                 || !SignatureChecker.isValidSignatureNow(signer, hashAuthorization(auth), signature)
@@ -70,7 +71,7 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable, EIP712 {
     }
 
     /// @inheritdoc ITipping
-    function tipAccount(address token, address to, uint256 amount) external whenNotPaused nonReentrant {
+    function tipAccount(address token, address to, uint256 amount) external nonReentrant {
         uint256 fee = _pay(token, to, amount);
         emit AccountTipped(msg.sender, to, token, amount, fee);
     }
@@ -125,13 +126,5 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard, Pausable, EIP712 {
         if (recipient == address(this)) revert InvalidFeeRecipient(recipient);
         feeRecipient = recipient;
         emit FeeRecipientUpdated(recipient);
-    }
-
-    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _pause();
-    }
-
-    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _unpause();
     }
 }

@@ -24,8 +24,6 @@ interface ITipping {
     event FeeUpdated(uint16 feeBps);
     event FeeRecipientUpdated(address indexed feeRecipient);
     event SignerUpdated(address indexed signer);
-    // `Paused(address)` / `Unpaused(address)` come from OpenZeppelin Pausable and are part of
-    // the indexed surface too; do not strip them from the generated ABI.
 
     error ZeroAddress();
     error ZeroAmount();

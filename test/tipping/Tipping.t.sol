@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
@@ -129,7 +128,6 @@ contract TippingTest is Test {
         assertEq(tipping.feeBps(), 0);
         assertEq(tipping.feeRecipient(), ADMIN);
         assertTrue(tipping.hasRole(tipping.DEFAULT_ADMIN_ROLE(), ADMIN));
-        assertFalse(tipping.paused());
     }
 
     function test_constructor_emitsInitialSettings() public {
@@ -343,31 +341,6 @@ contract TippingTest is Test {
         vm.stopPrank();
     }
 
-    // ───────── Pause ─────────
-
-    function test_pauseBlocksBothPaths() public {
-        vm.prank(ADMIN);
-        vm.expectEmit(true, true, true, true);
-        emit Pausable.Paused(ADMIN);
-        tipping.pause();
-        ITipping.TipAuthorization memory a = auth(address(nodl), BOB, 5e18);
-        bytes memory sig = sign(signerKey, a);
-        vm.prank(ALICE);
-        vm.expectRevert(Pausable.EnforcedPause.selector);
-        tipping.tip(a, sig);
-        vm.prank(ALICE);
-        vm.expectRevert(Pausable.EnforcedPause.selector);
-        tipping.tipAccount(address(nodl), BOB, 1e18);
-
-        vm.prank(ADMIN);
-        vm.expectEmit(true, true, true, true);
-        emit Pausable.Unpaused(ADMIN);
-        tipping.unpause();
-        vm.prank(ALICE);
-        tipping.tip(a, sig);
-        assertEq(nodl.balanceOf(BOB), 5e18);
-    }
-
     // ───────── Fees ─────────
 
     function test_feeSplitAndCap() public {
@@ -433,10 +406,6 @@ contract TippingTest is Test {
         tipping.setFee(1);
         vm.expectRevert(denied);
         tipping.setFeeRecipient(BOB);
-        vm.expectRevert(denied);
-        tipping.pause();
-        vm.expectRevert(denied);
-        tipping.unpause();
         vm.stopPrank();
         vm.prank(ADMIN);
         vm.expectRevert(ITipping.ZeroAddress.selector);

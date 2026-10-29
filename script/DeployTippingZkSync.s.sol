@@ -16,7 +16,7 @@ import {Tipping} from "../src/tipping/Tipping.sol";
  *
  * Environment Variables:
  *   - DEPLOYER_PRIVATE_KEY:  Private key with ETH for gas.
- *   - N_TIPPING_ADMIN:       Multisig that will hold DEFAULT_ADMIN_ROLE (fee, fee recipient, signer, pause).
+ *   - N_TIPPING_ADMIN:       Multisig that will hold DEFAULT_ADMIN_ROLE (fee, fee recipient, signer).
  *   - N_TIPPING_SIGNER:      Address whose EIP-712 signatures authorize post tips (the feed API's
  *                            signing key, or an ERC-1271 contract). Rotatable by the admin.
  */
