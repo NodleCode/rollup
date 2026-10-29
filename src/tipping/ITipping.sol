@@ -30,6 +30,8 @@ interface ITipping {
     event AccountTipped(address indexed tipper, address indexed to, address token, uint256 amount, uint256 fee);
     event FeeUpdated(uint16 feeBps);
     event FeeRecipientUpdated(address indexed feeRecipient);
+    /// @notice Accrued fees in `token` were sent to the fee recipient.
+    event FeesWithdrawn(address indexed token, address indexed to, uint256 amount);
 
     error ZeroAddress();
     error ZeroAmount();
@@ -53,6 +55,9 @@ interface ITipping {
         external
         view
         returns (bool);
+    /// @notice Send everything this contract holds in `token` (accrued fees) to the fee recipient. Anyone may call.
+    function withdrawFees(address token) external;
+
     function feeBps() external view returns (uint16);
     function feeRecipient() external view returns (address);
 }

@@ -414,14 +414,14 @@ contract TippingTest is Test {
         vm.expectEmit(true, true, true, true);
         emit ITipping.FeeUpdated(250);
         tipping.setFee(250);
-        vm.prank(ADMIN);
-        tipping.setFeeRecipient(CREATOR);
 
         vm.expectEmit(true, true, true, true);
         emit ITipping.Tipped(ALICE, address(post), POST_ID, address(nodl), BOB, 100e18, 2.5e18);
         tipPost(ALICE, 100e18);
         assertEq(nodl.balanceOf(BOB), 97.5e18);
-        assertEq(nodl.balanceOf(CREATOR), 2.5e18);
+        // The fee accrues in the contract; the fee recipient is paid on withdraw, not per tip.
+        assertEq(nodl.balanceOf(address(tipping)), 2.5e18);
+        assertEq(nodl.balanceOf(ADMIN), 0);
         assertEq(nodl.transfers(), 2);
 
         vm.prank(ADMIN);
@@ -432,13 +432,41 @@ contract TippingTest is Test {
         assertEq(tipping.feeBps(), 1000);
     }
 
+    function test_withdrawFees_anyoneSendsAccruedToFeeRecipient() public {
+        vm.prank(ADMIN);
+        tipping.setFee(1000);
+        vm.prank(ADMIN);
+        tipping.setFeeRecipient(CREATOR);
+        tipPost(ALICE, 50e18);
+        vm.prank(ALICE);
+        tipping.tipAccount(address(nodl), BOB, 10e18);
+        assertEq(nodl.balanceOf(address(tipping)), 6e18);
+
+        vm.expectEmit(true, true, true, true);
+        emit ITipping.FeesWithdrawn(address(nodl), CREATOR, 6e18);
+        vm.prank(BOB); // permissionless
+        tipping.withdrawFees(address(nodl));
+        assertEq(nodl.balanceOf(CREATOR), 6e18);
+        assertEq(nodl.balanceOf(address(tipping)), 0);
+
+        // Nothing accrued: revert rather than emit a zero withdrawal.
+        vm.expectRevert(ITipping.ZeroAmount.selector);
+        tipping.withdrawFees(address(nodl));
+        vm.expectRevert(ITipping.ZeroAddress.selector);
+        tipping.withdrawFees(address(0));
+        // Stray tokens sent directly are recoverable the same way.
+        usdc.mint(address(tipping), 7e6);
+        tipping.withdrawFees(address(usdc));
+        assertEq(usdc.balanceOf(CREATOR), 7e6);
+    }
+
     function test_feeRoundsDownInFavourOfRecipient() public {
         vm.prank(ADMIN);
         tipping.setFee(1);
         vm.prank(ALICE);
         tipping.tipAccount(address(nodl), BOB, 9_999);
         assertEq(nodl.balanceOf(BOB), 9_999);
-        assertEq(nodl.balanceOf(ADMIN), 0);
+        assertEq(nodl.balanceOf(address(tipping)), 0);
         assertEq(nodl.transfers(), 1);
     }
 

@@ -28,7 +28,8 @@ interface IOwnableLike {
  * @notice Immutable, agnostic tipping (nft-feed-indexer design §6.2, v2 of 2026-10-28). No proxy,
  *         no upgrade path, no pause, no backend signature: an allowance granted to this address
  *         can only ever be spent by the approver's own `tip`/`tipAccount` calls, because
- *         `transferFrom` is only called with `from == msg.sender`. The contract holds no funds.
+ *         `transferFrom` is only called with `from == msg.sender`. The only balance the contract
+ *         ever holds is accrued fees, which `withdrawFees` sends to the fee recipient.
  *
  * Post tips name their recipient (the feed knows who made or holds a post); the contract only
  * verifies the claim against the NFT: ERC-721 → `ownerOf(tokenId) == recipient`; ERC-1155 →
@@ -37,6 +38,11 @@ interface IOwnableLike {
  * enumerated from an ERC-1155, but a claim can be checked. The lookups are `view` calls
  * (STATICCALL) behind try/catch, so a hostile collection can only make the tip revert or burn
  * the tipper's own gas. Account tips name their recipient with no check.
+ *
+ * Fees (review decision 2026-10-28): the fee share of a tip stays in this contract and is moved to
+ * `feeRecipient` by `withdrawFees(token)`, which anyone may call; the tipper never pays for the
+ * fee recipient's transfer, and fee-on-transfer or stray tokens are handled by sending the
+ * actual balance.
  *
  * Roles: DEFAULT_ADMIN_ROLE (fee ≤ 10 %, fee recipient).
  */
@@ -129,7 +135,17 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
         if (to == msg.sender) revert SelfTip();
         fee = (amount * feeBps) / BPS;
         IERC20(token).safeTransferFrom(msg.sender, to, amount - fee);
-        if (fee > 0) IERC20(token).safeTransferFrom(msg.sender, feeRecipient, fee);
+        if (fee > 0) IERC20(token).safeTransferFrom(msg.sender, address(this), fee);
+    }
+
+    /// @inheritdoc ITipping
+    function withdrawFees(address token) external nonReentrant {
+        if (token == address(0)) revert ZeroAddress();
+        uint256 amount = IERC20(token).balanceOf(address(this));
+        if (amount == 0) revert ZeroAmount();
+        address to = feeRecipient;
+        IERC20(token).safeTransfer(to, amount);
+        emit FeesWithdrawn(token, to, amount);
     }
 
     // ───────── Admin ─────────
@@ -142,7 +158,7 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
 
     function setFeeRecipient(address recipient) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (recipient == address(0)) revert ZeroAddress();
-        // No rescue path exists in an immutable contract: fees sent to this address are lost.
+        // Withdrawing to itself would be a no-op: fees could never leave the contract.
         if (recipient == address(this)) revert InvalidFeeRecipient(recipient);
         feeRecipient = recipient;
         emit FeeRecipientUpdated(recipient);
