@@ -15,6 +15,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 NETWORK="${1:-}"; BROADCAST="${2:-}"
+case "$BROADCAST" in
+  ""|--broadcast) ;;
+  *) echo "usage: $0 <testnet|mainnet> [--broadcast]  (second argument must be exactly --broadcast or omitted)"; exit 1 ;;
+esac
 case "$NETWORK" in
   testnet) RPC_URL="${L2_RPC:-https://sepolia.era.zksync.dev}" ;;
   mainnet) RPC_URL="${L2_RPC:-https://mainnet.era.zksync.io}" ;;

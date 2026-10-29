@@ -89,6 +89,23 @@ contract NodleEdition1155 is ERC1155Supply, AccessControl {
     }
 }
 
+/// @dev A Nodle-style ERC-721 collection: OWNER_ROLE held by the creator (like UserCollection721).
+contract NodleCollection721 is ERC721, AccessControl {
+    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
+
+    constructor(address owner_) ERC721("Nodle721", "N721") {
+        _grantRole(OWNER_ROLE, owner_);
+    }
+
+    function mint(address to, uint256 id) external {
+        _mint(to, id);
+    }
+
+    function supportsInterface(bytes4 id) public view override(ERC721, AccessControl) returns (bool) {
+        return super.supportsInterface(id);
+    }
+}
+
 /// @dev A third-party Ownable edition: no roles, no royalty, no supply tracking.
 contract Ownable1155 is ERC1155, Ownable {
     constructor(address owner_) ERC1155("ipfs://o") Ownable(owner_) {}
@@ -336,6 +353,21 @@ contract TippingTest is Test {
     }
 
     // ───────── Resolution guards ─────────
+
+    function test_tip_erc721WithOwnerRolePassedAs1155IsRefused() public {
+        // Regression (Copilot review): a role-bearing ERC-721 declared as ERC-1155 must not skip
+        // ownerOf and pay the creator for a transferred, burned or never-minted id.
+        NodleCollection721 col = new NodleCollection721(CREATOR);
+        col.mint(BOB, 1);
+        assertFalse(tipping.isValidTipRecipient(address(col), ITipping.NFTStandard.ERC1155, 1, CREATOR));
+        assertFalse(tipping.isValidTipRecipient(address(col), ITipping.NFTStandard.ERC1155, 99, CREATOR));
+        vm.prank(ALICE);
+        vm.expectRevert(notRecipient(address(col), 99, CREATOR));
+        tipping.tip(address(col), ITipping.NFTStandard.ERC1155, 99, CREATOR, address(nodl), 1e18);
+        // Declared correctly it pays the owner and refuses the creator.
+        assertTrue(tipping.isValidTipRecipient(address(col), ITipping.NFTStandard.ERC721, 1, BOB));
+        assertFalse(tipping.isValidTipRecipient(address(col), ITipping.NFTStandard.ERC721, 1, CREATOR));
+    }
 
     function test_tip_wrongStandardFailsToResolve() public {
         // ERC-1155 path on a plain ERC-721: no totalSupply, no royaltyInfo.

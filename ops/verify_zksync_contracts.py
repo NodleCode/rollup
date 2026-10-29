@@ -85,6 +85,7 @@ CONTRACT_SOURCE_MAP = {
     "FleetIdentityUpgradeable": "src/swarms/FleetIdentityUpgradeable.sol:FleetIdentityUpgradeable",
     "SwarmRegistryUniversalUpgradeable": "src/swarms/SwarmRegistryUniversalUpgradeable.sol:SwarmRegistryUniversalUpgradeable",
     "ERC1967Proxy": "lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy",
+    "Tipping": "src/tipping/Tipping.sol:Tipping",
     "BondTreasuryPaymaster": "src/paymasters/BondTreasuryPaymaster.sol:BondTreasuryPaymaster",
     "CollectionFactory": "src/collections/CollectionFactory.sol:CollectionFactory",
     "UserCollection721": "src/collections/UserCollection721.sol:UserCollection721",
@@ -97,6 +98,7 @@ CONTRACT_SOURCE_MAP = {
 # with unnamed `additionalContracts`. For those scripts, recover the deployed
 # contract type by the deterministic deployment order inside the script.
 BROADCAST_CONTRACT_SEQUENCE = {
+    "DeployTippingZkSync.s.sol": ["Tipping"],
     "DeployEnvelopeZkSync.s.sol": [
         "EnvelopeLinks",
         "EnvelopePaymaster",
@@ -183,24 +185,24 @@ def apply_remappings(std_json: dict) -> int:
             pairs.append((prefix, target))
     pairs.sort(key=lambda x: -len(x[0]))
     source_keys = set(std_json["sources"].keys())
-    pattern = re.compile(r'(import\s+.*?["\'])([^"\'.][^"\']*)(["\'].*)')
+    # Whole-statement match: imports may span lines (`import {A, B} from\n    "@openzeppelin/..."`).
+    pattern = re.compile(r'(\bimport\b[^;]*?["\'])([^"\'.][^"\']*)(["\'])', re.S)
     changed = 0
+
+    def rewrite(m: "re.Match[str]") -> str:
+        nonlocal changed
+        prefix, path, quote = m.groups()
+        for rp, target in pairs:
+            if path.startswith(rp):
+                new_path = target + path[len(rp):]
+                if new_path in source_keys:
+                    changed += 1
+                    return prefix + new_path + quote
+                break
+        return m.group(0)
+
     for src_key in list(std_json["sources"].keys()):
-        lines = std_json["sources"][src_key]["content"].split("\n")
-        out = []
-        for line in lines:
-            m = pattern.match(line)
-            if m:
-                prefix, path, suffix = m.groups()
-                for rp, target in pairs:
-                    if path.startswith(rp):
-                        new_path = target + path[len(rp):]
-                        if new_path in source_keys:
-                            line = prefix + new_path + suffix
-                            changed += 1
-                        break
-            out.append(line)
-        std_json["sources"][src_key]["content"] = "\n".join(out)
+        std_json["sources"][src_key]["content"] = pattern.sub(rewrite, std_json["sources"][src_key]["content"])
     return changed
 
 

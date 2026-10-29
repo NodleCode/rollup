@@ -7,6 +7,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC2981} from "@openzeppelin/contracts/interfaces/IERC2981.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
 import {ITipping} from "./ITipping.sol";
 
@@ -101,8 +103,9 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
     /// @inheritdoc ITipping
     /// @dev ERC-721: `recipient` must be the current owner. ERC-1155: the id must exist (tracked
     ///      supply, when exposed, must be non-zero) and `recipient` must hold OWNER_ROLE, be the
-    ///      Ownable owner, or be the ERC-2981 receiver for the id. Reverts for non-contracts and
-    ///      invalid tokens; returns false for a wrong recipient.
+    ///      Ownable owner, or be the ERC-2981 receiver for the id; the collection must declare
+    ///      ERC-1155 support (ERC-165). Reverts for non-contracts and invalid tokens; returns false
+    ///      for a wrong recipient or a wrong standard.
     function isValidTipRecipient(address collection, NFTStandard standard, uint256 tokenId, address recipient)
         public
         view
@@ -116,6 +119,14 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
             } catch {
                 revert InvalidToken(collection, tokenId);
             }
+        }
+        // The ERC-1155 proofs (role, owner, royalty) say nothing about a token id, so they only
+        // apply to a collection that declares itself ERC-1155. Otherwise an ERC-721 with an
+        // OWNER_ROLE passed as "ERC-1155" would skip ownerOf and pay the creator for any id.
+        try IERC165(collection).supportsInterface(type(IERC1155).interfaceId) returns (bool is1155) {
+            if (!is1155) return false;
+        } catch {
+            return false;
         }
         try IERC1155SupplyLike(collection).totalSupply(tokenId) returns (uint256 supply) {
             if (supply == 0) revert InvalidToken(collection, tokenId);
