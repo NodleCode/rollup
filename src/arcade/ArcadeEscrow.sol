@@ -19,9 +19,13 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  *      - A wallet leaves with `requestWithdraw` → `withdraw` after `withdrawDelay`. The delay covers
  *        builds already running; arcade-forge never starts a build while a request is pending.
  *
- *      Trust model: the admin (a multisig) is trusted. It grants `ORACLE_ROLE` and sets
- *      `maxCharge` and the quota, so it could charge balances through an oracle it controls. What
- *      the contract guarantees is narrower, and holds even with a compromised oracle key:
+ *      Admin timelock: anything that widens what can be charged waits `ADMIN_DELAY`, which is longer
+ *      than `MAX_WITHDRAW_DELAY`. That covers granting `ORACLE_ROLE`, raising `maxCharge` or the
+ *      quota, and shortening the quota period. A user who disagrees with a scheduled change can
+ *      `requestWithdraw` and be out before it applies. Changes that narrow it (revoking the oracle,
+ *      lowering limits, pausing) apply immediately, so incident response is never delayed.
+ *
+ *      Guarantees, which hold even with a compromised oracle key:
  *      - `withdrawFees` reaches `feesAccrued` only, never a user's balance, so
  *        `token.balanceOf(this) >= Σ balanceOf + feesAccrued` always holds.
  *      - `maxCharge` per call and `QuotaControl` per period bound a leaked oracle key, which can
@@ -38,6 +42,17 @@ contract ArcadeEscrow is QuotaControl, Pausable, ReentrancyGuard {
 
     /// @dev Upper bound on `withdrawDelay`, so a balance can never be locked for long.
     uint64 public constant MAX_WITHDRAW_DELAY = 7 days;
+
+    /// @dev Wait before a scheduled change applies. Longer than any withdrawal delay, so users can exit first.
+    uint64 public constant ADMIN_DELAY = MAX_WITHDRAW_DELAY + 1 days;
+
+    /// @dev Admin changes that widen what can be charged, and so must wait `ADMIN_DELAY`.
+    enum Change {
+        GrantOracle,
+        MaxCharge,
+        Quota,
+        Period
+    }
 
     /// @dev A pending withdrawal. `amount == 0` means none is pending.
     struct Withdrawal {
@@ -69,6 +84,9 @@ contract ArcadeEscrow is QuotaControl, Pausable, ReentrancyGuard {
     /// @dev Seconds between `requestWithdraw` and `withdraw`.
     uint64 public withdrawDelay;
 
+    /// @dev Per scheduled change, `keccak256(kind, value)`, the time it may be executed.
+    mapping(bytes32 => uint256) public scheduledChanges;
+
     event Deposited(address indexed account, address indexed from, uint256 amount, uint256 balance);
     event WithdrawRequested(address indexed account, uint256 amount, uint64 readyAt);
     event WithdrawCancelled(address indexed account);
@@ -78,6 +96,9 @@ contract ArcadeEscrow is QuotaControl, Pausable, ReentrancyGuard {
     event MinDepositSet(uint256 minDeposit);
     event MaxChargeSet(uint256 maxCharge);
     event WithdrawDelaySet(uint64 withdrawDelay);
+    event ChangeScheduled(Change indexed kind, uint256 value, uint256 readyAt);
+    event ChangeCancelled(Change indexed kind, uint256 value);
+    event ChangeExecuted(Change indexed kind, uint256 value);
 
     error ZeroAddress();
     error ZeroAmount();
@@ -91,6 +112,10 @@ contract ArcadeEscrow is QuotaControl, Pausable, ReentrancyGuard {
     error ChargeConflict(bytes32 ref);
     error InsufficientFees(uint256 feesAccrued, uint256 needed);
     error WithdrawDelayTooLong(uint64 withdrawDelay);
+    error NeedsTimelock();
+    error ChangeAlreadyScheduled(Change kind, uint256 value);
+    error ChangeNotScheduled(Change kind, uint256 value);
+    error ChangeNotReady(uint256 readyAt);
 
     /**
      * @param _token The ERC20 token held in escrow (NODL).
@@ -229,9 +254,69 @@ contract ArcadeEscrow is QuotaControl, Pausable, ReentrancyGuard {
         emit MinDepositSet(newMinDeposit);
     }
 
+    /// @dev Lowers `maxCharge` immediately. Raising it goes through `scheduleChange`.
     function setMaxCharge(uint256 newMaxCharge) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        maxCharge = newMaxCharge;
-        emit MaxChargeSet(newMaxCharge);
+        if (newMaxCharge > maxCharge) revert NeedsTimelock();
+        _setMaxCharge(newMaxCharge);
+    }
+
+    /// @dev Lowers the quota immediately. Raising it goes through `scheduleChange`.
+    function setQuota(uint256 newQuota) external override onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (newQuota > quota) revert NeedsTimelock();
+        _setQuota(newQuota);
+    }
+
+    /// @dev Lengthens the period immediately. Shortening it goes through `scheduleChange`.
+    function setPeriod(uint256 newPeriod) external override onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (newPeriod < period) revert NeedsTimelock();
+        _setPeriod(newPeriod);
+    }
+
+    /// @dev `ORACLE_ROLE` is granted through `scheduleChange` only. Revoking stays immediate.
+    function grantRole(bytes32 role, address account) public override {
+        if (role == ORACLE_ROLE) revert NeedsTimelock();
+        super.grantRole(role, account);
+    }
+
+    /**
+     * @notice Schedules a change that widens what can be charged, executable after `ADMIN_DELAY`.
+     * @param kind What to change.
+     * @param value The new value. For `GrantOracle`, the oracle address as a `uint256`.
+     */
+    function scheduleChange(Change kind, uint256 value) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (kind == Change.GrantOracle) {
+            if (value == 0) revert ZeroAddress();
+            if (value > type(uint160).max) revert AmountTooLarge(value);
+        }
+        if (kind == Change.Period) _mustBeWithinPeriodRange(value);
+
+        bytes32 id = _changeId(kind, value);
+        if (scheduledChanges[id] != 0) revert ChangeAlreadyScheduled(kind, value);
+
+        uint256 readyAt = block.timestamp + ADMIN_DELAY;
+        scheduledChanges[id] = readyAt;
+        emit ChangeScheduled(kind, value, readyAt);
+    }
+
+    function cancelChange(Change kind, uint256 value) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        bytes32 id = _changeId(kind, value);
+        if (scheduledChanges[id] == 0) revert ChangeNotScheduled(kind, value);
+        delete scheduledChanges[id];
+        emit ChangeCancelled(kind, value);
+    }
+
+    function executeChange(Change kind, uint256 value) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        bytes32 id = _changeId(kind, value);
+        uint256 readyAt = scheduledChanges[id];
+        if (readyAt == 0) revert ChangeNotScheduled(kind, value);
+        if (block.timestamp < readyAt) revert ChangeNotReady(readyAt);
+        delete scheduledChanges[id];
+
+        if (kind == Change.GrantOracle) _grantRole(ORACLE_ROLE, address(uint160(value)));
+        else if (kind == Change.MaxCharge) _setMaxCharge(value);
+        else if (kind == Change.Quota) _setQuota(value);
+        else _setPeriod(value);
+        emit ChangeExecuted(kind, value);
     }
 
     /// @dev Applies to new requests only: a pending request keeps its `readyAt`.
@@ -263,6 +348,26 @@ contract ArcadeEscrow is QuotaControl, Pausable, ReentrancyGuard {
         emit Deposited(account, msg.sender, amount, newBalance);
 
         token.safeTransferFrom(msg.sender, address(this), amount);
+    }
+
+    function _setMaxCharge(uint256 newMaxCharge) internal {
+        maxCharge = newMaxCharge;
+        emit MaxChargeSet(newMaxCharge);
+    }
+
+    function _setQuota(uint256 newQuota) internal {
+        quota = newQuota;
+        emit QuotaSet(newQuota);
+    }
+
+    function _setPeriod(uint256 newPeriod) internal {
+        _mustBeWithinPeriodRange(newPeriod);
+        period = newPeriod;
+        emit PeriodSet(newPeriod);
+    }
+
+    function _changeId(Change kind, uint256 value) internal pure returns (bytes32) {
+        return keccak256(abi.encode(kind, value));
     }
 
     function _mustBeValidWithdrawDelay(uint64 delay) internal pure {

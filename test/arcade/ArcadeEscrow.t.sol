@@ -445,6 +445,185 @@ contract ArcadeEscrowTest is Test {
         _deposit(alice, 1 ether);
     }
 
+    // ── Admin timelock ────────────────────────────────────
+
+    function _schedule(ArcadeEscrow.Change kind, uint256 value) internal {
+        vm.prank(admin);
+        escrow.scheduleChange(kind, value);
+    }
+
+    function _execute(ArcadeEscrow.Change kind, uint256 value) internal {
+        vm.prank(admin);
+        escrow.executeChange(kind, value);
+    }
+
+    function test_adminDelayOutlastsAnyWithdrawal() public view {
+        assertGt(escrow.ADMIN_DELAY(), escrow.MAX_WITHDRAW_DELAY());
+    }
+
+    function test_increasesNeedTimelock() public {
+        bytes32 oracleRole = escrow.ORACLE_ROLE();
+        vm.startPrank(admin);
+        vm.expectRevert(ArcadeEscrow.NeedsTimelock.selector);
+        escrow.setMaxCharge(MAX_CHARGE + 1);
+        vm.expectRevert(ArcadeEscrow.NeedsTimelock.selector);
+        escrow.setQuota(QUOTA + 1);
+        vm.expectRevert(ArcadeEscrow.NeedsTimelock.selector);
+        escrow.setPeriod(PERIOD - 1);
+        vm.expectRevert(ArcadeEscrow.NeedsTimelock.selector);
+        escrow.grantRole(oracleRole, bob);
+        vm.stopPrank();
+    }
+
+    function test_decreasesAndRevokesApplyImmediately() public {
+        bytes32 oracleRole = escrow.ORACLE_ROLE();
+        vm.startPrank(admin);
+        escrow.setMaxCharge(MAX_CHARGE - 1);
+        vm.expectEmit(address(escrow));
+        emit QuotaControl.QuotaSet(QUOTA - 1);
+        escrow.setQuota(QUOTA - 1);
+        vm.expectEmit(address(escrow));
+        emit QuotaControl.PeriodSet(PERIOD + 1);
+        escrow.setPeriod(PERIOD + 1);
+        escrow.revokeRole(oracleRole, oracle);
+        vm.stopPrank();
+
+        assertEq(escrow.maxCharge(), MAX_CHARGE - 1);
+        assertEq(escrow.quota(), QUOTA - 1);
+        assertEq(escrow.period(), PERIOD + 1);
+        assertFalse(escrow.hasRole(oracleRole, oracle));
+    }
+
+    function test_setPeriodStaysWithinRange() public {
+        uint256 tooLong = escrow.MAX_PERIOD() + 1;
+        vm.prank(admin);
+        vm.expectRevert(QuotaControl.TooLongPeriod.selector);
+        escrow.setPeriod(tooLong);
+    }
+
+    function test_otherRolesGrantImmediately() public {
+        bytes32 adminRole = escrow.DEFAULT_ADMIN_ROLE();
+        vm.prank(admin);
+        escrow.grantRole(adminRole, bob);
+        assertTrue(escrow.hasRole(adminRole, bob));
+    }
+
+    function test_scheduledChangesApplyAfterDelay() public {
+        uint256 readyAt = block.timestamp + escrow.ADMIN_DELAY();
+
+        vm.expectEmit(address(escrow));
+        emit ArcadeEscrow.ChangeScheduled(ArcadeEscrow.Change.MaxCharge, 2 * MAX_CHARGE, readyAt);
+        _schedule(ArcadeEscrow.Change.MaxCharge, 2 * MAX_CHARGE);
+        _schedule(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+        _schedule(ArcadeEscrow.Change.Period, PERIOD / 2);
+        _schedule(ArcadeEscrow.Change.GrantOracle, uint160(bob));
+
+        vm.warp(readyAt - 1);
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(ArcadeEscrow.ChangeNotReady.selector, readyAt));
+        escrow.executeChange(ArcadeEscrow.Change.MaxCharge, 2 * MAX_CHARGE);
+
+        vm.warp(readyAt);
+        vm.expectEmit(address(escrow));
+        emit ArcadeEscrow.ChangeExecuted(ArcadeEscrow.Change.MaxCharge, 2 * MAX_CHARGE);
+        _execute(ArcadeEscrow.Change.MaxCharge, 2 * MAX_CHARGE);
+        _execute(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+        _execute(ArcadeEscrow.Change.Period, PERIOD / 2);
+        _execute(ArcadeEscrow.Change.GrantOracle, uint160(bob));
+
+        assertEq(escrow.maxCharge(), 2 * MAX_CHARGE);
+        assertEq(escrow.quota(), 2 * QUOTA);
+        assertEq(escrow.period(), PERIOD / 2);
+        assertTrue(escrow.hasRole(escrow.ORACLE_ROLE(), bob));
+
+        // Executed changes are consumed.
+        vm.prank(admin);
+        vm.expectRevert(
+            abi.encodeWithSelector(ArcadeEscrow.ChangeNotScheduled.selector, ArcadeEscrow.Change.Quota, 2 * QUOTA)
+        );
+        escrow.executeChange(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+    }
+
+    function test_cancelChange() public {
+        _schedule(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+
+        vm.prank(admin);
+        vm.expectRevert(
+            abi.encodeWithSelector(ArcadeEscrow.ChangeAlreadyScheduled.selector, ArcadeEscrow.Change.Quota, 2 * QUOTA)
+        );
+        escrow.scheduleChange(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+
+        vm.expectEmit(address(escrow));
+        emit ArcadeEscrow.ChangeCancelled(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+        vm.prank(admin);
+        escrow.cancelChange(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+
+        vm.warp(block.timestamp + escrow.ADMIN_DELAY());
+        vm.startPrank(admin);
+        vm.expectRevert(
+            abi.encodeWithSelector(ArcadeEscrow.ChangeNotScheduled.selector, ArcadeEscrow.Change.Quota, 2 * QUOTA)
+        );
+        escrow.executeChange(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+        vm.expectRevert(
+            abi.encodeWithSelector(ArcadeEscrow.ChangeNotScheduled.selector, ArcadeEscrow.Change.Quota, 2 * QUOTA)
+        );
+        escrow.cancelChange(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+        vm.stopPrank();
+    }
+
+    function test_scheduleChangeValidates() public {
+        vm.startPrank(admin);
+        vm.expectRevert(ArcadeEscrow.ZeroAddress.selector);
+        escrow.scheduleChange(ArcadeEscrow.Change.GrantOracle, 0);
+        uint256 notAnAddress = uint256(type(uint160).max) + 1;
+        vm.expectRevert(abi.encodeWithSelector(ArcadeEscrow.AmountTooLarge.selector, notAnAddress));
+        escrow.scheduleChange(ArcadeEscrow.Change.GrantOracle, notAnAddress);
+        vm.expectRevert(QuotaControl.ZeroPeriod.selector);
+        escrow.scheduleChange(ArcadeEscrow.Change.Period, 0);
+        vm.stopPrank();
+    }
+
+    function test_onlyAdminCanUseTimelock() public {
+        bytes32 adminRole = escrow.DEFAULT_ADMIN_ROLE();
+        vm.startPrank(oracle);
+        vm.expectRevert_AccessControlUnauthorizedAccount(oracle, adminRole);
+        escrow.scheduleChange(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+        vm.expectRevert_AccessControlUnauthorizedAccount(oracle, adminRole);
+        escrow.cancelChange(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+        vm.expectRevert_AccessControlUnauthorizedAccount(oracle, adminRole);
+        escrow.executeChange(ArcadeEscrow.Change.Quota, 2 * QUOTA);
+        vm.expectRevert_AccessControlUnauthorizedAccount(oracle, adminRole);
+        escrow.setQuota(0);
+        vm.expectRevert_AccessControlUnauthorizedAccount(oracle, adminRole);
+        escrow.setPeriod(PERIOD);
+        vm.stopPrank();
+    }
+
+    /// @dev The point of the timelock: a user who reacts to a scheduled oracle grant at the slowest
+    ///      allowed withdrawal delay still exits with their whole balance before the grant applies.
+    function test_userExitsBeforeScheduledOracleCanCharge() public {
+        uint64 maxDelay = escrow.MAX_WITHDRAW_DELAY();
+        vm.prank(admin);
+        escrow.setWithdrawDelay(maxDelay);
+        _deposit(alice, 10 ether);
+
+        address rogue = makeAddr("rogue");
+        _schedule(ArcadeEscrow.Change.GrantOracle, uint160(rogue));
+
+        vm.prank(alice);
+        escrow.requestWithdraw(10 ether);
+        vm.warp(block.timestamp + maxDelay);
+        vm.prank(alice);
+        escrow.withdraw();
+        assertEq(escrow.balanceOf(alice), 0);
+
+        vm.warp(block.timestamp + escrow.ADMIN_DELAY() - maxDelay);
+        _execute(ArcadeEscrow.Change.GrantOracle, uint160(rogue));
+        vm.prank(rogue);
+        vm.expectRevert(abi.encodeWithSelector(ArcadeEscrow.InsufficientBalance.selector, 0, 1 ether));
+        escrow.charge(alice, 1 ether, "drain");
+    }
+
     // ── Fuzz ──────────────────────────────────────────────
 
     function testFuzz_depositChargeWithdraw(uint256 deposited, uint256 chargedAmount, uint256 requested) public {
