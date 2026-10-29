@@ -10,9 +10,17 @@ import {IERC2981} from "@openzeppelin/contracts/interfaces/IERC2981.sol";
 
 import {ITipping} from "./ITipping.sol";
 
-/// @dev ERC-1155 supply extension (OpenZeppelin ERC1155Supply); optional on the collection.
+/// @dev Optional surfaces an ERC-1155 collection may expose; each is probed behind try/catch.
 interface IERC1155SupplyLike {
     function totalSupply(uint256 id) external view returns (uint256);
+}
+
+interface IRoleLike {
+    function hasRole(bytes32 role, address account) external view returns (bool);
+}
+
+interface IOwnableLike {
+    function owner() external view returns (address);
 }
 
 /**
@@ -22,11 +30,13 @@ interface IERC1155SupplyLike {
  *         can only ever be spent by the approver's own `tip`/`tipAccount` calls, because
  *         `transferFrom` is only called with `from == msg.sender`. The contract holds no funds.
  *
- * Post tips resolve the recipient from the NFT: `ownerOf(tokenId)` for ERC-721, the ERC-2981
- * royalty receiver for ERC-1155 (an edition has many holders; its royalty receiver is where the
- * creator is paid). The caller states the standard; a wrong standard simply fails to resolve.
- * The lookups are `view` calls (STATICCALL), so a hostile collection can only make the tip
- * revert or burn the tipper's own gas. Account tips name their recipient directly.
+ * Post tips name their recipient (the feed knows who made or holds a post); the contract only
+ * verifies the claim against the NFT: ERC-721 → `ownerOf(tokenId) == recipient`; ERC-1155 →
+ * the recipient holds the collection's `OWNER_ROLE` (Nodle collections grant it to the creator),
+ * or is its Ownable `owner()`, or its ERC-2981 royalty receiver for the id. Nothing can be
+ * enumerated from an ERC-1155, but a claim can be checked. The lookups are `view` calls
+ * (STATICCALL) behind try/catch, so a hostile collection can only make the tip revert or burn
+ * the tipper's own gas. Account tips name their recipient with no check.
  *
  * Roles: DEFAULT_ADMIN_ROLE (fee ≤ 10 %, fee recipient).
  */
@@ -35,6 +45,8 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
 
     uint16 public constant MAX_FEE_BPS = 1000;
     uint256 public constant BPS = 10_000;
+    /// @dev Role Nodle user collections grant to their creator (keccak256("OWNER_ROLE")).
+    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
 
     uint16 public feeBps;
     address public feeRecipient;
@@ -50,11 +62,11 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
     // ───────── Tipping ─────────
 
     /// @inheritdoc ITipping
-    function tip(address collection, Standard standard, uint256 tokenId, address token, uint256 amount)
+    function tip(address collection, Standard standard, uint256 tokenId, address recipient, address token, uint256 amount)
         external
         nonReentrant
     {
-        address recipient = _resolve(collection, standard, tokenId);
+        if (!_isRecipient(collection, standard, tokenId, recipient)) revert NotRecipient(collection, tokenId, recipient);
         uint256 fee = _pay(token, recipient, amount);
         emit Tipped(msg.sender, collection, tokenId, token, recipient, amount, fee);
     }
@@ -66,18 +78,28 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
     }
 
     /// @inheritdoc ITipping
-    function recipientOf(address collection, Standard standard, uint256 tokenId) external view returns (address) {
-        return _resolve(collection, standard, tokenId);
+    function isRecipient(address collection, Standard standard, uint256 tokenId, address recipient)
+        external
+        view
+        returns (bool)
+    {
+        return _isRecipient(collection, standard, tokenId, recipient);
     }
 
-    /// @dev ERC-721: the current owner. ERC-1155: the ERC-2981 receiver for the id, after
-    ///      rejecting ids whose tracked supply is zero (when the collection exposes totalSupply(id)).
-    function _resolve(address collection, Standard standard, uint256 tokenId) internal view returns (address) {
+    /// @dev ERC-721: `recipient` must be the current owner. ERC-1155: the id must exist (tracked
+    ///      supply, when exposed, must be non-zero) and `recipient` must hold OWNER_ROLE, be the
+    ///      Ownable owner, or be the ERC-2981 receiver for the id. Reverts for non-contracts and
+    ///      invalid tokens; returns false for a wrong recipient.
+    function _isRecipient(address collection, Standard standard, uint256 tokenId, address recipient)
+        internal
+        view
+        returns (bool)
+    {
         if (collection.code.length == 0) revert NotAContract(collection);
+        if (recipient == address(0)) return false;
         if (standard == Standard.ERC721) {
             try IERC721(collection).ownerOf(tokenId) returns (address owner) {
-                if (owner == address(0)) revert NoRecipient(collection, tokenId);
-                return owner;
+                return owner == recipient;
             } catch {
                 revert InvalidToken(collection, tokenId);
             }
@@ -85,14 +107,18 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
         try IERC1155SupplyLike(collection).totalSupply(tokenId) returns (uint256 supply) {
             if (supply == 0) revert InvalidToken(collection, tokenId);
         } catch {
-            // No supply extension: the royalty lookup below is the only check available.
+            // No supply extension: nothing to check here.
         }
+        try IRoleLike(collection).hasRole(OWNER_ROLE, recipient) returns (bool held) {
+            if (held) return true;
+        } catch {}
+        try IOwnableLike(collection).owner() returns (address owner) {
+            if (owner == recipient) return true;
+        } catch {}
         try IERC2981(collection).royaltyInfo(tokenId, BPS) returns (address receiver, uint256) {
-            if (receiver == address(0)) revert NoRecipient(collection, tokenId);
-            return receiver;
-        } catch {
-            revert NoRecipient(collection, tokenId);
-        }
+            if (receiver == recipient) return true;
+        } catch {}
+        return false;
     }
 
     /// @dev Shared guards and transfers. Only ever pulls from msg.sender: the property the

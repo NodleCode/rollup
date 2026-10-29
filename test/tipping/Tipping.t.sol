@@ -8,6 +8,8 @@ import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {ERC1155Supply} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
 import {Tipping} from "../../src/tipping/Tipping.sol";
@@ -70,7 +72,33 @@ contract Edition1155 is ERC1155Supply, ERC2981 {
     }
 }
 
-/// @dev An ERC-1155 that tracks no supply and pays no royalties (nothing to resolve).
+/// @dev A Nodle-style edition: supply tracking, OWNER_ROLE held by the creator, no royalty.
+contract NodleEdition1155 is ERC1155Supply, AccessControl {
+    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
+
+    constructor(address owner_) ERC1155("ipfs://n") {
+        _grantRole(OWNER_ROLE, owner_);
+    }
+
+    function mint(address to, uint256 id, uint256 amount) external {
+        _mint(to, id, amount, "");
+    }
+
+    function supportsInterface(bytes4 id) public view override(ERC1155, AccessControl) returns (bool) {
+        return super.supportsInterface(id);
+    }
+}
+
+/// @dev A third-party Ownable edition: no roles, no royalty, no supply tracking.
+contract Ownable1155 is ERC1155, Ownable {
+    constructor(address owner_) ERC1155("ipfs://o") Ownable(owner_) {}
+
+    function mint(address to, uint256 id, uint256 amount) external {
+        _mint(to, id, amount, "");
+    }
+}
+
+/// @dev An ERC-1155 that tracks no supply, pays no royalties and has no owner (nothing to verify against).
 contract Bare1155 is ERC1155 {
     constructor() ERC1155("ipfs://y") {}
 
@@ -100,6 +128,8 @@ contract TippingTest is Test {
     TokenMock internal usdc;
     Post721 internal post;
     Edition1155 internal edition;
+    NodleEdition1155 internal nodleEdition;
+    Ownable1155 internal ownable;
     Bare1155 internal bare;
     Tipping internal tipping;
 
@@ -116,12 +146,16 @@ contract TippingTest is Test {
         post = new Post721();
         edition = new Edition1155();
         bare = new Bare1155();
+        nodleEdition = new NodleEdition1155(CREATOR);
+        ownable = new Ownable1155(CREATOR);
         tipping = new Tipping(ADMIN);
 
         post.mint(BOB, POST_ID);
         edition.mint(ALICE, EDITION_ID, 100);
         edition.setRoyalty(CREATOR, 500);
         bare.mint(BOB, 1, 1);
+        nodleEdition.mint(ALICE, EDITION_ID, 10);
+        ownable.mint(ALICE, EDITION_ID, 10);
 
         nodl.mint(ALICE, 1_000e18);
         usdc.mint(ALICE, 1_000e6);
@@ -132,8 +166,13 @@ contract TippingTest is Test {
     }
 
     function tipPost(address who, uint256 amount) internal {
+        address owner = post.ownerOf(POST_ID); // before the prank: an external call would consume it
         vm.prank(who);
-        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, address(nodl), amount);
+        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, owner, address(nodl), amount);
+    }
+
+    function notRecipient(address collection, uint256 id, address who) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(ITipping.NotRecipient.selector, collection, id, who);
     }
 
     // ───────── Constructor ─────────
@@ -171,21 +210,26 @@ contract TippingTest is Test {
     function test_tip721_followsTransfers() public {
         vm.prank(BOB);
         post.transferFrom(BOB, CREATOR, POST_ID);
-        assertEq(tipping.recipientOf(address(post), ITipping.Standard.ERC721, POST_ID), CREATOR);
+        assertTrue(tipping.isRecipient(address(post), ITipping.Standard.ERC721, POST_ID, CREATOR));
+        assertFalse(tipping.isRecipient(address(post), ITipping.Standard.ERC721, POST_ID, BOB));
         tipPost(ALICE, 1e18);
         assertEq(nodl.balanceOf(CREATOR), 1e18);
         assertEq(nodl.balanceOf(BOB), 0);
+        // The previous owner is no longer a valid recipient.
+        vm.prank(ALICE);
+        vm.expectRevert(notRecipient(address(post), POST_ID, BOB));
+        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, BOB, address(nodl), 1e18);
     }
 
     function test_tip721_neverMintedOrBurnedIsInvalid() public {
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(ITipping.InvalidToken.selector, address(post), 99));
-        tipping.tip(address(post), ITipping.Standard.ERC721, 99, address(nodl), 1e18);
+        tipping.tip(address(post), ITipping.Standard.ERC721, 99, BOB, address(nodl), 1e18);
 
         post.burn(POST_ID);
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(ITipping.InvalidToken.selector, address(post), POST_ID));
-        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, address(nodl), 1e18);
+        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, BOB, address(nodl), 1e18);
     }
 
     function test_tip721_ownerCannotTipOwnPost() public {
@@ -194,12 +238,12 @@ contract TippingTest is Test {
         nodl.approve(address(tipping), 1e18);
         vm.prank(BOB);
         vm.expectRevert(ITipping.SelfTip.selector);
-        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, address(nodl), 1e18);
+        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, BOB, address(nodl), 1e18);
     }
 
     function test_tip_anyErc20() public {
         vm.prank(ALICE);
-        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, address(usdc), 3e6);
+        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, BOB, address(usdc), 3e6);
         assertEq(usdc.balanceOf(BOB), 3e6);
     }
 
@@ -209,32 +253,73 @@ contract TippingTest is Test {
         vm.expectEmit(true, true, true, true);
         emit ITipping.Tipped(ALICE, address(edition), EDITION_ID, address(nodl), CREATOR, 2e18, 0);
         vm.prank(ALICE);
-        tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, address(nodl), 2e18);
+        tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, CREATOR, address(nodl), 2e18);
         assertEq(nodl.balanceOf(CREATOR), 2e18);
-        assertEq(tipping.recipientOf(address(edition), ITipping.Standard.ERC1155, EDITION_ID), CREATOR);
+        assertTrue(tipping.isRecipient(address(edition), ITipping.Standard.ERC1155, EDITION_ID, CREATOR));
+        assertFalse(tipping.isRecipient(address(edition), ITipping.Standard.ERC1155, EDITION_ID, ALICE));
     }
 
     function test_tip1155_zeroSupplyIsInvalid() public {
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(ITipping.InvalidToken.selector, address(edition), 42));
-        tipping.tip(address(edition), ITipping.Standard.ERC1155, 42, address(nodl), 1e18);
+        tipping.tip(address(edition), ITipping.Standard.ERC1155, 42, CREATOR, address(nodl), 1e18);
 
         edition.burn(ALICE, EDITION_ID, 100);
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(ITipping.InvalidToken.selector, address(edition), EDITION_ID));
-        tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, address(nodl), 1e18);
+        tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, CREATOR, address(nodl), 1e18);
     }
 
-    function test_tip1155_noRoyaltyReceiverHasNoRecipient() public {
+    function test_tip1155_royaltyReceiverIsTheOnlyProofOnThisEdition() public {
+        // Someone else than the royalty receiver is refused.
+        vm.prank(ALICE);
+        vm.expectRevert(notRecipient(address(edition), EDITION_ID, BOB));
+        tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, BOB, address(nodl), 1e18);
+        // With the royalty removed nobody can be verified any more.
         edition.setRoyalty(address(0), 0);
         vm.prank(ALICE);
-        vm.expectRevert(abi.encodeWithSelector(ITipping.NoRecipient.selector, address(edition), EDITION_ID));
-        tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, address(nodl), 1e18);
-
-        // No supply extension and no ERC-2981 at all: nothing to resolve either.
+        vm.expectRevert(notRecipient(address(edition), EDITION_ID, CREATOR));
+        tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, CREATOR, address(nodl), 1e18);
+        // No supply extension, no roles, no owner, no ERC-2981: nothing to verify against.
         vm.prank(ALICE);
-        vm.expectRevert(abi.encodeWithSelector(ITipping.NoRecipient.selector, address(bare), 1));
-        tipping.tip(address(bare), ITipping.Standard.ERC1155, 1, address(nodl), 1e18);
+        vm.expectRevert(notRecipient(address(bare), 1, BOB));
+        tipping.tip(address(bare), ITipping.Standard.ERC1155, 1, BOB, address(nodl), 1e18);
+    }
+
+    function test_tip1155_nodleEditionPaysItsOwnerRoleHolder() public {
+        // Nodle collections: no royalty, but the creator holds OWNER_ROLE.
+        assertTrue(tipping.isRecipient(address(nodleEdition), ITipping.Standard.ERC1155, EDITION_ID, CREATOR));
+        assertFalse(tipping.isRecipient(address(nodleEdition), ITipping.Standard.ERC1155, EDITION_ID, ALICE));
+        vm.expectEmit(true, true, true, true);
+        emit ITipping.Tipped(ALICE, address(nodleEdition), EDITION_ID, address(nodl), CREATOR, 3e18, 0);
+        vm.prank(ALICE);
+        tipping.tip(address(nodleEdition), ITipping.Standard.ERC1155, EDITION_ID, CREATOR, address(nodl), 3e18);
+        assertEq(nodl.balanceOf(CREATOR), 3e18);
+        // A holder of the edition is not its owner.
+        vm.prank(ALICE);
+        vm.expectRevert(notRecipient(address(nodleEdition), EDITION_ID, ALICE));
+        tipping.tip(address(nodleEdition), ITipping.Standard.ERC1155, EDITION_ID, ALICE, address(nodl), 1e18);
+        // An id never minted on a supply-tracking edition is invalid.
+        vm.prank(ALICE);
+        vm.expectRevert(abi.encodeWithSelector(ITipping.InvalidToken.selector, address(nodleEdition), 5));
+        tipping.tip(address(nodleEdition), ITipping.Standard.ERC1155, 5, CREATOR, address(nodl), 1e18);
+    }
+
+    function test_tip1155_ownableEditionPaysItsOwner() public {
+        assertTrue(tipping.isRecipient(address(ownable), ITipping.Standard.ERC1155, EDITION_ID, CREATOR));
+        vm.prank(ALICE);
+        tipping.tip(address(ownable), ITipping.Standard.ERC1155, EDITION_ID, CREATOR, address(nodl), 1e18);
+        assertEq(nodl.balanceOf(CREATOR), 1e18);
+        vm.prank(ALICE);
+        vm.expectRevert(notRecipient(address(ownable), EDITION_ID, BOB));
+        tipping.tip(address(ownable), ITipping.Standard.ERC1155, EDITION_ID, BOB, address(nodl), 1e18);
+    }
+
+    function test_tip_zeroRecipientIsNotARecipient() public {
+        vm.prank(ALICE);
+        vm.expectRevert(notRecipient(address(post), POST_ID, address(0)));
+        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, address(0), address(nodl), 1e18);
+        assertFalse(tipping.isRecipient(address(nodleEdition), ITipping.Standard.ERC1155, EDITION_ID, address(0)));
     }
 
     function test_tip1155_royaltyReceiverCannotTipItself() public {
@@ -242,7 +327,7 @@ contract TippingTest is Test {
         vm.startPrank(CREATOR);
         nodl.approve(address(tipping), 1e18);
         vm.expectRevert(ITipping.SelfTip.selector);
-        tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, address(nodl), 1e18);
+        tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, CREATOR, address(nodl), 1e18);
         vm.stopPrank();
     }
 
@@ -251,20 +336,20 @@ contract TippingTest is Test {
     function test_tip_wrongStandardFailsToResolve() public {
         // ERC-1155 path on a plain ERC-721: no totalSupply, no royaltyInfo.
         vm.prank(ALICE);
-        vm.expectRevert(abi.encodeWithSelector(ITipping.NoRecipient.selector, address(post), POST_ID));
-        tipping.tip(address(post), ITipping.Standard.ERC1155, POST_ID, address(nodl), 1e18);
+        vm.expectRevert(notRecipient(address(post), POST_ID, BOB));
+        tipping.tip(address(post), ITipping.Standard.ERC1155, POST_ID, BOB, address(nodl), 1e18);
         // ERC-721 path on an ERC-1155: no ownerOf.
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(ITipping.InvalidToken.selector, address(edition), EDITION_ID));
-        tipping.tip(address(edition), ITipping.Standard.ERC721, EDITION_ID, address(nodl), 1e18);
+        tipping.tip(address(edition), ITipping.Standard.ERC721, EDITION_ID, CREATOR, address(nodl), 1e18);
     }
 
     function test_tip_collectionMustBeAContract() public {
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(ITipping.NotAContract.selector, address(0xD00D)));
-        tipping.tip(address(0xD00D), ITipping.Standard.ERC721, 1, address(nodl), 1e18);
+        tipping.tip(address(0xD00D), ITipping.Standard.ERC721, 1, BOB, address(nodl), 1e18);
         vm.expectRevert(abi.encodeWithSelector(ITipping.NotAContract.selector, address(0)));
-        tipping.recipientOf(address(0), ITipping.Standard.ERC721, 1);
+        tipping.isRecipient(address(0), ITipping.Standard.ERC721, 1, BOB);
     }
 
     function test_tip_lookupIsStaticAndCannotReenter() public {
@@ -273,16 +358,16 @@ contract TippingTest is Test {
         // tipAccount inside it reverts, the try/catch turns that into InvalidToken.
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(ITipping.InvalidToken.selector, address(evil), 1));
-        tipping.tip(address(evil), ITipping.Standard.ERC721, 1, address(nodl), 1e18);
+        tipping.tip(address(evil), ITipping.Standard.ERC721, 1, address(evil), address(nodl), 1e18);
         assertEq(nodl.transfers(), 0);
     }
 
     function test_tip_guards() public {
         vm.startPrank(ALICE);
         vm.expectRevert(ITipping.ZeroAddress.selector);
-        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, address(0), 1e18);
+        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, BOB, address(0), 1e18);
         vm.expectRevert(ITipping.ZeroAmount.selector);
-        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, address(nodl), 0);
+        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, BOB, address(nodl), 0);
         vm.stopPrank();
     }
 
@@ -291,12 +376,12 @@ contract TippingTest is Test {
         nodl.approve(address(tipping), 1e18);
         vm.prank(ALICE);
         vm.expectRevert();
-        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, address(nodl), 2e18);
+        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, BOB, address(nodl), 2e18);
         vm.prank(ALICE);
         nodl.approve(address(tipping), type(uint256).max);
         vm.prank(ALICE);
         vm.expectRevert();
-        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, address(nodl), 1_001e18);
+        tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, BOB, address(nodl), 1_001e18);
     }
 
     // ───────── Account tips ─────────
@@ -396,8 +481,8 @@ contract TippingTest is Test {
         nodl.approve(address(tipping), amount);
 
         vm.prank(tipper);
-        if (path % 3 == 0) tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, address(nodl), amount);
-        else if (path % 3 == 1) tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, address(nodl), amount);
+        if (path % 3 == 0) tipping.tip(address(post), ITipping.Standard.ERC721, POST_ID, BOB, address(nodl), amount);
+        else if (path % 3 == 1) tipping.tip(address(edition), ITipping.Standard.ERC1155, EDITION_ID, CREATOR, address(nodl), amount);
         else tipping.tipAccount(address(nodl), BOB, amount);
 
         uint256 n = nodl.transfers();

@@ -3,11 +3,12 @@ pragma solidity ^0.8.26;
 
 /**
  * @title ITipping
- * @notice Agnostic tipping: any ERC-20, any NFT, any account. The recipient of a post tip is
- *         resolved on-chain from the NFT itself: the current owner for ERC-721, the ERC-2981
- *         royalty receiver for ERC-1155 (editions have many holders; the royalty receiver is the
- *         creator's payout address). No backend involvement, no signature, no allowlist.
- *         The event surface is what the feed indexer consumes; keep it stable.
+ * @notice Agnostic tipping: any ERC-20, any NFT, any account. The caller names the recipient of
+ *         a post tip (the feed knows it) and the contract verifies the claim against the NFT:
+ *         ERC-721, the recipient must be `ownerOf(tokenId)`; ERC-1155, the recipient must hold the
+ *         collection's `OWNER_ROLE` (Nodle collections), or be its Ownable `owner()`, or be its
+ *         ERC-2981 royalty receiver for the id. Nothing is enumerated on-chain, only checked.
+ *         No backend signature, no allowlist. The event surface is what the feed indexer consumes.
  */
 interface ITipping {
     enum Standard {
@@ -36,18 +37,22 @@ interface ITipping {
     error NotAContract(address collection);
     /// @notice The NFT does not exist for the given standard (ownerOf reverted, or an ERC-1155 id with zero supply).
     error InvalidToken(address collection, uint256 tokenId);
-    /// @notice The NFT exists but names nobody to pay (zero owner, or an ERC-1155 without a royalty receiver).
-    error NoRecipient(address collection, uint256 tokenId);
+    /// @notice The named recipient is not the NFT's owner (ERC-721) nor the collection's owner / royalty receiver (ERC-1155).
+    error NotRecipient(address collection, uint256 tokenId, address recipient);
     error FeeTooHigh(uint16 feeBps);
     error InvalidFeeRecipient(address recipient);
 
-    /// @notice Tip the NFT `tokenId` of `collection` with `amount` of `token`. The recipient is resolved on-chain.
-    function tip(address collection, Standard standard, uint256 tokenId, address token, uint256 amount) external;
+    /// @notice Tip the NFT `tokenId` of `collection`: `recipient` is verified against the NFT, then paid `amount` of `token`.
+    function tip(address collection, Standard standard, uint256 tokenId, address recipient, address token, uint256 amount)
+        external;
     /// @notice Tip an account the caller names.
     function tipAccount(address token, address to, uint256 amount) external;
 
-    /// @notice Who a tip of this NFT would pay right now; reverts the way `tip` would.
-    function recipientOf(address collection, Standard standard, uint256 tokenId) external view returns (address);
+    /// @notice Whether `tip` would accept `recipient` for this NFT; reverts for a non-contract or an invalid token, like `tip`.
+    function isRecipient(address collection, Standard standard, uint256 tokenId, address recipient)
+        external
+        view
+        returns (bool);
     function feeBps() external view returns (uint16);
     function feeRecipient() external view returns (address);
 }
