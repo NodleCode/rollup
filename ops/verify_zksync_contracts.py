@@ -85,6 +85,7 @@ CONTRACT_SOURCE_MAP = {
     "FleetIdentityUpgradeable": "src/swarms/FleetIdentityUpgradeable.sol:FleetIdentityUpgradeable",
     "SwarmRegistryUniversalUpgradeable": "src/swarms/SwarmRegistryUniversalUpgradeable.sol:SwarmRegistryUniversalUpgradeable",
     "ERC1967Proxy": "lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy",
+    "Tipping": "src/tipping/Tipping.sol:Tipping",
     "BondTreasuryPaymaster": "src/paymasters/BondTreasuryPaymaster.sol:BondTreasuryPaymaster",
     "CollectionFactory": "src/collections/CollectionFactory.sol:CollectionFactory",
     "UserCollection721": "src/collections/UserCollection721.sol:UserCollection721",
@@ -97,6 +98,7 @@ CONTRACT_SOURCE_MAP = {
 # with unnamed `additionalContracts`. For those scripts, recover the deployed
 # contract type by the deterministic deployment order inside the script.
 BROADCAST_CONTRACT_SEQUENCE = {
+    "DeployTippingZkSync.s.sol": ["Tipping"],
     "DeployEnvelopeZkSync.s.sol": [
         "EnvelopeLinks",
         "EnvelopePaymaster",
@@ -163,6 +165,44 @@ def fix_traversal_imports(std_json: dict) -> int:
             new_lines.append(line)
         std_json["sources"][src_key]["content"] = "\n".join(new_lines)
 
+    return changed
+
+
+def apply_remappings(std_json: dict) -> int:
+    """Inline Foundry remappings into import statements and drop `settings.remappings`.
+
+    Since 2026-10 the explorer verifier rejects `settings.remappings` ("imports must match
+    `sources` keys exactly"). Source keys are already project-relative (e.g.
+    lib/openzeppelin-contracts/contracts/...), so rewriting `@openzeppelin/contracts/X` to
+    its remapped path makes every import match a key. Longest remapping prefix wins.
+    Returns the number of import lines rewritten.
+    """
+    remappings = std_json.get("settings", {}).pop("remappings", None) or []
+    pairs = []
+    for r in remappings:
+        if "=" in r:
+            prefix, target = r.split("=", 1)
+            pairs.append((prefix, target))
+    pairs.sort(key=lambda x: -len(x[0]))
+    source_keys = set(std_json["sources"].keys())
+    # Whole-statement match: imports may span lines (`import {A, B} from\n    "@openzeppelin/..."`).
+    pattern = re.compile(r'(\bimport\b[^;]*?["\'])([^"\'.][^"\']*)(["\'])', re.S)
+    changed = 0
+
+    def rewrite(m: "re.Match[str]") -> str:
+        nonlocal changed
+        prefix, path, quote = m.groups()
+        for rp, target in pairs:
+            if path.startswith(rp):
+                new_path = target + path[len(rp):]
+                if new_path in source_keys:
+                    changed += 1
+                    return prefix + new_path + quote
+                break
+        return m.group(0)
+
+    for src_key in list(std_json["sources"].keys()):
+        std_json["sources"][src_key]["content"] = pattern.sub(rewrite, std_json["sources"][src_key]["content"])
     return changed
 
 
@@ -258,7 +298,7 @@ def verify_one(
     std_json = generate_standard_json(
         address, contract, constructor_args, solc_version, project_root
     )
-    fixes = fix_traversal_imports(std_json)
+    fixes = apply_remappings(std_json) + fix_traversal_imports(std_json)
     print(f"done (rewrote {fixes} imports)")
 
     # Step 2: Submit
