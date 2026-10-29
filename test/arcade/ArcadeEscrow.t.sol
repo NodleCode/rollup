@@ -193,6 +193,16 @@ contract ArcadeEscrowTest is Test {
         vm.stopPrank();
     }
 
+    function test_requestWithdrawRejectsAmountAboveUint128() public {
+        uint256 huge = uint256(type(uint128).max) + 1;
+        _fund(alice, huge);
+        _deposit(alice, huge);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ArcadeEscrow.AmountTooLarge.selector, huge));
+        escrow.requestWithdraw(huge);
+    }
+
     function test_newRequestReplacesAndRestartsTimer() public {
         _deposit(alice, 10 ether);
         vm.prank(alice);
