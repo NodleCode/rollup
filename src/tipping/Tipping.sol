@@ -77,11 +77,17 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
     // ───────── Tipping ─────────
 
     /// @inheritdoc ITipping
-    function tip(address collection, Standard standard, uint256 tokenId, address recipient, address token, uint256 amount)
-        external
-        nonReentrant
-    {
-        if (!_isRecipient(collection, standard, tokenId, recipient)) revert NotRecipient(collection, tokenId, recipient);
+    function tip(
+        address collection,
+        NFTStandard standard,
+        uint256 tokenId,
+        address recipient,
+        address token,
+        uint256 amount
+    ) external nonReentrant {
+        if (!isValidTipRecipient(collection, standard, tokenId, recipient)) {
+            revert NotRecipient(collection, tokenId, recipient);
+        }
         uint256 fee = _pay(token, recipient, amount);
         emit Tipped(msg.sender, collection, tokenId, token, recipient, amount, fee);
     }
@@ -93,26 +99,18 @@ contract Tipping is ITipping, AccessControl, ReentrancyGuard {
     }
 
     /// @inheritdoc ITipping
-    function isRecipient(address collection, Standard standard, uint256 tokenId, address recipient)
-        external
-        view
-        returns (bool)
-    {
-        return _isRecipient(collection, standard, tokenId, recipient);
-    }
-
     /// @dev ERC-721: `recipient` must be the current owner. ERC-1155: the id must exist (tracked
     ///      supply, when exposed, must be non-zero) and `recipient` must hold OWNER_ROLE, be the
     ///      Ownable owner, or be the ERC-2981 receiver for the id. Reverts for non-contracts and
     ///      invalid tokens; returns false for a wrong recipient.
-    function _isRecipient(address collection, Standard standard, uint256 tokenId, address recipient)
-        internal
+    function isValidTipRecipient(address collection, NFTStandard standard, uint256 tokenId, address recipient)
+        public
         view
         returns (bool)
     {
         if (collection.code.length == 0) revert NotAContract(collection);
         if (recipient == address(0)) return false;
-        if (standard == Standard.ERC721) {
+        if (standard == NFTStandard.ERC721) {
             try IERC721(collection).ownerOf(tokenId) returns (address owner) {
                 return owner == recipient;
             } catch {

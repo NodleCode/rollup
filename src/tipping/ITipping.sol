@@ -10,7 +10,7 @@ pragma solidity ^0.8.26;
  *         Nodle feed indexer consumes it.
  */
 interface ITipping {
-    enum Standard {
+    enum NFTStandard {
         ERC721,
         ERC1155
     }
@@ -44,13 +44,19 @@ interface ITipping {
     error InvalidFeeRecipient(address recipient);
 
     /// @notice Tip the NFT `tokenId` of `collection`: `recipient` is verified against the NFT, then paid `amount` of `token`.
-    function tip(address collection, Standard standard, uint256 tokenId, address recipient, address token, uint256 amount)
-        external;
+    function tip(
+        address collection,
+        NFTStandard standard,
+        uint256 tokenId,
+        address recipient,
+        address token,
+        uint256 amount
+    ) external;
     /// @notice Tip an account the caller names.
     function tipAccount(address token, address to, uint256 amount) external;
 
     /// @notice Whether `tip` would accept `recipient` for this NFT; reverts for a non-contract or an invalid token, like `tip`.
-    function isRecipient(address collection, Standard standard, uint256 tokenId, address recipient)
+    function isValidTipRecipient(address collection, NFTStandard standard, uint256 tokenId, address recipient)
         external
         view
         returns (bool);
