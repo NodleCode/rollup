@@ -177,7 +177,7 @@ contract TippingTest is Test {
         assertEq(nodl.balanceOf(BOB), 0);
     }
 
-    function test_tip721_unmintedOrBurnedIsInvalid() public {
+    function test_tip721_neverMintedOrBurnedIsInvalid() public {
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(ITipping.InvalidToken.selector, address(post), 99));
         tipping.tip(address(post), ITipping.Standard.ERC721, 99, address(nodl), 1e18);
