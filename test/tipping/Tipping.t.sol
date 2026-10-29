@@ -369,6 +369,22 @@ contract TippingTest is Test {
         assertFalse(tipping.isValidTipRecipient(address(col), ITipping.NFTStandard.ERC721, 1, CREATOR));
     }
 
+    function test_tip1155_requiresErc165() public {
+        // A contract with no supportsInterface at all (here: an ERC-20) declared as ERC-1155 is refused
+        // before any proof is consulted (the ERC-165 probe reverts → false).
+        assertFalse(tipping.isValidTipRecipient(address(usdc), ITipping.NFTStandard.ERC1155, 1, BOB));
+        vm.prank(ALICE);
+        vm.expectRevert(notRecipient(address(usdc), 1, BOB));
+        tipping.tip(address(usdc), ITipping.NFTStandard.ERC1155, 1, BOB, address(nodl), 1e18);
+    }
+
+    function test_tip1155_noProofMatchesIsFalse() public {
+        // Genuine ERC-1155, every proof consulted, none names BOB: role (none), owner (CREATOR), royalty (none).
+        assertFalse(tipping.isValidTipRecipient(address(ownable), ITipping.NFTStandard.ERC1155, EDITION_ID, BOB));
+        // Genuine ERC-1155 with a royalty receiver that is not BOB.
+        assertFalse(tipping.isValidTipRecipient(address(edition), ITipping.NFTStandard.ERC1155, EDITION_ID, BOB));
+    }
+
     function test_tip_wrongStandardFailsToResolve() public {
         // ERC-1155 path on a plain ERC-721: no totalSupply, no royaltyInfo.
         vm.prank(ALICE);
