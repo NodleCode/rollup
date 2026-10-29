@@ -3,12 +3,11 @@ pragma solidity ^0.8.26;
 
 /**
  * @title ITipping
- * @notice Agnostic tipping: any ERC-20, any NFT, any account. The caller names the recipient of
- *         a post tip (the feed knows it) and the contract verifies the claim against the NFT:
- *         ERC-721, the recipient must be `ownerOf(tokenId)`; ERC-1155, the recipient must hold the
- *         collection's `OWNER_ROLE` (Nodle collections), or be its Ownable `owner()`, or be its
- *         ERC-2981 royalty receiver for the id. Nothing is enumerated on-chain, only checked.
- *         No backend signature, no allowlist. The event surface is what the feed indexer consumes.
+ * @notice Interface of Nodle Tipping v2: tip an NFT post or an account with any ERC-20.
+ *         A post tip names its recipient and the contract verifies the claim against the NFT
+ *         (ERC-721 owner; ERC-1155 collection owner role, Ownable owner or ERC-2981 receiver).
+ *         No backend signature, no allowlist, no pause. Keep the event surface stable: the
+ *         Nodle feed indexer consumes it.
  */
 interface ITipping {
     enum Standard {

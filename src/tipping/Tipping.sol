@@ -24,27 +24,36 @@ interface IOwnableLike {
 }
 
 /**
- * @title Tipping
- * @notice Immutable, agnostic tipping (nft-feed-indexer design §6.2, v2 of 2026-10-28). No proxy,
- *         no upgrade path, no pause, no backend signature: an allowance granted to this address
- *         can only ever be spent by the approver's own `tip`/`tipAccount` calls, because
- *         `transferFrom` is only called with `from == msg.sender`. The only balance the contract
- *         ever holds is accrued fees, which `withdrawFees` sends to the fee recipient.
+ * @title Nodle Tipping v2
+ * @author Nodle
+ * @notice Lets anyone tip an NFT post or an account with any ERC-20, on zkSync Era.
  *
- * Post tips name their recipient (the feed knows who made or holds a post); the contract only
- * verifies the claim against the NFT: ERC-721 → `ownerOf(tokenId) == recipient`; ERC-1155 →
- * the recipient holds the collection's `OWNER_ROLE` (Nodle collections grant it to the creator),
- * or is its Ownable `owner()`, or its ERC-2981 royalty receiver for the id. Nothing can be
- * enumerated from an ERC-1155, but a claim can be checked. The lookups are `view` calls
- * (STATICCALL) behind try/catch, so a hostile collection can only make the tip revert or burn
- * the tipper's own gas. Account tips name their recipient with no check.
+ * @dev How a post tip works
+ *      The caller passes the collection, its standard (ERC-721 or ERC-1155), the token id, the
+ *      recipient, the ERC-20 and the amount. The contract does not decide who gets paid; it
+ *      checks that the caller's recipient is legitimate for that NFT:
+ *        - ERC-721: `recipient` must be `ownerOf(tokenId)`.
+ *        - ERC-1155: the id must exist (non-zero tracked supply, when the collection exposes
+ *          `totalSupply(id)`) and `recipient` must hold the collection's `OWNER_ROLE` (Nodle
+ *          user collections grant it to their creator), or be its Ownable `owner()`, or be its
+ *          ERC-2981 royalty receiver for the id.
+ *      Nothing is enumerated from the NFT, only verified, so any collection works without a
+ *      registry or a backend signature. The checks are `view` calls (STATICCALL) behind
+ *      try/catch: a hostile collection can only make the tip revert or burn the caller's gas.
+ *      Account tips (`tipAccount`) name their recipient with no check.
  *
- * Fees (review decision 2026-10-28): the fee share of a tip stays in this contract and is moved to
- * `feeRecipient` by `withdrawFees(token)`, which anyone may call; the tipper never pays for the
- * fee recipient's transfer, and fee-on-transfer or stray tokens are handled by sending the
- * actual balance.
+ *      Money
+ *      Tokens move with `transferFrom(msg.sender, …)` only: an allowance granted to this
+ *      contract can be spent solely by the approver's own calls. The optional protocol fee
+ *      (at most 10 %, 0 at launch) stays in the contract and `withdrawFees(token)`, callable by
+ *      anyone, sends the contract's whole balance of that token to the fee recipient. Fees are
+ *      the only balance the contract ever holds; a token sent here by mistake is recovered the
+ *      same way. Self-tips and zero amounts revert.
  *
- * Roles: DEFAULT_ADMIN_ROLE (fee ≤ 10 %, fee recipient).
+ *      Governance
+ *      Immutable: no proxy, no upgrade, no pause. `DEFAULT_ADMIN_ROLE` (a multisig) can only
+ *      change the fee and the fee recipient. Events `Tipped`, `AccountTipped`, `FeeUpdated`,
+ *      `FeeRecipientUpdated` and `FeesWithdrawn` are the surface the Nodle feed indexer reads.
  */
 contract Tipping is ITipping, AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
