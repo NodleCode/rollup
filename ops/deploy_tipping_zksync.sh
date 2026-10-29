@@ -5,7 +5,7 @@
 # ops/deploy_collection_factory_zksync.sh and ops/upgrade_collection_factory_zksync.sh do.
 #
 # Usage:
-#   DEPLOYER_PRIVATE_KEY=0x… N_TIPPING_ADMIN=0x… N_TIPPING_SIGNER=0x… \
+#   DEPLOYER_PRIVATE_KEY=0x… N_TIPPING_ADMIN=0x… \
 #     ops/deploy_tipping_zksync.sh <testnet|mainnet> [--broadcast]
 #
 # Without --broadcast the script simulates only. The broadcast JSON lands in
@@ -20,7 +20,7 @@ case "$NETWORK" in
   mainnet) RPC_URL="${L2_RPC:-https://mainnet.era.zksync.io}" ;;
   *) echo "usage: $0 <testnet|mainnet> [--broadcast]"; exit 1 ;;
 esac
-: "${DEPLOYER_PRIVATE_KEY:?}" "${N_TIPPING_ADMIN:?}" "${N_TIPPING_SIGNER:?}"
+: "${DEPLOYER_PRIVATE_KEY:?}" "${N_TIPPING_ADMIN:?}"
 [[ "$DEPLOYER_PRIVATE_KEY" == 0x* ]] || export DEPLOYER_PRIVATE_KEY="0x${DEPLOYER_PRIVATE_KEY}"
 if [[ "$NETWORK" == "mainnet" && "$BROADCAST" == "--broadcast" && "${CONFIRM_MAINNET:-}" != "YES" ]]; then
   echo "mainnet broadcast requires CONFIRM_MAINNET=YES"; exit 1
@@ -50,5 +50,5 @@ move_l1_contracts() {
 trap restore_l1_contracts EXIT
 move_l1_contracts
 
-echo "network=$NETWORK rpc=$RPC_URL admin=$N_TIPPING_ADMIN signer=$N_TIPPING_SIGNER broadcast=${BROADCAST:-no}"
+echo "network=$NETWORK rpc=$RPC_URL admin=$N_TIPPING_ADMIN broadcast=${BROADCAST:-no}"
 forge script script/DeployTippingZkSync.s.sol --rpc-url "$RPC_URL" --zksync --skip test ${BROADCAST:+--broadcast --slow}
