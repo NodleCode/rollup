@@ -1,0 +1,27 @@
+{
+  "version": "1.0",
+  "chainId": "324",
+  "createdAt": 1793595600000,
+  "meta": {
+    "name": "ArcadeEscrow: sponsor oracle gas via BondTreasuryPaymaster",
+    "description": "Whitelist ArcadeEscrow 0x661A48370275F10A7f95a86E408B568C08eFeef0 as a destination and the arcade-forge oracle 0x7b0d247131B0A40D66baF289C3d424a3d4123fcD as a user on BondTreasuryPaymaster 0xb253528104D8C23eE14647410deDf70A9092bfFE.",
+    "txBuilderVersion": "1.18.0",
+    "createdFromSafeAddress": "0x5e097AC1BCF81E7Ff2657045F72cAa6cF06486C9"
+  },
+  "transactions": [
+    {
+      "to": "0xb253528104D8C23eE14647410deDf70A9092bfFE",
+      "value": "0",
+      "data": "0x25daffef00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000001000000000000000000000000661a48370275f10a7f95a86e408b568c08efeef0",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0xb253528104D8C23eE14647410deDf70A9092bfFE",
+      "value": "0",
+      "data": "0x6496d3fc000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000007b0d247131b0a40d66baf289c3d424a3d4123fcd",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}
