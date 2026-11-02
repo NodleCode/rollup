@@ -190,7 +190,9 @@ def apply_remappings(std_json: dict) -> int:
     pairs.sort(key=lambda x: -len(x[0]))
     source_keys = set(std_json["sources"].keys())
     # Whole-statement match: imports may span lines (`import {A, B} from\n    "@openzeppelin/..."`).
-    pattern = re.compile(r'(\bimport\b[^;]*?["\'])([^"\'.][^"\']*)(["\'])', re.S)
+    # The path excludes `;` and newlines, so a skipped relative import (`"../X.sol";`) cannot match
+    # from its closing quote into the next statement and swallow that statement's opening quote.
+    pattern = re.compile(r'(\bimport\b[^;]*?["\'])([^"\'.;\n][^"\';\n]*)(["\'])', re.S)
     changed = 0
 
     def rewrite(m: "re.Match[str]") -> str:
