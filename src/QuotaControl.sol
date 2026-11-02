@@ -94,7 +94,7 @@ contract QuotaControl is AccessControl {
      * @dev Sets a new reward quota. Can only be called by an account with the `DEFAULT_ADMIN_ROLE`.
      * @param newQuota The new maximum amount of rewards distributable in each period.
      */
-    function setQuota(uint256 newQuota) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setQuota(uint256 newQuota) external virtual onlyRole(DEFAULT_ADMIN_ROLE) {
         quota = newQuota;
         emit QuotaSet(newQuota);
     }
@@ -106,7 +106,7 @@ contract QuotaControl is AccessControl {
      * Requirements:
      * - `newPeriod` must be greater than 0 and less than or equal to `MAX_PERIOD`.
      */
-    function setPeriod(uint256 newPeriod) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setPeriod(uint256 newPeriod) external virtual onlyRole(DEFAULT_ADMIN_ROLE) {
         _mustBeWithinPeriodRange(newPeriod);
         period = newPeriod;
         emit PeriodSet(newPeriod);
