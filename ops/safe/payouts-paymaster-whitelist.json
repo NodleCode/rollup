@@ -1,0 +1,27 @@
+{
+  "version": "1.0",
+  "chainId": "324",
+  "createdAt": 1793891897000,
+  "meta": {
+    "name": "Payouts contract: sponsor oracle gas via BondTreasuryPaymaster",
+    "description": "Whitelist the payouts Payment contract 0x4D5e78077BC149bC1c8ED8BEd1Cb4b973a975f5B as a destination and its oracle 0xD49f0d1c1D058e0ceA178113500b939f4BD02eFf as a user on BondTreasuryPaymaster 0xb253528104D8C23eE14647410deDf70A9092bfFE.",
+    "txBuilderVersion": "1.18.0",
+    "createdFromSafeAddress": "0x5e097AC1BCF81E7Ff2657045F72cAa6cF06486C9"
+  },
+  "transactions": [
+    {
+      "to": "0xb253528104D8C23eE14647410deDf70A9092bfFE",
+      "value": "0",
+      "data": "0x25daffef000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010000000000000000000000004d5e78077bc149bc1c8ed8bed1cb4b973a975f5b",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0xb253528104D8C23eE14647410deDf70A9092bfFE",
+      "value": "0",
+      "data": "0x6496d3fc00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000001000000000000000000000000d49f0d1c1d058e0cea178113500b939f4bd02eff",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}
