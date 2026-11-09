@@ -42,7 +42,7 @@ if [[ "$ACTUAL_CHAIN_ID" != "$EXPECTED_CHAIN_ID" ]]; then
   echo "RPC chain ID $ACTUAL_CHAIN_ID does not match $NETWORK ($EXPECTED_CHAIN_ID)"; exit 1
 fi
 
-L1_BACKUP_DIR="/tmp/rollup-l1-backup-payment"
+L1_BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rollup-l1-backup-payment.XXXXXX")"
 restore_l1_contracts() {
   [ -d "$L1_BACKUP_DIR" ] || return 0
   [ -f "$L1_BACKUP_DIR/SwarmRegistryL1Upgradeable.sol" ] && mv "$L1_BACKUP_DIR/SwarmRegistryL1Upgradeable.sol" src/swarms/
@@ -54,8 +54,6 @@ restore_l1_contracts() {
   echo "L1-only contracts restored"
 }
 move_l1_contracts() {
-  [ -d "$L1_BACKUP_DIR" ] && restore_l1_contracts
-  mkdir -p "$L1_BACKUP_DIR"
   [ -f src/swarms/SwarmRegistryL1Upgradeable.sol ] && mv src/swarms/SwarmRegistryL1Upgradeable.sol "$L1_BACKUP_DIR/"
   [ -f test/SwarmRegistryL1.t.sol ] && mv test/SwarmRegistryL1.t.sol "$L1_BACKUP_DIR/"
   [ -d test/upgrade-demo ] && mv test/upgrade-demo "$L1_BACKUP_DIR/"
