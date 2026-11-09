@@ -33,6 +33,14 @@ esac
 if [[ "$NETWORK" == "mainnet" && "$BROADCAST" == "--broadcast" && "${CONFIRM_MAINNET:-}" != "YES" ]]; then
   echo "mainnet broadcast requires CONFIRM_MAINNET=YES"; exit 1
 fi
+case "$NETWORK" in
+  testnet) EXPECTED_CHAIN_ID=300 ;;
+  mainnet) EXPECTED_CHAIN_ID=324 ;;
+esac
+ACTUAL_CHAIN_ID="$(cast chain-id --rpc-url "$RPC_URL")"
+if [[ "$ACTUAL_CHAIN_ID" != "$EXPECTED_CHAIN_ID" ]]; then
+  echo "RPC chain ID $ACTUAL_CHAIN_ID does not match $NETWORK ($EXPECTED_CHAIN_ID)"; exit 1
+fi
 
 L1_BACKUP_DIR="/tmp/rollup-l1-backup-payment"
 restore_l1_contracts() {
